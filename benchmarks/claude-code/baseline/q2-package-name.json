@@ -1,0 +1,8 @@
+{
+  "id": "q2-package-name",
+  "prompt": "Read the file PolarUI/package.json and reply with ONLY the value of the \"name\" field, nothing else.",
+  "exit_code": 0,
+  "elapsed_ms": 57246,
+  "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":56083,\"duration_api_ms\":53680,\"ttft_ms\":32445,\"num_turns\":2,\"result\":\"`polar-ui`\",\"stop_reason\":\"end_turn\",\"session_id\":\"d205295c-0731-4c62-83b0-475028790279\",\"total_cost_usd\":0.24769,\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{\"claude-opus-4-8[1m]\":{\"inputTokens\":49303,\"outputTokens\":47,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.24769,\"contextWindow\":1000000,\"maxOutputTokens\":64000}},\"permission_denials\":[],\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"72f8c82e-f65d-413c-9588-1ed33bbbf1a7\"}\n",
+  "stderr": ""
+}

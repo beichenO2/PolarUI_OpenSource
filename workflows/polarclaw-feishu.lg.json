@@ -1,0 +1,301 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+      }
+    },
+    "params": {
+      "content": "飞书 webhook 消息",
+      "channel": "feishu"
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "PolarClaw 飞书客服",
+      "constraints": "ReAct JSON branch tool|finish",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "KnowLeverSearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "4": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "5": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "3",
+        0
+      ],
+      "input_b": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "6": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "飞书 ReAct。JSON: {\"branch\":\"tool|finish\",\"tool\":\"WebSearch|KnowLeverSearch|Notification\"}"
+    }
+  },
+  "7": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "branches": "tool,finish",
+      "cases": "[{\"id\":\"a\"},{\"id\":\"b\"}]"
+    }
+  },
+  "8": {
+    "class_type": "ToolCall",
+    "inputs": {
+      "prompt": [
+        "14",
+        0
+      ],
+      "tool_definitions": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "9": {
+    "class_type": "Notification",
+    "inputs": {
+      "message": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "10": {
+    "class_type": "StemCell",
+    "inputs": {
+      "state": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "allowed_types": "LLM,ToolCall,WebSearch,KnowLeverSearch,Notification",
+      "purpose": "飞书 LG 进化槽"
+    }
+  },
+  "11": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "format": "plain"
+    }
+  },
+  "12": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "7",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "13": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "14": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "13",
+        0
+      ],
+      "original_input": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "15": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "16": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "17": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "16",
+        0
+      ],
+      "original_input": [
+        "17",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_library": "LG",
+  "_name": "PolarClaw 飞书模式",
+  "_description": "飞书 ReAct LG — Prompt → 记忆检索 → LLM → Switch → ToolCall → 干细胞 → Output",
+  "_category": "polarclaw",
+  "_state_schema": {
+    "messages": "array",
+    "webhook_payload": "object",
+    "tool": "string",
+    "branch": "string"
+  },
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "5",
+      "kind": "static"
+    },
+    {
+      "from": "5",
+      "to": "6",
+      "kind": "static"
+    },
+    {
+      "from": "6",
+      "to": "7",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "8",
+      "kind": "conditional",
+      "when": "tool"
+    },
+    {
+      "from": "7",
+      "to": "10",
+      "kind": "conditional",
+      "when": "finish"
+    },
+    {
+      "from": "8",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "10",
+      "to": "11",
+      "kind": "static"
+    }
+  ]
+}

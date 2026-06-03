@@ -1,0 +1,362 @@
+[
+  {
+    "id": "6c0c00a3-8d91-4aaa-972b-0b1d95598130",
+    "name": "SSoT: Up to date",
+    "description": "通过 PolarClaw 检查项目 feature 状态并更新 polaris.json",
+    "category": "ssot",
+    "nodeCount": 4,
+    "file": "ssot-up-to-date.json",
+    "registeredAt": "2026-05-19T03:27:02.456Z",
+    "updatedAt": "2026-05-19T03:27:02.457Z"
+  },
+  {
+    "id": "7e3e8974-599b-4421-9e76-7add1ae4efa9",
+    "name": "SSoT: 执行未完成项",
+    "description": "逐个执行 SSoT 中未完成的 feature",
+    "category": "ssot",
+    "nodeCount": 5,
+    "file": "ssot-execute-pending.json",
+    "registeredAt": "2026-05-19T03:27:02.495Z",
+    "updatedAt": "2026-05-19T03:27:02.496Z"
+  },
+  {
+    "id": "e4892f5d-9bfc-4d8a-ac6b-5c92bd3163ed",
+    "name": "RAG 报告生成",
+    "description": "知识检索+Web搜索→合并→LLM生成→核验→报告输出",
+    "category": "mind-audit",
+    "nodeCount": 9,
+    "file": "01-rag-report.json",
+    "registeredAt": "2026-05-19T10:15:50.978Z",
+    "updatedAt": "2026-05-19T10:15:50.979Z"
+  },
+  {
+    "id": "fbd4a2c1-5892-42b2-a21a-e5232806209f",
+    "name": "批量代码审查",
+    "description": "Git diff→ForLoop逐文件→LLM审查→核验→审查报告",
+    "category": "mind-audit",
+    "nodeCount": 9,
+    "file": "02-batch-code-review.json",
+    "registeredAt": "2026-05-19T10:15:51.014Z",
+    "updatedAt": "2026-05-19T10:15:51.014Z"
+  },
+  {
+    "id": "45d32468-cd9f-4b94-8d1b-7cb36e675cad",
+    "name": "Agentic 数据管道",
+    "description": "多步AgenticUnit→人工审批→条件分支→文件写入",
+    "category": "mind-audit",
+    "nodeCount": 8,
+    "file": "03-agentic-data-pipeline.json",
+    "registeredAt": "2026-05-19T10:15:51.049Z",
+    "updatedAt": "2026-05-19T10:15:51.050Z"
+  },
+  {
+    "id": "46ae0bb9-61e3-4d53-ac4d-031a7b0e1502",
+    "name": "多模型对比",
+    "description": "并行多模型LLM→合并→评分→展示",
+    "category": "mind-audit",
+    "nodeCount": 8,
+    "file": "04-multi-model-comparison.json",
+    "registeredAt": "2026-05-19T10:15:51.089Z",
+    "updatedAt": "2026-05-19T10:15:51.089Z"
+  },
+  {
+    "id": "978c2561-16c7-4792-a85d-57d941e5f9a8",
+    "name": "迭代精炼",
+    "description": "WhileLoop→LLM→正则匹配→核验→重试→论文输出",
+    "category": "mind-audit",
+    "nodeCount": 9,
+    "file": "05-iterative-refinement.json",
+    "registeredAt": "2026-05-19T10:15:51.124Z",
+    "updatedAt": "2026-05-19T10:15:51.125Z"
+  },
+  {
+    "id": "9246014f-5f81-49bb-ae8c-7755f5e08856",
+    "name": "生态健康检查",
+    "description": "生态扫描→ForLoop→SSoT+Shell→MapReduce→健康报告",
+    "category": "mind-audit",
+    "nodeCount": 9,
+    "file": "06-ecosystem-health-check.json",
+    "library": "WF",
+    "registeredAt": "2026-05-19T10:15:51.159Z",
+    "updatedAt": "2026-05-19T10:15:51.160Z"
+  },
+  {
+    "id": "5dd684e6-3801-4514-9e7c-46105a0f41f6",
+    "name": "并行翻译",
+    "description": "逻辑链分解→并行ForLoop→多语言LLM→合并→文件写入",
+    "category": "mind-audit",
+    "nodeCount": 8,
+    "file": "08-parallel-translation.json",
+    "registeredAt": "2026-05-19T10:15:51.229Z",
+    "updatedAt": "2026-05-19T10:15:51.229Z"
+  },
+  {
+    "id": "e779ed7f-68c8-4edc-ab86-f8f68db31edf",
+    "name": "Git 自动审查",
+    "description": "Git日志→ForLoop→AgenticUnit→条件分支→提交",
+    "category": "mind-audit",
+    "nodeCount": 9,
+    "file": "09-git-auto-review.json",
+    "registeredAt": "2026-05-19T10:15:51.265Z",
+    "updatedAt": "2026-05-19T10:15:51.266Z"
+  },
+  {
+    "id": "3a98b8c9-44cb-4030-956a-711c421fcfe3",
+    "name": "Agentic 链调试",
+    "description": "反身性上下文→AgenticChain→核验→人工审批→Shell执行→Git提交",
+    "category": "mind-audit",
+    "nodeCount": 10,
+    "file": "10-agentic-chain-debug.json",
+    "registeredAt": "2026-05-19T10:15:51.301Z",
+    "updatedAt": "2026-05-19T10:15:51.302Z"
+  },
+  {
+    "id": "953c8c74-6bd3-413a-b3db-f00349fdc7c6",
+    "name": "claude-code-1to1",
+    "description": "",
+    "category": "general",
+    "nodeCount": 22,
+    "file": "claude-code-1to1.json",
+    "registeredAt": "2026-05-19T10:58:58.074Z",
+    "updatedAt": "2026-05-19T10:58:58.074Z"
+  },
+  {
+    "id": "bed3f356-0f5c-48f5-8291-51d5a1a71e16",
+    "name": "hermes-1to1",
+    "description": "",
+    "category": "general",
+    "nodeCount": 27,
+    "file": "hermes-1to1.json",
+    "registeredAt": "2026-05-19T10:58:58.110Z",
+    "updatedAt": "2026-05-19T10:58:58.111Z"
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "KnowLever 知识编译管道",
+    "description": "7阶段编译：Crystallize→Embed+Cluster→TreeConstruct→PageCompose→LinkValidate→SiteBuild→PDFCompose",
+    "category": "knowlever",
+    "nodeCount": 25,
+    "file": "knowlever-compile-pipeline.json",
+    "registeredAt": "2026-05-19T13:14:00.000Z",
+    "updatedAt": "2026-05-19T13:14:00.000Z"
+  },
+  {
+    "id": "03b6d1e2-bf0e-4d60-aab6-ca13e2c157fd",
+    "name": "DiGist 编译管线",
+    "description": "Digist 全流程编译：采集→标准化→消化→入库→Wiki编译→融合报告→自进化",
+    "category": "digist",
+    "nodeCount": 29,
+    "file": "digist-compile-pipeline.json",
+    "registeredAt": "2026-05-19T13:18:16.991Z",
+    "updatedAt": "2026-05-19T13:18:16.992Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000001",
+    "name": "PolarDesign 设计管线",
+    "description": "DesignResolve → DesignGenerate → DesignCritique → Validator → DesignPreview",
+    "category": "agentic",
+    "nodeCount": 7,
+    "file": "polar-design-pipeline.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000002",
+    "name": "AutoOffice 报告管线",
+    "description": "TemplateList → ContentRender → DeAiFlavor → QualityAnalyze",
+    "category": "agentic",
+    "nodeCount": 6,
+    "file": "autooffice-pipeline.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000003",
+    "name": "Clock 事件驱动器",
+    "description": "ClockSnapshot → Condition → Switch → 动作路由",
+    "category": "agentic",
+    "nodeCount": 4,
+    "file": "clock-event-driver.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000004",
+    "name": "DIGiST 消化管线",
+    "description": "DigestScrape → DigestSummarize → DigestFuse → DigestRecommend",
+    "category": "agentic",
+    "nodeCount": 6,
+    "file": "digest-pipeline.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000005",
+    "name": "PolarMemory 记忆代理",
+    "description": "MemorySync → UserPreferenceExtract → MemorySearch",
+    "category": "agentic",
+    "nodeCount": 5,
+    "file": "memory-agent.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000006",
+    "name": "TQSDK 策略研究管线",
+    "description": "TQResearchRun → TQBacktest → TQRiskCheck",
+    "category": "agentic",
+    "nodeCount": 5,
+    "file": "tq-research-pipeline.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000007",
+    "name": "TQSDK 永续进化管线",
+    "description": "TQStrategyList → TQBacktest → TQOptimize",
+    "category": "agentic",
+    "nodeCount": 4,
+    "file": "tq-evolution-pipeline.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000008",
+    "name": "PolarProcess 进程看门狗",
+    "description": "ProcessList → Condition → ProcessStart",
+    "category": "agentic",
+    "nodeCount": 4,
+    "file": "process-watchdog.json",
+    "registeredAt": "2026-05-20T00:00:00.000Z",
+    "updatedAt": "2026-05-20T00:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000009",
+    "name": "自愈单元",
+    "description": "HealthCheck → ErrorClassifier → Condition → ProcessRestart",
+    "category": "agentic",
+    "nodeCount": 7,
+    "file": "self-heal-unit.json",
+    "registeredAt": "2026-05-20T01:00:00.000Z",
+    "updatedAt": "2026-05-20T01:00:00.000Z"
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4789-abcd-000000000010",
+    "name": "检修事件：分诊→诊断→修复→汇报",
+    "description": "CheckupEventInbox → Triage → Context → Diagnose → Condition(≥0.7) → FixChain | HumanApproval → Report",
+    "category": "agentic",
+    "nodeCount": 8,
+    "file": "checkup-triage-and-heal.json",
+    "registeredAt": "2026-05-20T05:40:00.000Z",
+    "updatedAt": "2026-05-20T05:40:00.000Z"
+  },
+  {
+    "id": "b19d46ea-b8e6-4628-b80d-a0057697338c",
+    "name": "Master 元流水线递归循环",
+    "description": "固定 DAG 元流水线：拉信号→规范决策→Switch 路由→学习沉淀→递归触发（不自改拓扑，MVP_260520）",
+    "category": "agentic",
+    "nodeCount": 18,
+    "file": "evolution-loop.json",
+    "registeredAt": "2026-05-20T11:56:15.508Z",
+    "updatedAt": "2026-05-20T11:56:15.509Z"
+  },
+  {
+    "id": "pc-lg-web",
+    "name": "PolarClaw Web 模式",
+    "description": "Hub Web Solo Agent — ReAct 环：Thought → hub_send_prompt → Observation",
+    "category": "polarclaw",
+    "nodeCount": 5,
+    "file": "polarclaw-web.lg.json",
+    "library": "LG",
+    "registeredAt": "2026-05-23T00:00:00.000Z",
+    "updatedAt": "2026-05-23T00:00:00.000Z"
+  },
+  {
+    "id": "pc-lg-ide",
+    "name": "PolarClaw IDE 模式",
+    "description": "MCP/IDE Agent ReAct 环 — 适合 Cursor/IDE 侧栏 Agent",
+    "category": "polarclaw",
+    "nodeCount": 5,
+    "file": "polarclaw-ide.lg.json",
+    "library": "LG",
+    "registeredAt": "2026-05-23T00:00:00.000Z",
+    "updatedAt": "2026-05-23T00:00:00.000Z"
+  },
+  {
+    "id": "pc-lg-feishu",
+    "name": "PolarClaw 飞书模式",
+    "description": "飞书 webhook → ReAct 环 → 回传（LG Spec，非 WF frozen 链）",
+    "category": "polarclaw",
+    "nodeCount": 5,
+    "file": "polarclaw-feishu.lg.json",
+    "library": "LG",
+    "registeredAt": "2026-05-23T00:00:00.000Z",
+    "updatedAt": "2026-05-23T00:00:00.000Z"
+  },
+  {
+    "id": "bench-r1-openevolve",
+    "name": "Benchmark R1 — OpenEvolve Step",
+    "description": "mutate → evaluate → select（StaticData 占位 Evolve*）",
+    "category": "benchmark",
+    "nodeCount": 14,
+    "file": "benchmark-openevolve-step.json",
+    "library": "WF",
+    "registeredAt": "2026-05-23T12:00:00.000Z",
+    "updatedAt": "2026-05-23T12:00:00.000Z"
+  },
+  {
+    "id": "bench-r2-openclaw",
+    "name": "Benchmark R2 — OpenClaw Proposal",
+    "description": "SessionLog → Pattern → HumanApproval（默认拒绝）→ LearningCapture",
+    "category": "benchmark",
+    "nodeCount": 12,
+    "file": "benchmark-openclaw-proposal.json",
+    "library": "WF",
+    "registeredAt": "2026-05-23T12:00:00.000Z",
+    "updatedAt": "2026-05-23T12:00:00.000Z"
+  },
+  {
+    "id": "bench-r3-autobuild",
+    "name": "Benchmark R3 — EvoAgentX AutoBuild",
+    "description": "seed prompt → Planner stub → workflow JSON（≥3 节点）",
+    "category": "benchmark",
+    "nodeCount": 15,
+    "file": "benchmark-evoagentx-autobuild.json",
+    "library": "WF",
+    "registeredAt": "2026-05-23T12:00:00.000Z",
+    "updatedAt": "2026-05-23T12:00:00.000Z"
+  },
+  {
+    "id": "bench-r4-evolve-loop",
+    "name": "Benchmark R4 — EvoAgentX Evolve Loop",
+    "description": "Digist stub → eval → LearningCapture → RecursionGuard → AgentWorkflow(self skip)",
+    "category": "benchmark",
+    "nodeCount": 16,
+    "file": "benchmark-evoagentx-evolve-loop.json",
+    "library": "WF",
+    "registeredAt": "2026-05-23T12:00:00.000Z",
+    "updatedAt": "2026-05-23T12:00:00.000Z"
+  },
+  {
+    "id": "mvp-seed-wf",
+    "name": "MVP 原模型 WF",
+    "description": "Seed：PromptInput → LLM → Validator → RetryLoop → PetriDish → Output",
+    "category": "seed",
+    "nodeCount": 12,
+    "file": "mvp-seed-wf.json",
+    "library": "WF",
+    "registeredAt": "2026-05-23T14:00:00.000Z",
+    "updatedAt": "2026-05-23T14:00:00.000Z"
+  },
+  {
+    "id": "mvp-seed-lg",
+    "name": "MVP 原模型 LG",
+    "description": "Seed：Entry → LLM → PluripotentCell → End",
+    "category": "seed",
+    "nodeCount": 4,
+    "file": "mvp-seed-lg.lg.json",
+    "library": "LG",
+    "registeredAt": "2026-05-23T14:00:00.000Z",
+    "updatedAt": "2026-05-23T14:00:00.000Z"
+  }
+]

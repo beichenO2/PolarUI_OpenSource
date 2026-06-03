@@ -1,0 +1,471 @@
+[
+  {
+    "class_type": "KnowLeverSearch",
+    "category": "Tools",
+    "display_name": "知识检索",
+    "description": "生态模块：从 KnowLever 知识库检索相关内容",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "知识检索 · 输入「query」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "chunks",
+        "type": "object",
+        "description": "知识检索 · 输出「chunks」（类型 object）"
+      },
+      {
+        "name": "summary",
+        "type": "string",
+        "description": "知识检索 · 输出「summary」（类型 string）"
+      }
+    ],
+    "params": {
+      "top_k": {
+        "type": "number",
+        "default": 5,
+        "label": "Top K"
+      },
+      "collection": {
+        "type": "string",
+        "default": "",
+        "label": "集合名"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverIngest",
+    "category": "Tools",
+    "display_name": "知识摄入",
+    "description": "原子化元件：将文档/文本摄入 KnowLever 知识库",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      },
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "知识摄入 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      },
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:18080",
+        "label": "KnowLever 地址"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverCompile",
+    "category": "Tools",
+    "display_name": "知识编译",
+    "description": "原子化元件：LLM 将原始素材编译为结构化 Wiki",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "知识编译 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverBuild",
+    "category": "Tools",
+    "display_name": "站点构建",
+    "description": "原子化元件：构建 KnowLever 静态 HTML 站点",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "站点构建 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "build_path",
+        "type": "string",
+        "description": "站点构建 · 输出「build_path」（类型 string）"
+      }
+    ],
+    "params": {
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverExportPDF",
+    "category": "Tools",
+    "display_name": "导出PDF",
+    "description": "原子化元件：将 KnowLever Wiki 导出为 PDF 文档",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "导出PDF · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "pdf_path",
+        "type": "string",
+        "description": "导出PDF · 输出「pdf_path」（类型 string）"
+      }
+    ],
+    "params": {
+      "template": {
+        "type": "text",
+        "default": "report",
+        "label": "模板"
+      },
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverStorage",
+    "category": "Tools",
+    "display_name": "结构化存储",
+    "description": "原子化元件：KnowLever 结构化 topic/page 存储（GET /api/topics）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "string",
+        "description": "结构化存储 · 输入「user」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "topics",
+        "type": "object",
+        "description": "结构化存储 · 输出「topics」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:18080",
+        "label": "KnowLever 地址"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverNormalize",
+    "category": "Tools",
+    "display_name": "规范化管道",
+    "description": "原子化元件：素材规范化 normalized content.md 管道",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "规范化管道 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "规范化管道 · 输出「path」（类型 string）"
+      }
+    ],
+    "params": {
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverNodeSdk",
+    "category": "Tools",
+    "display_name": "Node SDK",
+    "description": "原子化元件：@polarisor/knowlever Node SDK 封装（ingest/search/compile）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "operation",
+        "type": "string",
+        "description": "Node SDK · 输入「operation」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KnowLeverWebhook",
+    "category": "Tools",
+    "display_name": "反馈与 Webhook",
+    "description": "原子化元件：Webhook 注册与反馈（POST /api/webhooks/register, /api/feedback）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "反馈与 Webhook · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:18080",
+        "label": "KnowLever 地址"
+      }
+    }
+  },
+  {
+    "class_type": "KnowLeverFunnel",
+    "category": "Tools",
+    "display_name": "公网暴露（Funnel）",
+    "description": "原子化元件：SOTAgent Funnel 公网暴露状态（GET /api/funnel/status）",
+    "color": "#2d4263",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "status",
+        "type": "object",
+        "description": "公网暴露（Funnel） · 输出「status」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:18080",
+        "label": "KnowLever 地址"
+      }
+    }
+  },
+  {
+    "class_type": "KL_B01基础蒸馏_b341a2",
+    "category": "Tools",
+    "display_name": "B01 基础蒸馏",
+    "description": "原子化元件：B01 基础蒸馏（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "B01 基础蒸馏 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_B03技能对比_9db12d",
+    "category": "Tools",
+    "display_name": "B03 技能对比",
+    "description": "原子化元件：B03 技能对比（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "B03 技能对比 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_B04增量蒸馏_a0c3f1",
+    "category": "Tools",
+    "display_name": "B04 增量蒸馏",
+    "description": "原子化元件：B04 增量蒸馏（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "B04 增量蒸馏 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_B05元技能组合_9101ef",
+    "category": "Tools",
+    "display_name": "B05 元技能组合",
+    "description": "原子化元件：B05 元技能组合（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "B05 元技能组合 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_B06决策矩阵_f82324",
+    "category": "Tools",
+    "display_name": "B06 决策矩阵",
+    "description": "原子化元件：B06 决策矩阵（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "B06 决策矩阵 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_文件级隔离_ccbe3d",
+    "category": "Tools",
+    "display_name": "文件级隔离",
+    "description": "原子化元件：文件级隔离（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "文件级隔离 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_Asset路径修复_9abd9e",
+    "category": "Tools",
+    "display_name": "Asset 路径修复",
+    "description": "原子化元件：Asset 路径修复（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "Asset 路径修复 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "KL_层次整理L15Conso_bf1feb",
+    "category": "Tools",
+    "display_name": "层次整理（L1.5 Consolidation）",
+    "description": "原子化元件：层次整理（L1.5 Consolidation）（coverage-gap 自动补全，对接 KnowLever API）",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "层次整理（L1.5 Consolidation） · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  }
+]

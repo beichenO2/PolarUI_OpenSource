@@ -1,0 +1,785 @@
+[
+  {
+    "class_type": "WebSearch",
+    "category": "Tools",
+    "display_name": "Web 搜索",
+    "description": "生态模块：联网搜索实时信息",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "Web 搜索 · 输入「query」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "results",
+        "type": "object",
+        "description": "Web 搜索 · 输出「results」（类型 object）"
+      },
+      {
+        "name": "summary",
+        "type": "string",
+        "description": "Web 搜索 · 输出「summary」（类型 string）"
+      }
+    ],
+    "params": {
+      "max_results": {
+        "type": "number",
+        "default": 5,
+        "label": "结果数"
+      }
+    }
+  },
+  {
+    "class_type": "FileRead",
+    "category": "Tools",
+    "display_name": "读取文件",
+    "description": "生态模块：读取本地文件内容",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "读取文件 · 输入「path」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      },
+      {
+        "name": "metadata",
+        "type": "object",
+        "optional": true,
+        "description": "读取文件 · 输出「metadata」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "encoding": {
+        "type": "select",
+        "default": "utf-8",
+        "options": [
+          "utf-8",
+          "ascii",
+          "base64"
+        ],
+        "label": "编码"
+      },
+      "optional": {
+        "type": "boolean",
+        "default": false,
+        "label": "文件缺失时返回空（跨 run Prompt 回流）"
+      }
+    }
+  },
+  {
+    "class_type": "FileWrite",
+    "category": "Tools",
+    "display_name": "写入文件",
+    "description": "生态模块：将内容写入文件",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "写入文件 · 输入「path」（类型 string）"
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "success",
+        "type": "boolean",
+        "description": "写入文件 · 输出「success」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "create_dirs": {
+        "type": "boolean",
+        "default": true,
+        "label": "自动创建目录"
+      }
+    }
+  },
+  {
+    "class_type": "GitCommit",
+    "category": "Tools",
+    "display_name": "Git Commit",
+    "description": "生态模块：提交代码变更",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "message",
+        "type": "string",
+        "description": "Git Commit · 输入「message」（类型 string）"
+      },
+      {
+        "name": "files",
+        "type": "object",
+        "optional": true,
+        "description": "Git Commit · 输入「files」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "commit_hash",
+        "type": "string",
+        "description": "Git Commit · 输出「commit_hash」（类型 string）"
+      }
+    ],
+    "params": {
+      "push": {
+        "type": "boolean",
+        "default": true,
+        "label": "自动 push"
+      },
+      "branch": {
+        "type": "string",
+        "default": "main",
+        "label": "分支"
+      }
+    }
+  },
+  {
+    "class_type": "SSoTQuery",
+    "category": "Tools",
+    "display_name": "SSoT 查询",
+    "description": "生态模块：查询项目结构化文档",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "project",
+        "type": "string",
+        "description": "SSoT 查询 · 输入「project」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "polaris",
+        "type": "object",
+        "description": "SSoT 查询 · 输出「polaris」（类型 object）"
+      },
+      {
+        "name": "requirements",
+        "type": "object",
+        "optional": true,
+        "description": "SSoT 查询 · 输出「requirements」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "filter_status": {
+        "type": "select",
+        "default": "all",
+        "options": [
+          "all",
+          "active",
+          "done",
+          "blocked"
+        ],
+        "label": "状态过滤"
+      }
+    }
+  },
+  {
+    "class_type": "ShellExec",
+    "category": "Tools",
+    "display_name": "Shell 执行",
+    "description": "生态模块：执行终端命令",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "command",
+        "type": "string",
+        "description": "Shell 执行 · 输入「command」（类型 string）"
+      },
+      {
+        "name": "cwd",
+        "type": "string",
+        "optional": true,
+        "description": "Shell 执行 · 输入「cwd」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "stdout",
+        "type": "string",
+        "optional": true,
+        "description": "Shell 执行 · 输出「stdout」（类型 string），可选"
+      },
+      {
+        "name": "stderr",
+        "type": "string",
+        "optional": true,
+        "description": "Shell 执行 · 输出「stderr」（类型 string），可选"
+      },
+      {
+        "name": "exit_code",
+        "type": "number",
+        "optional": true,
+        "description": "Shell 执行 · 输出「exit_code」（类型 number），可选"
+      },
+      {
+        "name": "success",
+        "type": "boolean",
+        "optional": true,
+        "description": "Shell 执行 · 输出「success」（类型 boolean），可选"
+      },
+      {
+        "name": "skipped",
+        "type": "boolean",
+        "optional": true,
+        "description": "Shell 执行 · 输出「skipped」（类型 boolean），可选"
+      }
+    ],
+    "params": {
+      "timeout_s": {
+        "type": "number",
+        "default": 30,
+        "label": "超时(秒)"
+      }
+    }
+  },
+  {
+    "class_type": "ContextWindow",
+    "category": "Tools",
+    "display_name": "上下文窗口",
+    "description": "原子化元件：管理对话历史。输入消息 → 压缩/截断/缓存 → 输出可用上下文。",
+    "color": "#2d5a63",
+    "inputs": [
+      {
+        "name": "messages",
+        "type": "object",
+        "description": "上下文窗口 · 输入「messages」（类型 object）"
+      },
+      {
+        "name": "new_message",
+        "type": "string",
+        "description": "上下文窗口 · 输入「new_message」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "object",
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      },
+      {
+        "name": "compressed",
+        "type": "boolean",
+        "description": "上下文窗口 · 输出「compressed」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "max_tokens": {
+        "type": "number",
+        "default": 128000,
+        "label": "窗口大小"
+      },
+      "compress_threshold": {
+        "type": "number",
+        "default": 0.5,
+        "label": "压缩阈值 (0-1)"
+      },
+      "strategy": {
+        "type": "select",
+        "default": "sliding",
+        "options": [
+          "sliding",
+          "summary",
+          "selective"
+        ],
+        "label": "策略"
+      }
+    }
+  },
+  {
+    "class_type": "SubAgent",
+    "category": "Tools",
+    "display_name": "子 Agent",
+    "description": "原子化元件：将子任务委派给独立 Agent 进程。输入任务描述 → 输出结果。",
+    "color": "#2d4a63",
+    "inputs": [
+      {
+        "name": "task",
+        "type": "string",
+        "description": "子 Agent · 输入「task」（类型 string）"
+      },
+      {
+        "name": "context",
+        "type": "object",
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "any",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "description": "子 Agent · 输出「status」（类型 string）"
+      }
+    ],
+    "params": {
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "模型"
+      },
+      "timeout_s": {
+        "type": "number",
+        "default": 300,
+        "label": "超时(秒)"
+      },
+      "sandbox": {
+        "type": "boolean",
+        "default": true,
+        "label": "沙箱隔离"
+      }
+    }
+  },
+  {
+    "class_type": "MemoryStore",
+    "category": "Memory",
+    "display_name": "持久记忆",
+    "description": "原子化元件：读写持久化记忆。支持 MEMORY.md / USER.md 等。",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "key",
+        "type": "string",
+        "description": "持久记忆 · 输入「key」（类型 string）"
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "stored",
+        "type": "boolean",
+        "description": "持久记忆 · 输出「stored」（类型 boolean）"
+      },
+      {
+        "name": "recalled",
+        "type": "string",
+        "description": "持久记忆 · 输出「recalled」（类型 string）"
+      }
+    ],
+    "params": {
+      "operation": {
+        "type": "select",
+        "default": "read",
+        "options": [
+          "read",
+          "write",
+          "append",
+          "search"
+        ],
+        "label": "操作"
+      },
+      "max_tokens": {
+        "type": "number",
+        "default": 800,
+        "label": "最大 token"
+      }
+    }
+  },
+  {
+    "class_type": "BrowserAction",
+    "category": "Tools",
+    "display_name": "浏览器操作",
+    "description": "原子化元件：单个浏览器操作（导航/点击/输入/截图）。",
+    "color": "#2d4a4a",
+    "inputs": [
+      {
+        "name": "url",
+        "type": "string",
+        "description": "浏览器操作 · 输入「url」（类型 string）"
+      },
+      {
+        "name": "action",
+        "type": "string",
+        "description": "浏览器操作 · 输入「action」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "string",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "screenshot",
+        "type": "string",
+        "description": "浏览器操作 · 输出「screenshot」（类型 string）"
+      }
+    ],
+    "params": {
+      "action_type": {
+        "type": "select",
+        "default": "navigate",
+        "options": [
+          "navigate",
+          "click",
+          "type",
+          "screenshot",
+          "extract_text",
+          "scroll"
+        ],
+        "label": "操作类型"
+      },
+      "selector": {
+        "type": "string",
+        "default": "",
+        "label": "CSS 选择器"
+      },
+      "headless": {
+        "type": "boolean",
+        "default": true,
+        "label": "无头模式"
+      }
+    }
+  },
+  {
+    "class_type": "ImageGenerate",
+    "category": "Tools",
+    "display_name": "图片生成",
+    "description": "原子化元件：输入 prompt → 调用图片生成 API → 输出图片路径。",
+    "color": "#4a2d63",
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "string",
+        "description": "用户或上游传入的提示/任务正文，作为本组件主要处理对象。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "image_path",
+        "type": "string",
+        "description": "图片生成 · 输出「image_path」（类型 string）"
+      },
+      {
+        "name": "metadata",
+        "type": "object",
+        "description": "图片生成 · 输出「metadata」（类型 object）"
+      }
+    ],
+    "params": {
+      "model": {
+        "type": "select",
+        "default": "dall-e-3",
+        "options": [
+          "dall-e-3",
+          "stable-diffusion",
+          "midjourney"
+        ],
+        "label": "模型"
+      },
+      "size": {
+        "type": "select",
+        "default": "1024x1024",
+        "options": [
+          "512x512",
+          "1024x1024",
+          "1792x1024"
+        ],
+        "label": "尺寸"
+      }
+    }
+  },
+  {
+    "class_type": "SessionSearch",
+    "category": "Tools",
+    "display_name": "会话搜索",
+    "description": "原子化元件：全文搜索对话历史（SQLite FTS5）。",
+    "color": "#2d5a4a",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "会话搜索 · 输入「query」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "matches",
+        "type": "object",
+        "description": "会话搜索 · 输出「matches」（类型 object）"
+      },
+      {
+        "name": "count",
+        "type": "number",
+        "description": "会话搜索 · 输出「count」（类型 number）"
+      }
+    ],
+    "params": {
+      "limit": {
+        "type": "number",
+        "default": 10,
+        "label": "最大结果数"
+      },
+      "scope": {
+        "type": "select",
+        "default": "current",
+        "options": [
+          "current",
+          "all_sessions",
+          "project"
+        ],
+        "label": "搜索范围"
+      }
+    }
+  },
+  {
+    "class_type": "MCPCall",
+    "category": "Tools",
+    "display_name": "MCP 调用",
+    "description": "原子化元件：调用外部 MCP Server 的工具。mcp_request = { server, tool_name, arguments }。",
+    "color": "#2d4a5a",
+    "inputs": [
+      {
+        "name": "mcp_request",
+        "type": "object",
+        "label": "{ server, tool_name, arguments }",
+        "description": "MCP 调用 · 输入「mcp_request」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "any",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "error",
+        "type": "string",
+        "description": "MCP 调用 · 输出「error」（类型 string）"
+      }
+    ],
+    "params": {
+      "timeout_s": {
+        "type": "number",
+        "default": 30,
+        "label": "超时(秒)"
+      }
+    }
+  },
+  {
+    "class_type": "GlobSearch",
+    "category": "Tools",
+    "display_name": "Glob 搜索",
+    "description": "原子化元件：按 glob 模式搜索文件路径。",
+    "color": "#2d5a5a",
+    "inputs": [
+      {
+        "name": "pattern",
+        "type": "string",
+        "description": "Glob 搜索 · 输入「pattern」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "files",
+        "type": "object",
+        "description": "Glob 搜索 · 输出「files」（类型 object）"
+      },
+      {
+        "name": "count",
+        "type": "number",
+        "optional": true,
+        "description": "Glob 搜索 · 输出「count」（类型 number），可选"
+      }
+    ],
+    "params": {
+      "cwd": {
+        "type": "string",
+        "default": ".",
+        "label": "工作目录"
+      }
+    }
+  },
+  {
+    "class_type": "GrepSearch",
+    "category": "Tools",
+    "display_name": "Grep 搜索",
+    "description": "原子化元件：正则搜索文件内容（ripgrep）。",
+    "color": "#2d5a5a",
+    "inputs": [
+      {
+        "name": "pattern",
+        "type": "string",
+        "description": "Grep 搜索 · 输入「pattern」（类型 string）"
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Grep 搜索 · 输入「path」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "matches",
+        "type": "object",
+        "description": "Grep 搜索 · 输出「matches」（类型 object）"
+      },
+      {
+        "name": "count",
+        "type": "number",
+        "description": "Grep 搜索 · 输出「count」（类型 number）"
+      }
+    ],
+    "params": {
+      "case_insensitive": {
+        "type": "boolean",
+        "default": false,
+        "label": "忽略大小写"
+      },
+      "glob": {
+        "type": "string",
+        "default": "",
+        "label": "文件过滤"
+      }
+    }
+  },
+  {
+    "class_type": "Notification",
+    "category": "Tools",
+    "display_name": "通知推送",
+    "description": "原子化元件：发送桌面/手机通知。",
+    "color": "#5a2d4a",
+    "inputs": [
+      {
+        "name": "message",
+        "type": "string",
+        "description": "通知推送 · 输入「message」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "sent",
+        "type": "boolean",
+        "description": "通知推送 · 输出「sent」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "channel": {
+        "type": "select",
+        "default": "desktop",
+        "options": [
+          "desktop",
+          "feishu",
+          "webhook"
+        ],
+        "label": "通道"
+      }
+    }
+  },
+  {
+    "class_type": "CodeExec",
+    "category": "Tools",
+    "display_name": "代码执行",
+    "description": "原子化元件：在沙箱中执行代码片段（Python/JS/Shell）。",
+    "color": "#2d634a",
+    "inputs": [
+      {
+        "name": "code",
+        "type": "string",
+        "description": "代码执行 · 输入「code」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "stdout",
+        "type": "string",
+        "description": "代码执行 · 输出「stdout」（类型 string）"
+      },
+      {
+        "name": "stderr",
+        "type": "string",
+        "optional": true,
+        "description": "代码执行 · 输出「stderr」（类型 string），可选"
+      },
+      {
+        "name": "exit_code",
+        "type": "number",
+        "optional": true,
+        "description": "代码执行 · 输出「exit_code」（类型 number），可选"
+      }
+    ],
+    "params": {
+      "language": {
+        "type": "select",
+        "default": "python",
+        "options": [
+          "python",
+          "javascript",
+          "shell"
+        ],
+        "label": "语言"
+      },
+      "timeout_s": {
+        "type": "number",
+        "default": 30,
+        "label": "超时(秒)"
+      },
+      "sandbox": {
+        "type": "boolean",
+        "default": true,
+        "label": "沙箱隔离"
+      }
+    }
+  },
+  {
+    "class_type": "ErrorClassifier",
+    "category": "Tools",
+    "display_name": "错误分类",
+    "description": "原子化元件：用 LLM 对 error_log 分类（崩溃/配置/依赖/未知）",
+    "color": "#4a2d4a",
+    "inputs": [
+      {
+        "name": "error_log",
+        "type": "string",
+        "description": "错误分类 · 输入「error_log」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "classification",
+        "type": "string",
+        "optional": true,
+        "description": "错误分类 · 输出「classification」（类型 string），可选"
+      }
+    ],
+    "params": {
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "分类模型"
+      }
+    }
+  }
+]

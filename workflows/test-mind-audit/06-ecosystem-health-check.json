@@ -1,0 +1,189 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "扫描 Polarisor 生态所有项目的健康状态",
+      "expected_output": "\"health_score\"\\s*:",
+      "purpose": "生态健康检查：逐项扫描 → 汇总 → 生成报告"
+    }
+  },
+  "2": {
+    "class_type": "EcosystemScanner",
+    "inputs": {}
+  },
+  "3": {
+    "class_type": "ForLoop",
+    "inputs": {
+      "items": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "max_items": 3
+    }
+  },
+  "4": {
+    "class_type": "SSoTQuery",
+    "inputs": {
+      "project": [
+        "3",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是项目健康审计员",
+      "constraints": "输出 JSON {project, health_score (0-100), issues[], risks[]}",
+      "prior_knowledge": ""
+    }
+  },
+  "6": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "4",
+        0
+      ],
+      "context": [
+        "5",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "8": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "7",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "4",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "MapReduce",
+    "inputs": {
+      "items": [
+        "3",
+        2
+      ]
+    }
+  },
+  "10": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "9",
+        0
+      ],
+      "role": "你是生态总监",
+      "constraints": "汇总所有项目健康报告，输出整体评估",
+      "prior_knowledge": ""
+    }
+  },
+  "11": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "9",
+        0
+      ],
+      "context": [
+        "10",
+        0
+      ]
+    }
+  },
+  "12": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "11",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"overall_score\""
+      }
+    }
+  },
+  "13": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "12",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "9",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "ContentRender",
+    "inputs": {
+      "data": [
+        "11",
+        0
+      ],
+      "template_id": "健康报告"
+    }
+  },
+  "15": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "14",
+        0
+      ]
+    }
+  },
+  "6b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "8",
+        1
+      ],
+      "context": [
+        "5",
+        0
+      ]
+    }
+  },
+  "11b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "13",
+        1
+      ],
+      "context": [
+        "10",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "飞书消息自动回复工作流",
+      "expected_output": "\"reply\"\\s*:",
+      "purpose": "接收飞书消息 → 检索知识 → 生成回复 → 核验后发送"
+    }
+  },
+  "2": {
+    "class_type": "FeishuRelay",
+    "inputs": {
+      "webhook_payload": "@webhook"
+    }
+  },
+  "3": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是飞书客服助手",
+      "constraints": "回复必须简洁专业，JSON {reply, confidence, sources[]}",
+      "prior_knowledge": ""
+    }
+  },
+  "4": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "KnowLeverSearch",
+    "inputs": {
+      "query": [
+        "4",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "4",
+        1
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "5",
+        0
+      ],
+      "input_b": [
+        "6",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "7",
+        0
+      ],
+      "context": [
+        "3",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "8",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "10": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "9",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "7",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "8",
+        0
+      ],
+      "role": "你是回复质量审核员",
+      "constraints": "审核回复的准确性和语气，给出 pass/fail",
+      "prior_knowledge": ""
+    }
+  },
+  "12": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "8",
+        0
+      ],
+      "context": [
+        "11",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "12",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"verdict\"\\s*:\\s*\"pass\""
+      }
+    }
+  },
+  "14": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "13",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "8",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "8",
+        0
+      ]
+    }
+  },
+  "8b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "10",
+        1
+      ],
+      "context": [
+        "3",
+        0
+      ]
+    }
+  },
+  "12b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "14",
+        1
+      ],
+      "context": [
+        "11",
+        0
+      ]
+    }
+  }
+}

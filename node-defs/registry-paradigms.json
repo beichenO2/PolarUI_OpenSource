@@ -1,0 +1,1668 @@
+[
+  {
+    "class_type": "AgentWorkflow",
+    "category": "Agentic",
+    "display_name": "调用工作流",
+    "description": "Agentic 组合：引用已保存的工作流。可展开查看由原子化元件组成的内部结构。",
+    "color": "#4a3060",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "any",
+        "description": "上游传入的通用输入。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": "any",
+        "description": "调用工作流 · 输出「output」（类型 any）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "workflow_id": {
+        "type": "string",
+        "default": "",
+        "label": "工作流 ID"
+      },
+      "workflow_name": {
+        "type": "string",
+        "default": "",
+        "label": "工作流名称"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "AgenticUnit",
+    "category": "Agentic",
+    "display_name": "Agentic 单元",
+    "description": "Agentic 组合：工作层(LLM调用) + 核验层(正则匹配) + 重试循环。由原子化元件组成，可展开查看内部结构。",
+    "color": "#5a2070",
+    "inputs": [
+      {
+        "name": "task_input",
+        "type": "any",
+        "description": "Agentic 单元 · 输入「task_input」（类型 any）"
+      },
+      {
+        "name": "validation_spec",
+        "type": "object",
+        "label": "核验规格 { purpose, expected_pattern }",
+        "description": "校验规格：期望模式、用途说明等。"
+      },
+      {
+        "name": "prior_knowledge",
+        "type": "string",
+        "optional": true,
+        "description": "Agentic 单元 · 输入「prior_knowledge」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "verified_output",
+        "type": "any",
+        "description": "Agentic 单元 · 输出「verified_output」（类型 any）"
+      },
+      {
+        "name": "validation_report",
+        "type": "object",
+        "description": "Agentic 单元 · 输出「validation_report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "work_model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "工作层模型"
+      },
+      "verify_model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "核验层模型"
+      },
+      "max_retries": {
+        "type": "number",
+        "default": 7,
+        "label": "最大重试"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "AgenticChain",
+    "category": "Agentic",
+    "display_name": "Agentic 链",
+    "description": "Agentic 组合：多个 Agentic 单元串联。每步工作层输出经核验层确认后才进入下一步。可展开查看内部。",
+    "color": "#4a1860",
+    "inputs": [
+      {
+        "name": "initial_input",
+        "type": "any",
+        "description": "Agentic 链 · 输入「initial_input」（类型 any）"
+      },
+      {
+        "name": "chain_spec",
+        "type": "object",
+        "description": "Agentic 链 · 输入「chain_spec」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "final_output",
+        "type": "any",
+        "description": "Agentic 链 · 输出「final_output」（类型 any）"
+      },
+      {
+        "name": "chain_report",
+        "type": "object",
+        "description": "Agentic 链 · 输出「chain_report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "steps": {
+        "type": "number",
+        "default": 3,
+        "label": "链长度"
+      },
+      "fail_strategy": {
+        "type": "select",
+        "default": "retry_step",
+        "options": [
+          "retry_step",
+          "restart_chain",
+          "abort"
+        ],
+        "label": "失败策略"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "Planner",
+    "category": "Agentic",
+    "display_name": "规划器",
+    "description": "Agentic 组合：接收目标 → LLM 推理 → 输出工作流。可展开查看内部结构。",
+    "color": "#6b21a8",
+    "inputs": [
+      {
+        "name": "goal",
+        "type": "string",
+        "description": "规划器 · 输入「goal」（类型 string）"
+      },
+      {
+        "name": "constraints",
+        "type": "object",
+        "description": "规划器 · 输入「constraints」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "workflow",
+        "type": "object",
+        "description": "工作流图或注册引用。"
+      },
+      {
+        "name": "reasoning",
+        "type": "string",
+        "description": "规划器 · 输出「reasoning」（类型 string）"
+      },
+      {
+        "name": "components_used",
+        "type": "object",
+        "description": "规划器 · 输出「components_used」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "推理模型"
+      },
+      "strategy": {
+        "type": "select",
+        "default": "linear",
+        "options": [
+          "linear",
+          "parallel",
+          "iterative"
+        ],
+        "label": "规划策略"
+      },
+      "max_depth": {
+        "type": "number",
+        "default": 5,
+        "label": "逻辑链最大深度"
+      },
+      "reflect": {
+        "type": "boolean",
+        "default": true,
+        "label": "启用反身性扫描"
+      },
+      "via_polarclaw": {
+        "type": "boolean",
+        "default": false,
+        "label": "经 PolarClaw 规划（runPolarClaw）"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "WorkflowMeta",
+    "category": "Agentic",
+    "display_name": "画中画容器",
+    "description": "元工作流节点：工作流运行中自建议+沙箱修改+回退/接受",
+    "color": "#3a2a5a",
+    "inputs": [
+      {
+        "name": "current_workflow",
+        "type": "object",
+        "description": "画中画容器 · 输入「current_workflow」（类型 object）"
+      },
+      {
+        "name": "issue_report",
+        "type": "string",
+        "description": "画中画容器 · 输入「issue_report」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "modified_workflow",
+        "type": "object",
+        "description": "画中画容器 · 输出「modified_workflow」（类型 object）"
+      },
+      {
+        "name": "accepted",
+        "type": "boolean",
+        "description": "画中画容器 · 输出「accepted」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "sandbox": {
+        "type": "boolean",
+        "default": true,
+        "label": "沙箱模式"
+      },
+      "require_approval": {
+        "type": "boolean",
+        "default": true,
+        "label": "需人工审批"
+      },
+      "max_changes": {
+        "type": "number",
+        "default": 3,
+        "label": "单次最大修改数"
+      }
+    }
+  },
+  {
+    "class_type": "PolarDesignPipeline",
+    "category": "Agentic/PolarDesign",
+    "display_name": "设计管线",
+    "description": "Agentic 复合组件：DesignResolve → DesignGenerate → DesignCritique → [重试] → DesignPreview",
+    "color": "#2d8a63",
+    "inputs": [
+      {
+        "name": "brief",
+        "type": "string",
+        "description": "设计管线 · 输入「brief」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "preview_url",
+        "type": "string",
+        "description": "设计管线 · 输出「preview_url」（类型 string）"
+      },
+      {
+        "name": "report",
+        "type": "object",
+        "description": "设计管线 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "max_retries": {
+        "type": "number",
+        "default": 3,
+        "label": "最大重试次数"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "polar-design-pipeline"
+  },
+  {
+    "class_type": "AutoOfficePipeline",
+    "category": "Agentic/AutoOffice",
+    "display_name": "报告管线",
+    "description": "Agentic 复合组件：TemplateList → ContentRender → DeAiFlavor → QualityAnalyze → [可选 VisualQA]",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "data",
+        "type": "object",
+        "description": "通用数据载荷（对象/数组/标量）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "file_path",
+        "type": "string",
+        "description": "报告管线 · 输出「file_path」（类型 string）"
+      },
+      {
+        "name": "grade",
+        "type": "string",
+        "description": "报告管线 · 输出「grade」（类型 string）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "format": {
+        "type": "select",
+        "default": "html",
+        "options": [
+          "html",
+          "docx",
+          "pptx",
+          "pdf",
+          "latex"
+        ],
+        "label": "输出格式"
+      },
+      "enable_visual_qa": {
+        "type": "boolean",
+        "default": false,
+        "label": "启用视觉质检"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "autooffice-pipeline"
+  },
+  {
+    "class_type": "ClockEventDriver",
+    "category": "Agentic/Clock",
+    "display_name": "事件驱动器",
+    "description": "Agentic 复合组件：ClockSnapshot → Condition(事件判定) → Switch(路由) → Notification/SubAgent",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "event",
+        "type": "object",
+        "description": "事件驱动器 · 输入「event」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "action",
+        "type": "object",
+        "description": "事件驱动器 · 输出「action」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "clock-event-driver"
+  },
+  {
+    "class_type": "DigestPipeline",
+    "category": "Agentic/DIGiST",
+    "display_name": "消化管线",
+    "description": "Agentic 复合组件：DigestScrape → DigestSummarize → DigestFuse → DigestRecommend",
+    "color": "#5a2d8a",
+    "inputs": [
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "消化管线 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "recommendations",
+        "type": "object",
+        "description": "消化管线 · 输出「recommendations」（类型 object）"
+      },
+      {
+        "name": "fusion_report",
+        "type": "object",
+        "description": "消化管线 · 输出「fusion_report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "platform": {
+        "type": "text",
+        "default": "all",
+        "label": "平台"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "digest-pipeline"
+  },
+  {
+    "class_type": "MemoryAgent",
+    "category": "Agentic/PolarMemory",
+    "display_name": "记忆代理",
+    "description": "Agentic 复合组件：MemorySync → UserPreferenceExtract → MemorySearch → [随 PromptInject 输出]",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "记忆代理 · 输入「query」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "prior_knowledge",
+        "type": "string",
+        "description": "记忆代理 · 输出「prior_knowledge」（类型 string）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "top_k": {
+        "type": "number",
+        "default": 5,
+        "label": "返回数量"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "memory-agent"
+  },
+  {
+    "class_type": "KnowLeverCompilePipeline",
+    "category": "Agentic/KnowLever",
+    "display_name": "知识编译管线",
+    "description": "Agentic 复合组件：KnowLeverIngest → KnowLeverCompile → KnowLeverBuild → KnowLeverExportPDF",
+    "color": "#2d4263",
+    "inputs": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      },
+      {
+        "name": "topic",
+        "type": "string",
+        "description": "知识编译管线 · 输入「topic」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "build_path",
+        "type": "string",
+        "description": "知识编译管线 · 输出「build_path」（类型 string）"
+      },
+      {
+        "name": "pdf_path",
+        "type": "string",
+        "description": "知识编译管线 · 输出「pdf_path」（类型 string）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "user": {
+        "type": "text",
+        "default": "admin",
+        "label": "用户"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "knowlever-compile-pipeline"
+  },
+  {
+    "class_type": "TQResearchPipeline",
+    "category": "Agentic/TQSDK",
+    "display_name": "策略研究管线",
+    "description": "Agentic 复合组件：TQResearchRun → TQBacktest → TQRiskCheck → TQOptimize → TQLiveTrade",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "description",
+        "type": "string",
+        "description": "策略研究管线 · 输入「description」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "tq-research-pipeline"
+  },
+  {
+    "class_type": "TQEvolutionPipeline",
+    "category": "Agentic/TQSDK",
+    "display_name": "永续进化管线",
+    "description": "Agentic 复合组件：TQStrategyList → ForLoop(逐策略) → TQBacktest → TQOptimize → 冠军保存",
+    "color": "#8a2d2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "champion",
+        "type": "object",
+        "description": "永续进化管线 · 输出「champion」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "tq-evolution-pipeline"
+  },
+  {
+    "class_type": "SelfHealUnit",
+    "category": "Agentic",
+    "display_name": "自愈单元",
+    "description": "Agentic 复合组件：HealthCheck → ErrorClassifier → ProcessRestart → [Agentic 修复] → Report",
+    "color": "#4a2d4a",
+    "inputs": [
+      {
+        "name": "heal_request",
+        "type": "object",
+        "label": "{ service_name, error_log }",
+        "description": "自愈单元 · 输入「heal_request」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "自愈单元 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "self-heal-unit"
+  },
+  {
+    "class_type": "ProcessWatchdog",
+    "category": "Agentic/PolarProcess",
+    "display_name": "进程看门狗",
+    "description": "Agentic 复合组件：ProcessList → ForLoop → Condition → ProcessStart → [失败 3 次] → AgenticUnit(LLM 修复)",
+    "color": "#4a2d4a",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "进程看门狗 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "check_interval_s": {
+        "type": "number",
+        "default": 30,
+        "label": "检查间隔(秒)"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "process-watchdog"
+  },
+  {
+    "class_type": "PolarPilot",
+    "category": "Agentic",
+    "display_name": "PolarPilot",
+    "description": "生态模块：自主进化 Daemon。可展开查看内部工作流。",
+    "color": "#3d1f6b",
+    "inputs": [
+      {
+        "name": "target",
+        "type": "string",
+        "description": "PolarPilot · 输入「target」（类型 string）"
+      },
+      {
+        "name": "task_context",
+        "type": "object",
+        "label": "{ project, context }",
+        "description": "PolarPilot · 输入「task_context」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "commits",
+        "type": "object",
+        "description": "PolarPilot · 输出「commits」（类型 object）"
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "description": "PolarPilot · 输出「status」（类型 string）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "mode": {
+        "type": "select",
+        "default": "yolo",
+        "options": [
+          "yolo",
+          "careful",
+          "review-only"
+        ],
+        "label": "模式"
+      },
+      "max_iterations": {
+        "type": "number",
+        "default": 5,
+        "label": "最大迭代"
+      },
+      "auto_commit": {
+        "type": "boolean",
+        "default": true,
+        "label": "自动提交"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "SkillCapture",
+    "category": "Agentic",
+    "display_name": "技能捕获",
+    "description": "原子化元件：捕获工具调用轨迹 → 生成可复用 Skill Markdown。",
+    "color": "#2d635a",
+    "inputs": [
+      {
+        "name": "trajectory",
+        "type": "object",
+        "description": "技能捕获 · 输入「trajectory」（类型 object）"
+      },
+      {
+        "name": "task_description",
+        "type": "string",
+        "description": "技能捕获 · 输入「task_description」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "skill_md",
+        "type": "string",
+        "description": "技能捕获 · 输出「skill_md」（类型 string）"
+      },
+      {
+        "name": "saved",
+        "type": "boolean",
+        "description": "技能捕获 · 输出「saved」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "save_path": {
+        "type": "string",
+        "default": "~/.hermes/skills/",
+        "label": "保存路径"
+      },
+      "auto_save": {
+        "type": "boolean",
+        "default": true,
+        "label": "自动保存"
+      }
+    }
+  },
+  {
+    "class_type": "EcosystemScanner",
+    "category": "Agentic",
+    "display_name": "生态扫描器",
+    "description": "生态模块：扫描 Polarisor 生态目录 → 输出项目 SSoT 地图。无数据输入；可选 trigger 表示执行顺序。",
+    "color": "#5b21b6",
+    "inputs": [
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "label": "上游触发",
+        "description": "触发信号（定时、事件或上游脉冲）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "projects",
+        "type": "object",
+        "description": "生态扫描器 · 输出「projects」（类型 object）"
+      },
+      {
+        "name": "ssot_map",
+        "type": "object",
+        "description": "生态扫描器 · 输出「ssot_map」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "root_path": {
+        "type": "string",
+        "default": "~/Polarisor",
+        "label": "生态根目录"
+      },
+      "include_archived": {
+        "type": "boolean",
+        "default": false,
+        "label": "包含已归档项目"
+      }
+    }
+  },
+  {
+    "class_type": "CheckupTriageAndHeal",
+    "category": "Agentic",
+    "display_name": "检修事件：分诊→诊断→修复→汇报",
+    "description": "Agentic Pipeline（10 节点）：inbox → 分诊 → 上下文 → 诊断 → Condition(gte 0.7) → FixChain → ShellExec → GitCommit | HumanApproval(auto_approve=false) → CheckupReport",
+    "color": "#7c2d12",
+    "expandable": true,
+    "internal_workflow": "checkup-triage-and-heal",
+    "inputs": [
+      {
+        "name": "event",
+        "type": "object",
+        "optional": true,
+        "description": "检修事件：分诊→诊断→修复→汇报 · 输入「event」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "检修事件：分诊→诊断→修复→汇报 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "CheckupEventInbox",
+    "category": "Agentic",
+    "display_name": "检修事件收件箱",
+    "description": "订阅 @checkup-agent.inbox，输出标准化 event",
+    "color": "#7c2d12",
+    "inputs": [
+      {
+        "name": "event",
+        "type": "object",
+        "optional": true,
+        "description": "检修事件收件箱 · 输入「event」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "event",
+        "type": "object",
+        "description": "检修事件收件箱 · 输出「event」（类型 object）"
+      },
+      {
+        "name": "event_id",
+        "type": "string",
+        "optional": true,
+        "description": "检修事件收件箱 · 输出「event_id」（类型 string），可选"
+      }
+    ],
+    "params": {
+      "agent_id": {
+        "type": "string",
+        "default": "@checkup-agent",
+        "label": "检修 Agent ID"
+      }
+    }
+  },
+  {
+    "class_type": "CheckupTriage",
+    "category": "Agentic",
+    "display_name": "检修分诊",
+    "description": "解析 project / page_url / 用户描述 / 批注；有截图时默认 L101/qwen3-vl 视觉摘要",
+    "color": "#7c2d12",
+    "inputs": [
+      {
+        "name": "event",
+        "type": "object",
+        "description": "检修分诊 · 输入「event」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "project",
+        "type": "string",
+        "description": "检修分诊 · 输出「project」（类型 string）"
+      },
+      {
+        "name": "page_url",
+        "type": "string",
+        "description": "检修分诊 · 输出「page_url」（类型 string）"
+      },
+      {
+        "name": "summary",
+        "type": "string",
+        "optional": true,
+        "description": "检修分诊 · 输出「summary」（类型 string），可选"
+      }
+    ],
+    "params": {
+      "use_vlm": {
+        "type": "boolean",
+        "default": true,
+        "label": "截图 VLM 分诊"
+      },
+      "vlm_model": {
+        "type": "string",
+        "default": "qwen3-vl",
+        "label": "Ollama 回退模型"
+      },
+      "vlm_timeout_ms": {
+        "type": "number",
+        "default": 90000,
+        "label": "VLM 超时(ms)"
+      }
+    }
+  },
+  {
+    "class_type": "ProjectContextGather",
+    "category": "Agentic",
+    "display_name": "项目上下文收集",
+    "description": "按 project 拉 polaris.json 与生态扫描线索。triage_result 包含 project + page_url。",
+    "color": "#7c2d12",
+    "inputs": [
+      {
+        "name": "triage_result",
+        "type": "object",
+        "label": "{ project, page_url }",
+        "description": "项目上下文收集 · 输入「triage_result」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "object",
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "CheckupDiagnoseChain",
+    "category": "Agentic",
+    "display_name": "检修诊断链",
+    "description": "AgenticChain：信息收集→根因分析→核验",
+    "color": "#7c2d12",
+    "expandable": true,
+    "inputs": [
+      {
+        "name": "diagnostic_input",
+        "type": "object",
+        "label": "{ event, context, purpose? }",
+        "description": "检修诊断链 · 输入「diagnostic_input」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "diagnosis",
+        "type": "object",
+        "description": "检修诊断链 · 输出「diagnosis」（类型 object）"
+      },
+      {
+        "name": "confidence",
+        "type": "number",
+        "description": "检修诊断链 · 输出「confidence」（类型 number）"
+      }
+    ],
+    "params": {
+      "max_retries": {
+        "type": "number",
+        "default": 2,
+        "label": "最大重试"
+      }
+    }
+  },
+  {
+    "class_type": "CheckupFixChain",
+    "category": "Agentic",
+    "display_name": "检修修复链",
+    "description": "AgenticChain：修复方案→核验；输出 status/summary/shell_command/git_message",
+    "color": "#7c2d12",
+    "expandable": true,
+    "inputs": [
+      {
+        "name": "diagnosis",
+        "type": "object",
+        "description": "检修修复链 · 输入「diagnosis」（类型 object）"
+      },
+      {
+        "name": "context",
+        "type": "object",
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "status",
+        "type": "string",
+        "description": "检修修复链 · 输出「status」（类型 string）"
+      },
+      {
+        "name": "summary",
+        "type": "string",
+        "description": "检修修复链 · 输出「summary」（类型 string）"
+      },
+      {
+        "name": "shell_command",
+        "type": "string",
+        "description": "检修修复链 · 输出「shell_command」（类型 string）"
+      },
+      {
+        "name": "git_message",
+        "type": "string",
+        "description": "检修修复链 · 输出「git_message」（类型 string）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "CheckupReport",
+    "category": "Tools",
+    "display_name": "检修结果汇报",
+    "description": "向 Hub 写回处理状态与用户可见摘要。report_context 包含 event_id / status / summary / approved / feedback / workflow_run_id / shell_success / commit_hash。",
+    "color": "#7c2d12",
+    "inputs": [
+      {
+        "name": "report_context",
+        "type": "object",
+        "description": "检修结果汇报 · 输入「report_context」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "reported",
+        "type": "boolean",
+        "optional": true,
+        "description": "检修结果汇报 · 输出「reported」（类型 boolean），可选"
+      },
+      {
+        "name": "report_summary",
+        "type": "object",
+        "optional": true,
+        "description": "检修结果汇报 · 输出「report_summary」（类型 object），可选"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "FeishuRelay",
+    "category": "Agentic/PolarClaw",
+    "display_name": "飞书接线员",
+    "description": "PolarClaw 飞书模式：webhook → ReAct 环 → 回传。须用 LG 模式工作流（*.lg.json）。",
+    "color": "#2d5a8a",
+    "inputs": [
+      {
+        "name": "webhook_payload",
+        "type": "object",
+        "description": "飞书接线员 · 输入「webhook_payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "response",
+        "type": "object",
+        "description": "本组件产出的主结果，供下游连线消费。"
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "description": "飞书接线员 · 输出「status」（类型 string）"
+      }
+    ],
+    "params": {
+      "reply_format": {
+        "type": "select",
+        "default": "text",
+        "options": [
+          "text",
+          "card",
+          "image"
+        ],
+        "label": "回复格式"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "polarclaw-feishu.lg"
+  },
+  {
+    "class_type": "IDEAgent",
+    "category": "Agentic/PolarClaw",
+    "display_name": "IDE 模式",
+    "description": "PolarClaw IDE Agent：MCP/IDE ReAct 环。须用 LG 模式工作流（*.lg.json）。",
+    "color": "#2d7a5a",
+    "inputs": [
+      {
+        "name": "task_context",
+        "type": "object",
+        "label": "{ instruction, workspace? }",
+        "description": "IDE 模式 · 输入「task_context」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "files_changed",
+        "type": "object",
+        "description": "IDE 模式 · 输出「files_changed」（类型 object）"
+      }
+    ],
+    "params": {
+      "agent_id": {
+        "type": "string",
+        "default": "ide-agent",
+        "label": "Agent ID"
+      },
+      "mode": {
+        "type": "select",
+        "default": "master",
+        "options": [
+          "master",
+          "slave"
+        ],
+        "label": "角色模式"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "polarclaw-ide.lg"
+  },
+  {
+    "class_type": "WebAgent",
+    "category": "Agentic/PolarClaw",
+    "display_name": "Web 模式",
+    "description": "PolarClaw Hub Web Solo Agent ReAct。须用 LG 模式工作流（*.lg.json）。",
+    "color": "#5a2d7a",
+    "inputs": [
+      {
+        "name": "hub_message",
+        "type": "object",
+        "description": "Web 模式 · 输入「hub_message」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "prompt_sent",
+        "type": "boolean",
+        "description": "Web 模式 · 输出「prompt_sent」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "agent_id": {
+        "type": "string",
+        "default": "web-agent",
+        "label": "Agent ID"
+      },
+      "mode": {
+        "type": "select",
+        "default": "slave",
+        "options": [
+          "master",
+          "slave"
+        ],
+        "label": "角色模式"
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "polarclaw-web.lg"
+  }
+]

@@ -1,0 +1,276 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+      }
+    },
+    "params": {
+      "content": "Hub Web solo message",
+      "channel": "hub_web"
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "PolarClaw Web Solo Agent",
+      "constraints": "Hub Web ReAct",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "ReflectiveContext",
+    "inputs": {
+      "trigger": [
+        "2",
+        0
+      ]
+    },
+    "params": {}
+  },
+  "4": {
+    "class_type": "EcosystemScanner",
+    "inputs": {
+      "trigger": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "5": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "Web ReAct. JSON: {\"branch\":\"tool|finish\",\"tool\":\"hub_send_prompt|WebSearch|EcosystemScanner\"}"
+    }
+  },
+  "6": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "branches": "tool,finish",
+      "cases": "[{\"id\":\"a\"},{\"id\":\"b\"}]"
+    }
+  },
+  "7": {
+    "class_type": "ToolCall",
+    "inputs": {
+      "prompt": [
+        "13",
+        0
+      ],
+      "tool_definitions": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "8": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "9": {
+    "class_type": "StemCell",
+    "inputs": {
+      "state": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "allowed_types": "LLM,ToolCall,WebSearch,EcosystemScanner",
+      "purpose": "Hub Web LG 进化槽"
+    }
+  },
+  "10": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "13",
+        0
+      ]
+    },
+    "params": {}
+  },
+  "11": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "6",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "12": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "13": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "12",
+        0
+      ],
+      "original_input": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "14": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "6",
+        0
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "15": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "16": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "15",
+        0
+      ],
+      "original_input": [
+        "16",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_library": "LG",
+  "_name": "PolarClaw Web 模式",
+  "_description": "Hub Web ReAct LG — Prompt → 反身性 → LLM → ToolCall(hub/WebSearch/生态扫描) → 干细胞 → Output",
+  "_category": "polarclaw",
+  "_state_schema": {
+    "messages": "array",
+    "hub_message": "object",
+    "tool": "string",
+    "branch": "string"
+  },
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "5",
+      "kind": "static"
+    },
+    {
+      "from": "5",
+      "to": "6",
+      "kind": "static"
+    },
+    {
+      "from": "6",
+      "to": "7",
+      "kind": "conditional",
+      "when": "tool"
+    },
+    {
+      "from": "6",
+      "to": "9",
+      "kind": "conditional",
+      "when": "finish"
+    },
+    {
+      "from": "7",
+      "to": "5",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "9",
+      "to": "10",
+      "kind": "static"
+    }
+  ]
+}

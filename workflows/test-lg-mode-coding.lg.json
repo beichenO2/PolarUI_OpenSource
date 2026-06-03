@@ -1,0 +1,117 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": ".+"
+      }
+    },
+    "params": {
+      "content": "写一段 Python 数字图像处理示例代码（读取灰度、 Sobel 边缘）",
+      "expected_output": {
+        "body": ".+"
+      }
+    }
+  },
+  "2": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "Coding 助手，只输出可运行 Python 代码块。"
+    }
+  },
+  "3": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "5",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "5": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "4",
+        0
+      ],
+      "original_input": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "6": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "7": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "6",
+        0
+      ],
+      "original_input": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_library": "LG",
+  "_name": "LG Mode Coding",
+  "_description": "260526 Phase3 — Coding 情景",
+  "_category": "test",
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    }
+  ]
+}

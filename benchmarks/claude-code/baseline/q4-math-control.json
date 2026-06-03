@@ -1,0 +1,8 @@
+{
+  "id": "q4-math-control",
+  "prompt": "What is 17 * 23 + 5? Reply with the integer only.",
+  "exit_code": 0,
+  "elapsed_ms": 17893,
+  "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"duration_ms\":16716,\"duration_api_ms\":13964,\"ttft_ms\":16715,\"num_turns\":1,\"result\":\"396\",\"stop_reason\":\"end_turn\",\"session_id\":\"5f53ff1c-97f5-489c-9e08-2e1790e7888c\",\"total_cost_usd\":0.12382,\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{\"claude-opus-4-8[1m]\":{\"inputTokens\":24614,\"outputTokens\":30,\"cacheReadInputTokens\":0,\"cacheCreationInputTokens\":0,\"webSearchRequests\":0,\"costUSD\":0.12382,\"contextWindow\":1000000,\"maxOutputTokens\":64000}},\"permission_denials\":[],\"terminal_reason\":\"completed\",\"fast_mode_state\":\"off\",\"uuid\":\"9e9909c9-29fb-4478-b07e-8f3666b148e1\"}\n",
+  "stderr": ""
+}

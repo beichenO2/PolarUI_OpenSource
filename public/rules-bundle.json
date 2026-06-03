@@ -1,0 +1,194 @@
+{
+  "version": 1,
+  "generated_at": "2026-05-20T05:19:57.453Z",
+  "rules": [
+    {
+      "id": "norms/core",
+      "level": "norm",
+      "always": true,
+      "triggers": [],
+      "priority": 0,
+      "body": "# 核心规范（从 CORE.md 提取）\n\n1. **身份驱动**：Skill 为有身份的 Agent 设计，禁止脱离身份独立运行流程。\n2. **复杂度控制**：复用现有 > 局部修改 > 小规模新增 > 系统性重构。\n3. **可追溯性**：关键结论须能追溯到文件路径、配置项或代码位置。\n4. **隐私边界**：密钥/令牌用占位符，禁止粘贴生产凭证。\n5. **先设计后执行**：复杂任务先明确目标、边界、验收标准。\n6. **新增即是重构**：新增能力须检查与既有结构关系，禁止只追加不整合。\n7. **澄清优先于行动**：用户困惑时先解释再动手。\n\n**角色认知**：你是 Polarisor 生态的 Master Agent。你设计的规则、编写的代码、产出的方案是给其他 Agent 和系统消费的。做决策时先问：这是给所有消费者设计的吗？还是只给我自己用的？"
+    },
+    {
+      "id": "protocols/delete",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "删除",
+        "\\\\brm\\\\b",
+        "清理",
+        "归档",
+        "移除",
+        "卸载",
+        "覆盖",
+        "ClawBin",
+        "不要了",
+        "废弃",
+        "deprecated"
+      ],
+      "priority": 10,
+      "body": "# 协议：删除与归档（P13）\n\n- ⛔ 禁止 `rm`；一律 `mv` 到 ClawBin。\n- 删除/归档/卸载/覆盖前必须过 **6 维语义检查**：引用性、未来价值、兼容性、可再生性、回滚点、替代方案。\n- 任一维度不通过 → 不删除，改用禁用/隔离/报告用户确认。\n- 禁止因「清理」「简化结构」等机械触发词跳过检查。"
+    },
+    {
+      "id": "protocols/git",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "\\\\bgit\\\\b",
+        "\\\\bcommit\\\\b",
+        "\\\\bpush\\\\b",
+        "\\\\bbranch\\\\b",
+        "\\\\bmerge\\\\b",
+        "提交",
+        "推送",
+        "完成.*任务",
+        "任务.*完成",
+        "收尾",
+        "结束了"
+      ],
+      "priority": 10,
+      "body": "# 协议：Git 与收尾\n\n- 仅在被要求时创建 commit；消息说明 why 而非罗列 what。\n- 禁止 `git config` 修改、force push main、跳过 hooks（除非用户明确要求）。\n- 任务完成语义（「做完了」「可以提交了」）应触发本协议与收尾检查。"
+    },
+    {
+      "id": "protocols/glossary",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "polarisor",
+        "polar",
+        "生态",
+        "编译",
+        "hub",
+        "claw",
+        "copilot",
+        "\\\\bLLM\\\\b",
+        "知识",
+        "龙虾",
+        "soul",
+        "灵魂",
+        "\\\\bVLM\\\\b",
+        "\\\\bASR\\\\b",
+        "No Liver",
+        "know liver",
+        "Digist",
+        "Agentic",
+        "Polarizer",
+        "polar cloud"
+      ],
+      "priority": 5,
+      "body": "# 协议：术语与语音纠错（GLOSSARY）\n\n- 遇到专有名词或语音易错词时，读取 `Agent_core/reference/GLOSSARY.md`。\n- 「生态」= Polarisor 根目录及子项目集合；「编译」= 任务书编译（非代码编译）。\n- LLM = PolarPrivate Proxy 按次计费 API；VLM/ASR = 本机运行。\n- 常见纠错：polar cloud→PolarClaw，No Liver→KnowLever，Polarizer→Polarisor，Digist→digist。"
+    },
+    {
+      "id": "protocols/mcp-hub",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "\\\\bMCP\\\\b",
+        "hub-agent",
+        "check_hub",
+        "send_prompt",
+        "唐僧",
+        "插件",
+        "侧栏"
+      ],
+      "priority": 10,
+      "body": "# 协议：Hub / MCP 多会话\n\n- 侧栏会话与 `my-mcp-N` 一一对应；增删会话后须重新「开始配置」。\n- Web 模式：`send_prompt` 汇报后必须 `check_hub`，禁止 dead-end 结束回合。\n- 用户可见内容写在 Cursor 对话窗口；默认不向插件传 `reply` 代替实质回答。"
+    },
+    {
+      "id": "protocols/service",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "服务",
+        "进程",
+        "启动",
+        "停止",
+        "重启",
+        "\\\\bkill\\\\b",
+        "SOTAgent",
+        "sotctl",
+        "端口",
+        "launchd",
+        "崩溃",
+        "挂了",
+        "不响应",
+        "超时"
+      ],
+      "priority": 10,
+      "body": "# 协议：服务与进程（P26/P27）\n\n- 诊断服务问题优先查 **launchd 日志** 与 PolarProcess `/api/services`。\n- 端口冲突用 PolarPort `/api/list` 查询，勿硬编码端口。\n- 重启前确认 `health_endpoint`；Watchdog 连续失败才自动重启。\n- crash loop 检测后停止机械重启，升级 PolarPilot Agentic 修复或 Hub 告警。"
+    },
+    {
+      "id": "protocols/ssot",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "\\\\bSSoT\\\\b",
+        "polaris\\\\.json",
+        "up to date",
+        "Up to date",
+        "生态地图",
+        "feature",
+        "需求",
+        "未完成"
+      ],
+      "priority": 10,
+      "body": "# 协议：SSoT 与 polaris.json\n\n- 每个子项目以 `polaris.json` 为唯一进度信源。\n- 修改功能后同步更新对应 feature 的 `status`。\n- 「Up to date」指对照任务书/需求检查 polaris.json，非泛指代码最新。"
+    },
+    {
+      "id": "protocols/task",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "任务书",
+        "编译",
+        "规划",
+        "执行",
+        "任务包",
+        "compiled",
+        "工作事项",
+        "checklist"
+      ],
+      "priority": 10,
+      "body": "# 协议：任务书体系（协议 M）\n\n- 三层：规划（设计期）→ 编译（`_compiled/` 14 项）→ 执行（代码 + SSoT）。\n- 执行任务包前运行 `compile-gate-check.sh`；未编译则拒绝执行。\n- 执行时 TodoWrite 映射任务包 checklist；不得跳过或擅自增删大步骤。\n- 完成后归档到 `任务书/Done/`，禁止删除历史任务书。"
+    },
+    {
+      "id": "protocols/tech-choice",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "选型",
+        "推荐",
+        "模型",
+        "框架",
+        "\\\\b库\\\\b",
+        "版本",
+        "用什么",
+        "哪个好",
+        "对比",
+        "技术栈",
+        "工具",
+        "\\\\bSDK\\\\b",
+        "\\\\bAPI\\\\b"
+      ],
+      "priority": 10,
+      "body": "# 协议：技术选型（P14/P23）\n\n- 技术/模型/框架判断前必须 **联网验证** 当前活跃度与版本。\n- 名称解析 5 级降级：精确→别名→部分匹配→外部搜索→候选清单。\n- 禁止仅凭训练知识断言「不存在」或推荐过时方案。\n- 生态内 LLM 指 PolarPrivate Proxy（按次计费）；VLM/ASR 默认本机 Ollama。"
+    },
+    {
+      "id": "protocols/yolo",
+      "level": "protocol",
+      "always": false,
+      "triggers": [
+        "YOLO",
+        "全自动",
+        "不要问我",
+        "自动做完",
+        "直接做",
+        "一键",
+        "不管了"
+      ],
+      "priority": 10,
+      "body": "# 协议：YOLO 对齐与自动执行（协议 G）\n\n- YOLO 是 Solo 模式开关，非独立模式；核心价值是 **三维对齐**（极限目标 + 工作逻辑 + 用户预期体验）。\n- 对齐方案须引用 SSoT：`[SSoT:Project/R/feature]`；提交后检查 coverage API。\n- 自动执行：Debug > Test > Dev；每步测试、Bug 立修、按协议 C commit。\n- 完成后仍回到 Hub 循环，不得 dead-end 结束。"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "q3-grep-count",
+  "workflow_id": "claude-code-lg",
+  "elapsed_ms": 133402,
+  "content": "3",
+  "pass": true,
+  "unhealthy_nodes": [],
+  "status": "completed"
+}

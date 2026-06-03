@@ -1,0 +1,546 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+      },
+      "purpose": "Hermes Agent LG — 自我进化 + 多平台 ReAct"
+    },
+    "params": {
+      "content": "Hermes Agent task",
+      "channel": "cli",
+      "preload_memory": true
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "You are Hermes, a self-improving AI agent by Nous Research.",
+      "constraints": "Use tools. Generate skills from trajectories. Maintain memory. ReAct JSON branch tool|finish.",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "ReflectiveContext",
+    "inputs": {
+      "trigger": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "include_manifest": true
+    }
+  },
+  "4": {
+    "class_type": "MemorySearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "limit": 8
+    }
+  },
+  "5": {
+    "class_type": "SessionSearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "scope": "all_sessions",
+      "limit": 5
+    }
+  },
+  "6": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "4",
+        0
+      ],
+      "input_b": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "7": {
+    "class_type": "ContextWindow",
+    "inputs": {
+      "messages": [
+        "6",
+        0
+      ],
+      "new_message": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "max_tokens": 128000,
+      "strategy": "summary"
+    }
+  },
+  "8": {
+    "class_type": "StaticData",
+    "inputs": {
+      "trigger": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "value": "[{\"name\":\"terminal\",\"tool\":\"ShellExec\"},{\"name\":\"file\",\"tool\":\"FileRead\"},{\"name\":\"web\",\"tool\":\"WebSearch\"},{\"name\":\"browser\",\"tool\":\"BrowserAction\"},{\"name\":\"delegate\",\"tool\":\"SubAgent\"},{\"name\":\"memory\",\"tool\":\"MemoryStore\"},{\"name\":\"mcp\",\"tool\":\"MCPCall\"},{\"name\":\"code\",\"tool\":\"CodeExec\"}]",
+      "type": "json"
+    }
+  },
+  "9": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "7",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "Hermes ReAct. Output JSON: {\"branch\":\"tool|finish\",\"tool_type\":\"terminal|file|web|...\",\"tool\":\"ShellExec|FileRead|WebSearch|...\"}"
+    }
+  },
+  "10": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "28",
+        0
+      ]
+    },
+    "params": {
+      "branches": "tool,finish",
+      "cases": "[{\"id\":\"a\"},{\"id\":\"b\"}]"
+    }
+  },
+  "11": {
+    "class_type": "ToolCall",
+    "inputs": {
+      "prompt": [
+        "28",
+        0
+      ],
+      "tool_definitions": [
+        "8",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "12": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "13": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "14": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "15": {
+    "class_type": "BrowserAction",
+    "inputs": {
+      "url": [
+        "10",
+        0
+      ],
+      "action": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "16": {
+    "class_type": "MCPCall",
+    "inputs": {
+      "mcp_request": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "17": {
+    "class_type": "StemCell",
+    "inputs": {
+      "state": [
+        "21",
+        0
+      ]
+    },
+    "params": {
+      "allowed_types": "LLM,ToolCall,ShellExec,WebSearch,FileRead,SubAgent",
+      "purpose": "Hermes LG 结构进化槽（WF 模式对应培养皿 PetriDish）"
+    }
+  },
+  "18": {
+    "class_type": "LG_EvolutionGuard",
+    "inputs": {
+      "state": [
+        "17",
+        0
+      ]
+    },
+    "params": {
+      "max_differentiations": 7
+    }
+  },
+  "19": {
+    "class_type": "LearningCapture",
+    "inputs": {
+      "execution_record": {
+        "decision": [
+          "9",
+          0
+        ],
+        "result": [
+          "21",
+          0
+        ]
+      }
+    },
+    "params": {
+      "auto_apply": false
+    }
+  },
+  "20": {
+    "class_type": "PromptEvolve",
+    "inputs": {
+      "evolution_sources": [
+        "19",
+        2
+      ]
+    },
+    "params": {}
+  },
+  "21": {
+    "class_type": "SkillCapture",
+    "inputs": {
+      "trajectory": [
+        "28",
+        0
+      ],
+      "task_description": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "auto_save": false,
+      "push_suggestion": true
+    }
+  },
+  "22": {
+    "class_type": "HistoryReader",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "limit": 10
+    }
+  },
+  "23": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "purpose": [
+          "1",
+          2
+        ],
+        "expected_pattern": [
+          "1",
+          1
+        ]
+      }
+    },
+    "params": {
+      "verify_mode": "auto"
+    }
+  },
+  "24": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "23",
+        0
+      ],
+      "original_input": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "25": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "28",
+        0
+      ]
+    },
+    "params": {
+      "format": "markdown",
+      "label": "Hermes final"
+    }
+  },
+  "26": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "10",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "27": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "28": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "27",
+        0
+      ],
+      "original_input": [
+        "28",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "29": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "30": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "29",
+        0
+      ],
+      "original_input": [
+        "30",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_library": "LG",
+  "_name": "Hermes Agent LG",
+  "_description": "Hermes 1:1 LG — 记忆/Prompt 注入 → ReAct 环 → SkillCapture → 干细胞分化 → 演化守卫 → 记忆/Prompt 进化 → 输出（WF 对应槽位为培养皿 PetriDish）",
+  "_category": "agent-reference",
+  "_state_schema": {
+    "messages": "array",
+    "memory_snapshot": "object",
+    "channel": "string",
+    "tool": "string",
+    "tool_type": "string",
+    "branch": "string"
+  },
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "5",
+      "kind": "static"
+    },
+    {
+      "from": "5",
+      "to": "6",
+      "kind": "static"
+    },
+    {
+      "from": "6",
+      "to": "7",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "8",
+      "kind": "static"
+    },
+    {
+      "from": "8",
+      "to": "9",
+      "kind": "static"
+    },
+    {
+      "from": "9",
+      "to": "10",
+      "kind": "static"
+    },
+    {
+      "from": "10",
+      "to": "11",
+      "kind": "conditional",
+      "when": "tool"
+    },
+    {
+      "from": "10",
+      "to": "21",
+      "kind": "conditional",
+      "when": "finish"
+    },
+    {
+      "from": "11",
+      "to": "9",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "21",
+      "to": "17",
+      "kind": "static"
+    },
+    {
+      "from": "17",
+      "to": "18",
+      "kind": "static"
+    },
+    {
+      "from": "18",
+      "to": "19",
+      "kind": "static"
+    },
+    {
+      "from": "19",
+      "to": "22",
+      "kind": "static"
+    },
+    {
+      "from": "22",
+      "to": "20",
+      "kind": "static"
+    },
+    {
+      "from": "20",
+      "to": "23",
+      "kind": "static"
+    },
+    {
+      "from": "23",
+      "to": "24",
+      "kind": "static"
+    },
+    {
+      "from": "24",
+      "to": "25",
+      "kind": "static"
+    }
+  ]
+}

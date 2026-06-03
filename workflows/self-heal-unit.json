@@ -1,0 +1,95 @@
+{
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{service_name}",
+      "type": "string"
+    }
+  },
+  "2": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{error_log}",
+      "type": "string"
+    }
+  },
+  "3": {
+    "class_type": "HealthCheck",
+    "inputs": {
+      "service_name": [
+        "1",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "ErrorClassifier",
+    "inputs": {
+      "error_log": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "Condition",
+    "inputs": {
+      "value": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "operator": "equals",
+      "compare_value": "unhealthy"
+    }
+  },
+  "6": {
+    "class_type": "ProcessRestart",
+    "inputs": {
+      "service_name": [
+        "1",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "6",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "8": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "5",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "9": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "_name": "自愈单元"
+}

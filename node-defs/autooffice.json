@@ -1,0 +1,385 @@
+[
+  {
+    "class_type": "ContentRender",
+    "category": "Tools",
+    "display_name": "文档渲染",
+    "description": "原子化元件：模板 + 数据 → 单次渲染生成文档（取代 ReportGenerator）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "data",
+        "type": "object",
+        "description": "通用数据载荷（对象/数组/标量）。"
+      },
+      {
+        "name": "template_id",
+        "type": "string",
+        "description": "文档渲染 · 输入「template_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "document",
+        "type": "string",
+        "description": "文档渲染 · 输出「document」（类型 string）"
+      },
+      {
+        "name": "file_path",
+        "type": "string",
+        "optional": true,
+        "description": "文档渲染 · 输出「file_path」（类型 string），可选"
+      }
+    ],
+    "params": {
+      "format": {
+        "type": "select",
+        "default": "html",
+        "options": [
+          "html",
+          "docx",
+          "pptx",
+          "pdf",
+          "latex"
+        ],
+        "label": "输出格式"
+      },
+      "theme": {
+        "type": "text",
+        "default": "minimal",
+        "label": "主题"
+      },
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TemplateList",
+    "category": "Tools",
+    "display_name": "模板列表",
+    "description": "原子化元件：列出 AutoOffice 可用的内置 + 自定义模板",
+    "color": "#2d6363",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "templates",
+        "type": "object",
+        "description": "模板列表 · 输出「templates」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TemplateGet",
+    "category": "Tools",
+    "display_name": "获取模板详情",
+    "description": "原子化元件：获取指定模板的结构和样式定义",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "template_id",
+        "type": "string",
+        "description": "获取模板详情 · 输入「template_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "template",
+        "type": "object",
+        "description": "获取模板详情 · 输出「template」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "DeAiFlavor",
+    "category": "Tools",
+    "display_name": "去AI腔调",
+    "description": "原子化元件：文本去 AI 腔调处理，让内容更自然",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "text",
+        "type": "string",
+        "description": "待处理的文本输入。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "string",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "QualityAnalyze",
+    "category": "Tools",
+    "display_name": "质量分析",
+    "description": "原子化元件：文本质量分析，返回 A-F 等级和改进建议",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "text",
+        "type": "string",
+        "description": "待处理的文本输入。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "grade",
+        "type": "string",
+        "description": "质量分析 · 输出「grade」（类型 string）"
+      },
+      {
+        "name": "report",
+        "type": "object",
+        "optional": true,
+        "description": "质量分析 · 输出「report」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "VisualQA",
+    "category": "Tools",
+    "display_name": "视觉质量评估",
+    "description": "原子化元件：VLM 对文档进行 5 维度视觉质量评分",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "file_path",
+        "type": "string",
+        "description": "视觉质量评估 · 输入「file_path」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "scores",
+        "type": "object",
+        "description": "视觉质量评估 · 输出「scores」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ContentSummarize",
+    "category": "Tools",
+    "display_name": "内容摘要",
+    "description": "原子化元件：内容摘要 + Mermaid 架构图生成",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "summary",
+        "type": "string",
+        "description": "内容摘要 · 输出「summary」（类型 string）"
+      },
+      {
+        "name": "mermaid",
+        "type": "string",
+        "description": "内容摘要 · 输出「mermaid」（类型 string）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ContentEnrich",
+    "category": "Tools",
+    "display_name": "RAG上下文增强",
+    "description": "原子化元件：KnowLever RAG 上下文增强，自动补充背景知识",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "enriched",
+        "type": "string",
+        "description": "RAG上下文增强 · 输出「enriched」（类型 string）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3900",
+        "label": "AutoOffice 地址"
+      }
+    }
+  },
+  {
+    "class_type": "AO_Word生成_f06cad",
+    "category": "Tools",
+    "display_name": "Word 生成",
+    "description": "原子化元件：Word 生成（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "Word 生成 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "AO_LaTeX生成_bd6979",
+    "category": "Tools",
+    "display_name": "LaTeX 生成",
+    "description": "原子化元件：LaTeX 生成（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "LaTeX 生成 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "AO_去AI化处理_c1d221",
+    "category": "Tools",
+    "display_name": "去AI化处理",
+    "description": "原子化元件：去AI化处理（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "去AI化处理 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "AO_批量生成batch_a97a98",
+    "category": "Tools",
+    "display_name": "批量生成（batch）",
+    "description": "原子化元件：批量生成（batch）（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "批量生成（batch） · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "AO_图表嵌入_4c88d9",
+    "category": "Tools",
+    "display_name": "图表嵌入",
+    "description": "原子化元件：图表嵌入（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "图表嵌入 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "AO_外部工具检测_a0e3e0",
+    "category": "Tools",
+    "display_name": "外部工具检测",
+    "description": "原子化元件：外部工具检测（coverage-gap 自动补全，对接 AutoOffice API）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "外部工具检测 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  }
+]

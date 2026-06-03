@@ -1,0 +1,440 @@
+[
+  {
+    "class_type": "LearningCapture",
+    "category": "Evolve",
+    "display_name": "学习记录",
+    "description": "把一次完整决策与结果写入 PolarClaw learning store，供 self-learning-loop 异步消费。",
+    "color": "#3a5060",
+    "inputs": [
+      {
+        "name": "execution_record",
+        "type": "object",
+        "label": "{ decision, result, validation_report? }",
+        "description": "学习记录 · 输入「execution_record」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "capture_id",
+        "type": "string",
+        "description": "学习记录 · 输出「capture_id」（类型 string）"
+      },
+      {
+        "name": "store_size",
+        "type": "number",
+        "optional": true,
+        "description": "学习记录 · 输出「store_size」（类型 number），可选"
+      },
+      {
+        "name": "capture",
+        "type": "object",
+        "optional": true,
+        "description": "学习记录 · 输出「capture」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "endpoint": {
+        "type": "text",
+        "default": "http://127.0.0.1:8787/api/learning/capture",
+        "label": "PolarClaw HTTP 端点"
+      },
+      "fallback_path": {
+        "type": "text",
+        "default": "PolarClaw/.data/learning-captures.jsonl",
+        "label": "fallback JSONL 路径（PolarClaw self-learning-loop 消费）"
+      },
+      "wake_self_learning": {
+        "type": "boolean",
+        "default": true,
+        "label": "写入后标记 PolarClaw 可消费（learning-capture.last.json）"
+      }
+    }
+  },
+  {
+    "class_type": "RecursionGuard",
+    "category": "Evolve",
+    "display_name": "递归保护",
+    "description": "递归循环保护：深度限制 + 冷却时间 + 失败熔断。不通过则输出 null，下游 AgentWorkflow 跳过。",
+    "color": "#7a4a30",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "any",
+        "description": "待分支或判断的值。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "pass_value",
+        "type": "any",
+        "description": "递归保护 · 输出「pass_value」（类型 any）"
+      },
+      {
+        "name": "stop_reason",
+        "type": "string",
+        "optional": true,
+        "description": "递归保护 · 输出「stop_reason」（类型 string），可选"
+      }
+    ],
+    "params": {
+      "max_depth": {
+        "type": "number",
+        "default": 100,
+        "label": "最大递归深度"
+      },
+      "cooldown_ms": {
+        "type": "number",
+        "default": 5000,
+        "label": "两次递归最小间隔(ms)"
+      },
+      "circuit_breaker_threshold": {
+        "type": "number",
+        "default": 5,
+        "label": "连续失败熔断阈值"
+      },
+      "circuit_breaker_window_ms": {
+        "type": "number",
+        "default": 60000,
+        "label": "失败统计窗口(ms)"
+      },
+      "workflow_key": {
+        "type": "text",
+        "default": "evolution-loop",
+        "label": "隔离键 workflow_id"
+      }
+    }
+  },
+  {
+    "class_type": "ExperienceCapture",
+    "category": "Evolve",
+    "display_name": "经验采集器",
+    "description": "在关键判断点（出错/成功）采集执行上下文，供记忆与 Prompt 迭代。",
+    "color": "#4a3a2d",
+    "inputs": [
+      {
+        "name": "capture_context",
+        "type": "object",
+        "label": "{ context, trigger_event }",
+        "description": "经验采集器 · 输入「capture_context」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "experience_record",
+        "type": "object",
+        "description": "经验采集器 · 输出「experience_record」（类型 object）"
+      }
+    ],
+    "params": {
+      "capture_mode": {
+        "type": "select",
+        "default": "both",
+        "options": [
+          "error_only",
+          "success_only",
+          "both"
+        ],
+        "label": "采集模式"
+      },
+      "storage_path": {
+        "type": "text",
+        "default": "knowledge/",
+        "label": "存储路径"
+      },
+      "auto_apply": {
+        "type": "boolean",
+        "default": false,
+        "label": "自动应用到下次"
+      }
+    }
+  },
+  {
+    "class_type": "PromptEvolve",
+    "category": "Evolve",
+    "display_name": "Prompt 进化",
+    "description": "蒸馏 LearningCapture / ExperienceCapture → prior_knowledge 写回 PromptInject 或 MemoryStore（00 §3.4 闭环）。",
+    "color": "#4a5060",
+    "inputs": [
+      {
+        "name": "evolution_sources",
+        "type": "object",
+        "label": "{ capture?, learning_capture?, experience_record?, memory_blocks?, history_runs? }",
+        "description": "Prompt 进化 · 输入「evolution_sources」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "prior_knowledge",
+        "type": "string",
+        "description": "Prompt 进化 · 输出「prior_knowledge」（类型 string）"
+      },
+      {
+        "name": "evolved_prompt",
+        "type": "string",
+        "description": "Prompt 进化 · 输出「evolved_prompt」（类型 string）"
+      },
+      {
+        "name": "store_key",
+        "type": "string",
+        "optional": true,
+        "description": "Prompt 进化 · 输出「store_key」（类型 string），可选"
+      },
+      {
+        "name": "distilled_chars",
+        "type": "number",
+        "optional": true,
+        "description": "Prompt 进化 · 输出「distilled_chars」（类型 number），可选"
+      }
+    ],
+    "params": {
+      "target": {
+        "type": "select",
+        "default": "prompt_inject",
+        "options": [
+          "prompt_inject",
+          "memory_store",
+          "both"
+        ],
+        "label": "写回目标"
+      },
+      "memory_key": {
+        "type": "text",
+        "default": "prompt_evolve",
+        "label": "MemoryStore key"
+      },
+      "max_chars": {
+        "type": "number",
+        "default": 2000,
+        "label": "蒸馏最大字符"
+      },
+      "read_auto_apply": {
+        "type": "boolean",
+        "default": true,
+        "label": "无 capture 时读 auto-apply 文件"
+      },
+      "include_history": {
+        "type": "boolean",
+        "default": true,
+        "label": "无 history_runs 输入时尝试 HistoryReader"
+      },
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3100",
+        "label": "PolarMemory API"
+      }
+    }
+  },
+  {
+    "class_type": "HistorySink",
+    "category": "History",
+    "display_name": "History 落盘",
+    "description": "聚合一次 execute 的全链路 trace，输出 log_json + log_path + summary（WF/LG 共用）。",
+    "color": "#3d4a5a",
+    "inputs": [
+      {
+        "name": "run_envelope",
+        "type": "object",
+        "description": "History 落盘 · 输入「run_envelope」（类型 object）"
+      },
+      {
+        "name": "node_traces",
+        "type": "object",
+        "optional": true,
+        "description": "History 落盘 · 输入「node_traces」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "log_json",
+        "type": "object",
+        "description": "History 落盘 · 输出「log_json」（类型 object）"
+      },
+      {
+        "name": "log_path",
+        "type": "string",
+        "description": "History 落盘 · 输出「log_path」（类型 string）"
+      },
+      {
+        "name": "summary",
+        "type": "string",
+        "description": "History 落盘 · 输出「summary」（类型 string）"
+      }
+    ],
+    "params": {
+      "runs_dir": {
+        "type": "text",
+        "default": "PolarUI/runs/",
+        "label": "Run 目录"
+      }
+    }
+  },
+  {
+    "class_type": "HistoryReader",
+    "category": "History",
+    "display_name": "History 读取",
+    "description": "读取最近 N 次 run log，供对比与 Prompt 迭代。",
+    "color": "#3d4a5a",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "optional": true,
+        "description": "History 读取 · 输入「query」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "runs",
+        "type": "object",
+        "description": "History 读取 · 输出「runs」（类型 object）"
+      },
+      {
+        "name": "count",
+        "type": "number",
+        "description": "History 读取 · 输出「count」（类型 number）"
+      }
+    ],
+    "params": {
+      "limit": {
+        "type": "number",
+        "default": 10,
+        "label": "最近 N 次"
+      },
+      "runs_dir": {
+        "type": "text",
+        "default": "PolarUI/runs/",
+        "label": "Run 目录"
+      }
+    }
+  },
+  {
+    "class_type": "PetriDish",
+    "category": "Evolve",
+    "execution_mode": "WF",
+    "display_name": "培养皿",
+    "description": "WF 结构进化（子图路径）：展开 slave 子工作流，在子图内改图并人审注册；不直接改主图。",
+    "color": "#5a4a6a",
+    "expandable": true,
+    "inputs": [
+      {
+        "name": "seed",
+        "type": "any",
+        "optional": true,
+        "description": "培养皿 · 输入「seed」（类型 any），可选"
+      },
+      {
+        "name": "evolution_signal",
+        "type": "object",
+        "optional": true,
+        "description": "培养皿 · 输入「evolution_signal」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "refined_workflow",
+        "type": "object",
+        "description": "培养皿 · 输出「refined_workflow」（类型 object）"
+      },
+      {
+        "name": "applied",
+        "type": "boolean",
+        "description": "培养皿 · 输出「applied」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "slave_workflow": {
+        "type": "text",
+        "default": "",
+        "label": "Slave 子工作流（workflows/ 路径）"
+      },
+      "allow_graph_edit": {
+        "type": "boolean",
+        "default": true,
+        "label": "允许运行时改图"
+      }
+    }
+  },
+  {
+    "class_type": "StemCell",
+    "category": "Evolve",
+    "execution_mode": "WF",
+    "display_name": "干细胞",
+    "description": "WF 权柄入口：执行经过此节点时准许对当前工作流直接增删改节点与连线（可读可写）；allowed_types 限制可新增的类型。",
+    "color": "#6a5a8a",
+    "inputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞 · 输入「state」（类型 object）"
+      },
+      {
+        "name": "differentiation_signal",
+        "type": "object",
+        "optional": true,
+        "description": "干细胞 · 输入「differentiation_signal」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞 · 输出「state」（类型 object）"
+      },
+      {
+        "name": "materialized_class",
+        "type": "string",
+        "description": "干细胞 · 输出「materialized_class」（类型 string）"
+      },
+      {
+        "name": "node_id",
+        "type": "string",
+        "description": "干细胞 · 输出「node_id」（类型 string）"
+      },
+      {
+        "name": "graph_edit_granted",
+        "type": "boolean",
+        "description": "干细胞 · 输出「graph_edit_granted」— 本步是否开放工作流结构读写"
+      }
+    ],
+    "params": {
+      "allowed_types": {
+        "type": "text",
+        "default": "LLM,ToolCall,ShellExec,Switch,Output,StemCell",
+        "label": "可新增/改动的 class_type（逗号分隔）"
+      },
+      "allow_graph_edit": {
+        "type": "boolean",
+        "default": true,
+        "label": "准许运行时改主工作流结构"
+      },
+      "purpose": {
+        "type": "text",
+        "default": "",
+        "label": "分化目的说明"
+      }
+    }
+  },
+  {
+    "class_type": "PluripotentCell",
+    "palette_hidden": true,
+    "category": "Internal/Evolve",
+    "display_name": "干细胞（旧名）",
+    "description": "已重命名为 StemCell；保留 class_type 兼容旧 workflow",
+    "color": "#6a5a8a",
+    "inputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞（旧名） · 输入「state」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞（旧名） · 输出「state」（类型 object）"
+      }
+    ],
+    "params": {}
+  }
+]

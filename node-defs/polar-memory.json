@@ -1,0 +1,208 @@
+[
+  {
+    "class_type": "WorkingMemory",
+    "category": "Memory",
+    "display_name": "工作记忆",
+    "description": "多轮对话工作记忆：调用 PolarClaw SessionMemory 按 conversation_id 注入历史摘要 + 长期记忆 Block。配合 PromptInject.memory_blocks 使用。",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "conversation_id",
+        "type": "string",
+        "description": "工作记忆 · 输入「conversation_id」（类型 string）"
+      },
+      {
+        "name": "new_message",
+        "type": "string",
+        "optional": true,
+        "description": "工作记忆 · 输入「new_message」（类型 string），可选"
+      },
+      {
+        "name": "user_id",
+        "type": "string",
+        "optional": true,
+        "description": "工作记忆 · 输入「user_id」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "string",
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      },
+      {
+        "name": "compressed",
+        "type": "boolean",
+        "description": "工作记忆 · 输出「compressed」（类型 boolean）"
+      },
+      {
+        "name": "stats",
+        "type": "object",
+        "description": "工作记忆 · 输出「stats」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:4810",
+        "label": "PolarClaw 地址"
+      },
+      "auto_compress": {
+        "type": "boolean",
+        "default": true,
+        "label": "回合结束自动压缩"
+      },
+      "fetch_long_term": {
+        "type": "boolean",
+        "default": true,
+        "label": "拉取 PolarMemory 长期块"
+      },
+      "message_role": {
+        "type": "select",
+        "default": "user",
+        "options": [
+          "user",
+          "assistant",
+          "system",
+          "tool"
+        ],
+        "label": "新消息角色"
+      }
+    }
+  },
+  {
+    "class_type": "MemorySearch",
+    "category": "Memory",
+    "display_name": "记忆检索",
+    "description": "原子化元件：Block 细粒度语义检索（按 query 相关性 + top_k + 权重过滤）",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "记忆检索 · 输入「query」（类型 string）"
+      },
+      {
+        "name": "user",
+        "type": "string",
+        "optional": true,
+        "description": "记忆检索 · 输入「user」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "blocks",
+        "type": "object",
+        "description": "记忆检索 · 输出「blocks」（类型 object）"
+      }
+    ],
+    "params": {
+      "top_k": {
+        "type": "number",
+        "default": 5,
+        "label": "返回数量"
+      },
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3100",
+        "label": "PolarMemory 地址"
+      }
+    }
+  },
+  {
+    "class_type": "MemoryConvert",
+    "category": "Memory",
+    "display_name": "Wiki→Block转换",
+    "description": "原子化元件：将 KnowLever Wiki 页面压缩转换为高密度 Block",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "wiki_path",
+        "type": "string",
+        "description": "Wiki→Block转换 · 输入「wiki_path」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "block",
+        "type": "object",
+        "description": "Wiki→Block转换 · 输出「block」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3100",
+        "label": "PolarMemory 地址"
+      }
+    }
+  },
+  {
+    "class_type": "MemorySync",
+    "category": "Memory",
+    "display_name": "记忆同步",
+    "description": "原子化元件：与 KnowLever Wiki 增量同步（返回 added/updated 计数）",
+    "color": "#2d6363",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "sync_result",
+        "type": "object",
+        "optional": true,
+        "description": "记忆同步 · 输出「sync_result」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3100",
+        "label": "PolarMemory 地址"
+      }
+    }
+  },
+  {
+    "class_type": "UserPreferenceExtract",
+    "category": "Memory",
+    "display_name": "用户偏好提取",
+    "description": "原子化元件：从任务全链路（工具调用轨迹/用户反馈/修改模式）提取用户偏好",
+    "color": "#2d6363",
+    "inputs": [
+      {
+        "name": "trajectory",
+        "type": "object",
+        "description": "用户偏好提取 · 输入「trajectory」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "preferences",
+        "type": "object",
+        "optional": true,
+        "description": "用户偏好提取 · 输出「preferences」（类型 object），可选"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "Mem_BlockManager_091585",
+    "category": "Memory",
+    "display_name": "BlockManager",
+    "description": "原子化元件：BlockManager（coverage-gap 自动补全，对接 PolarMemory API）",
+    "color": "#2d4a63",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "BlockManager · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  }
+]

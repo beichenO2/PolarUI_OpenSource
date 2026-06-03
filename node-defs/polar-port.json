@@ -1,0 +1,140 @@
+[
+  {
+    "class_type": "PortAllocate",
+    "category": "Tools",
+    "display_name": "端口分配",
+    "description": "原子化元件：幂等端口分配（相同 service_name 返回同一端口）",
+    "color": "#4a4a2d",
+    "inputs": [
+      {
+        "name": "service_name",
+        "type": "string",
+        "description": "端口分配 · 输入「service_name」（类型 string）"
+      },
+      {
+        "name": "project",
+        "type": "string",
+        "description": "端口分配 · 输入「project」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "port",
+        "type": "number",
+        "description": "端口分配 · 输出「port」（类型 number）"
+      }
+    ],
+    "params": {
+      "preferred_port": {
+        "type": "number",
+        "default": 0,
+        "label": "首选端口(0=自动)"
+      },
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:11050",
+        "label": "PolarPort 地址"
+      }
+    }
+  },
+  {
+    "class_type": "PortRelease",
+    "category": "Tools",
+    "display_name": "释放端口",
+    "description": "原子化元件：释放已分配的端口",
+    "color": "#4a4a2d",
+    "inputs": [
+      {
+        "name": "port",
+        "type": "number",
+        "description": "释放端口 · 输入「port」（类型 number）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "ok",
+        "type": "boolean",
+        "description": "释放端口 · 输出「ok」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:11050",
+        "label": "PolarPort 地址"
+      }
+    }
+  },
+  {
+    "class_type": "PortHeartbeat",
+    "category": "Tools",
+    "display_name": "端口心跳",
+    "description": "原子化元件：上报端口心跳（保活/验证）",
+    "color": "#4a4a2d",
+    "inputs": [
+      {
+        "name": "port",
+        "type": "number",
+        "description": "端口心跳 · 输入「port」（类型 number）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "last_verified",
+        "type": "string",
+        "description": "端口心跳 · 输出「last_verified」（类型 string）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:11050",
+        "label": "PolarPort 地址"
+      }
+    }
+  },
+  {
+    "class_type": "PortList",
+    "category": "Tools",
+    "display_name": "端口列表",
+    "description": "原子化元件：列出所有已分配端口及状态",
+    "color": "#4a4a2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "ports",
+        "type": "object",
+        "description": "端口列表 · 输出「ports」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:11050",
+        "label": "PolarPort 地址"
+      }
+    }
+  },
+  {
+    "class_type": "PortFacadeContract",
+    "category": "Tools",
+    "display_name": "facade 同形契约",
+    "description": "原子化元件：PolarPort facade 同形契约（allocate/list/heartbeat 统一响应形状）",
+    "color": "#4a4a2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "contract",
+        "type": "object",
+        "description": "facade 同形契约 · 输出「contract」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:11050",
+        "label": "PolarPort 地址"
+      }
+    }
+  }
+]

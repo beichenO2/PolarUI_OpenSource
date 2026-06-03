@@ -1,0 +1,53 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": ".*"
+      },
+      "purpose": "检索 query"
+    },
+    "params": {
+      "content": "PolarUI RetryLoop 默认轮数"
+    }
+  },
+  "2": {
+    "class_type": "MemorySync",
+    "inputs": {},
+    "params": {
+      "user": "polarui",
+      "topic": "polarisor"
+    }
+  },
+  "3": {
+    "class_type": "UserPreferenceExtract",
+    "inputs": {
+      "trajectory": [
+        "1",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "MemorySearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "format": "markdown"
+    }
+  },
+  "_name": "PolarMemory 记忆代理"
+}

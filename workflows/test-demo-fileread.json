@@ -1,0 +1,21 @@
+{
+  "1": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": "PolarUI/package.json"
+    },
+    "params": {}
+  },
+  "2": {
+    "class_type": "Output",
+    "inputs": {
+      "content": ["1", 0]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "_name": "Test Demo FileRead",
+  "_description": "260526 Phase2 — 单工具 Demo：FileRead → Output",
+  "_category": "test"
+}

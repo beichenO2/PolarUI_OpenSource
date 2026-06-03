@@ -1,0 +1,9 @@
+{
+  "id": "q1-folders",
+  "workflow_id": "claude-code-lg",
+  "elapsed_ms": 149169,
+  "content": "**Top-level directories under `PolarUI/`:**\n\n| # | Directory |\n|---|-----------|\n| 1 | `.cursor` |\n| 2 | `.data` |\n| 3 | `cli` |\n| 4 | `data` |\n| 5 | `dist` |\n| 6 | `electron` |\n| 7 | `logs` |\n| 8 | `node_modules` |\n| 9 | `output` |\n| 10 | `prompts` |\n| 11 | `public` |\n| 12 | `reference` |\n| 13 | `release` |\n| 14 | `runs` |\n| 15 | `scripts` |\n| 16 | `skills` |\n| 17 | `src` |\n| 18 | `tests` |\n| 19 | `workflows` |\n| 20 | `任务书` |\n\n---\n\n**Summary:** The `PolarUI/` project is a full-featured Electron + web application workspace with 20 top-level directories spanning source code (`src`), build output (`dist`, `release`), tooling (`scripts`, `cli`, `.cursor`), data/logs, tests, workflow definitions, and Chinese-language task documentation (`任务书`).",
+  "pass": true,
+  "unhealthy_nodes": [],
+  "status": "completed"
+}

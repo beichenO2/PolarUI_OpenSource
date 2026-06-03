@@ -1,0 +1,51 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "帮我写一份雷达系统实验报告",
+      "expected_output": {
+        "body": "(摘要|引言|方法|结果|结论)"
+      },
+      "purpose": "生成符合学术规范的雷达实验报告"
+    }
+  },
+  "3": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "1",
+        0
+      ],
+      "max_results": 5
+    }
+  },
+  "4": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "max_steps": 10,
+      "temperature": 0.3
+    }
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "4",
+        0
+      ],
+      "format": "auto",
+      "save_to": "./output/实验报告.md"
+    }
+  }
+}

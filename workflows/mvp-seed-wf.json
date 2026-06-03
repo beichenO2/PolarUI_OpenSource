@@ -1,0 +1,177 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "生成最小可执行 WF JSON：节点 1=PromptInput(用户说「你好 PolarUI」)，节点 2=LLM(简短问候)，节点 3=Output。必须含 \"class_type\" 字段；只输出纯 JSON，不要 markdown 围栏。",
+      "expected_output": {
+        "body": "\"class_type\"\\s*:"
+      },
+      "purpose": "MVP Seed：WF 模式工作流编译 + 培养皿改图"
+    },
+    "params": {}
+  },
+  "2": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "2m",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt_file": "prompts/seed-wf-compile.txt"
+    }
+  },
+  "3": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "purpose": [
+          "1",
+          2
+        ],
+        "expected_pattern": [
+          "1",
+          1
+        ]
+      }
+    },
+    "params": {
+      "verify_mode": "auto",
+      "verify_model": "GLM-5.1"
+    }
+  },
+  "4": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "3",
+        0
+      ],
+      "original_input": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "5": {
+    "class_type": "PetriDish",
+    "inputs": {
+      "seed": [
+        "8",
+        0
+      ],
+      "evolution_signal": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "slave_workflow": "",
+      "allow_graph_edit": true
+    }
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "format": "json",
+      "label": "refined_workflow + applied"
+    }
+  },
+  "7": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "8": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "7",
+        0
+      ],
+      "original_input": [
+        "8",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "9": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "10": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "9",
+        0
+      ],
+      "original_input": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_name": "MVP 原模型 WF",
+  "_description": "Seed：PromptInput → LLM ← RetryLoop 回边 → Validator(purpose SSOT) → RetryLoop → PetriDish → Output",
+  "_category": "seed",
+  "_role": "master",
+  "2m": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "1",
+        0
+      ],
+      "input_b": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "first_non_null"
+    }
+  }
+}

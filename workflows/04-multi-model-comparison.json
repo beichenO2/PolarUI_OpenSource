@@ -1,0 +1,417 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "比较不同模型对同一问题的回答质量",
+      "expected_output": {
+        "body": "\"scores\"\\s*:\\s*\\{"
+      },
+      "purpose": "多模型对比：同一问题发给多个模型，评分比较"
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是 AI 模型评测专家",
+      "constraints": "输出必须为 JSON {model, response, quality_score}",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "4": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5-TURBO"
+    }
+  },
+  "5": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "010"
+    }
+  },
+  "6": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "14",
+        0
+      ],
+      "input_b": [
+        "16",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "6",
+        0
+      ],
+      "input_b": [
+        "18",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "你是评测裁判",
+      "constraints": "对比三个模型输出，打分并排名，输出 JSON {scores: {model: score}, winner, analysis}",
+      "prior_knowledge": ""
+    }
+  },
+  "9": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "7",
+        0
+      ],
+      "context": [
+        "8",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "11": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "10",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "7",
+        0
+      ]
+    }
+  },
+  "12": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "20",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "3",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "14": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "13",
+        0
+      ],
+      "original_input": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "15": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "4",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "16": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "15",
+        0
+      ],
+      "original_input": [
+        "16",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "17": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "18": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "17",
+        0
+      ],
+      "original_input": [
+        "18",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "19": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "20": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "19",
+        0
+      ],
+      "original_input": [
+        "20",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "21": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "3",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "22": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "21",
+        0
+      ],
+      "original_input": [
+        "22",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "23": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "4",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "24": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "23",
+        0
+      ],
+      "original_input": [
+        "24",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "25": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "26": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "25",
+        0
+      ],
+      "original_input": [
+        "26",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "27": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "28": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "27",
+        0
+      ],
+      "original_input": [
+        "28",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "9b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "11",
+        1
+      ],
+      "context": [
+        "8",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "比较不同模型对同一问题的回答质量",
+      "expected_output": "\"scores\"\\s*:\\s*\\{",
+      "purpose": "多模型对比：同一问题发给多个模型，评分比较"
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是 AI 模型评测专家",
+      "constraints": "输出必须为 JSON {model, response, quality_score}",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "4": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5-TURBO"
+    }
+  },
+  "5": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "010"
+    }
+  },
+  "6": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "3",
+        0
+      ],
+      "input_b": [
+        "4",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "6",
+        0
+      ],
+      "input_b": [
+        "5",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "你是评测裁判",
+      "constraints": "对比三个模型输出，打分并排名，输出 JSON {scores: {model: score}, winner, analysis}",
+      "prior_knowledge": ""
+    }
+  },
+  "9": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "7",
+        0
+      ],
+      "context": [
+        "8",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "11": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "10",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "7",
+        0
+      ]
+    }
+  },
+  "12": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "9",
+        0
+      ]
+    }
+  },
+  "9b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "11",
+        1
+      ],
+      "context": [
+        "8",
+        0
+      ]
+    }
+  }
+}

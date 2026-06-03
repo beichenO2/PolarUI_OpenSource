@@ -1,0 +1,503 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "编译主题：{topic}\n用户：{user}\n源目录：data/users/{user}/topics/{topic}/normalized/",
+      "expected_output": {
+        "body": "site/.*\\.html|pdf/manuscript\\.md"
+      },
+      "purpose": "KnowLever 7 阶段知识编译管道：normalized content.md → atoms → clusters → tree → wiki pages → validated site → PDF"
+    }
+  },
+  "2": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{\"pipeline\":\"knowlever-compile\",\"stages\":7,\"version\":\"2026-sota\",\"embedding_model\":\"qwen3-embedding:8b\",\"embedding_dim\":1024,\"llm_backend\":\"polarprivate → local (L-codes)\",\"design_system\":\"polar-tech\"}",
+      "type": "json"
+    }
+  },
+  "3": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": "KnowLever/GroundTruth/Agent-Wiki/outputs/html-site/preview/index.html"
+    },
+    "params": {
+      "encoding": "utf-8",
+      "optional": true
+    }
+  },
+  "4": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "role": "你是知识结晶化引擎（Stage 1 — Crystallize）",
+      "constraints": "调用 emit_atoms 工具把文本切成知识原子。一个 atom 承载一个 idea。claim ≤ 40 中文字。evidence_quote 必须是原文连续片段。kind 必须是 definition/example/formula/rule/anti-pattern/problem 之一。draft_tags 2-5 个关键词。",
+      "prior_knowledge": "Zettelkasten 原子化原则：每个卡片只承载一个想法"
+    }
+  },
+  "5": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "3",
+        0
+      ],
+      "context": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "6": {
+    "class_type": "SchemaExtract",
+    "inputs": {
+      "text": [
+        "29",
+        0
+      ],
+      "schema": [
+        "4",
+        1
+      ]
+    },
+    "params": {
+      "strict": true
+    }
+  },
+  "7": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        1
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"atoms\"\\s*:\\s*\\["
+      }
+    },
+    "params": {
+      "strict": true
+    }
+  },
+  "8": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "7",
+        0
+      ],
+      "retry_hint": "function calling 未返回 atoms 数组，重试",
+      "original_input": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 3
+    }
+  },
+  "9": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{\"clusters\": [{\"slug\": \"stub-page\", \"title\": \"Stub Page\"}], \"atoms\": [{\"claim\": \"stub atom\"}]}",
+      "type": "json"
+    }
+  },
+  "10": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "9",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"clusters\"\\s*:\\s*\\["
+      }
+    },
+    "params": {
+      "strict": true
+    }
+  },
+  "11": {
+    "class_type": "JsonParse",
+    "inputs": {
+      "input": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "path": "$.clusters"
+    }
+  },
+  "12": {
+    "class_type": "Condition",
+    "inputs": {
+      "data": [
+        "11",
+        0
+      ]
+    },
+    "params": {
+      "expression": "data.children && data.children.length <= 7"
+    }
+  },
+  "13": {
+    "class_type": "ForLoop",
+    "inputs": {
+      "items": [
+        "11",
+        0
+      ]
+    },
+    "params": {
+      "parallel": false,
+      "collect_results": true,
+      "max_items": 1
+    }
+  },
+  "14": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "role": "你是知识页面撰写引擎（Stage 4 — Page Compose）",
+      "constraints": "三条编译规则：① 长的变短：长篇叙述拆成 ≤40 字短句，逻辑连词串联。② 短的变长：纯名词列表展开为「名词 + 一句话解释」。③ 故事线：非叶子节点按 5 段结构（目的→困难→方法→结果→局限）。字数硬上限：叶子 ≤ 600 / 中间 ≤ 1200 / 根 ≤ 2000。仅引用白名单 slug，[[slug]] 格式。",
+      "prior_knowledge": "五段故事模板：我们在做什么→遇到什么困难→采取什么方法→取得什么结果→有什么缺陷"
+    }
+  },
+  "15": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "13",
+        0
+      ],
+      "context": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "temperature": 0.3,
+      "system_prompt": ""
+    }
+  },
+  "16": {
+    "class_type": "FileWrite",
+    "inputs": {
+      "path": "KnowLever/data/stub-page.md",
+      "content": [
+        "31",
+        0
+      ]
+    },
+    "params": {
+      "create_dirs": true
+    }
+  },
+  "17": {
+    "class_type": "GlobSearch",
+    "inputs": {
+      "pattern": [
+        "16",
+        0
+      ]
+    },
+    "params": {
+      "cwd": "."
+    }
+  },
+  "18": {
+    "class_type": "RegexMatch",
+    "inputs": {
+      "text": [
+        "17",
+        0
+      ]
+    },
+    "params": {
+      "pattern": "\\[\\[([^\\]]+)\\]\\]",
+      "flags": "g"
+    }
+  },
+  "19": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "18",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"errors\"\\s*:\\s*\\[\\s*\\]"
+      }
+    },
+    "params": {
+      "strict": true
+    }
+  },
+  "20": {
+    "class_type": "Condition",
+    "inputs": {
+      "data": [
+        "19",
+        0
+      ]
+    },
+    "params": {
+      "expression": "data === true"
+    }
+  },
+  "21": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "echo 'index.html'",
+      "cwd": "KnowLever"
+    },
+    "params": {
+      "timeout_s": 120
+    }
+  },
+  "22": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "21",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "index\\.html"
+      }
+    },
+    "params": {
+      "strict": false
+    }
+  },
+  "23": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "echo 'pdf/manuscript.md'",
+      "cwd": "KnowLever"
+    },
+    "params": {
+      "timeout_s": 180
+    }
+  },
+  "24": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "21",
+        0
+      ],
+      "input_b": [
+        "23",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "merge_object"
+    }
+  },
+  "25": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "24",
+        0
+      ]
+    },
+    "params": {
+      "format": "json",
+      "save_to": ""
+    }
+  },
+  "26": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "12",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "27": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "20",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "28": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "29": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "28",
+        0
+      ],
+      "original_input": [
+        "29",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "30": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "15",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "31": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "30",
+        0
+      ],
+      "original_input": [
+        "31",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "32": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "12",
+        0
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "33": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "20",
+        0
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "34": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "5",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "35": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "34",
+        0
+      ],
+      "original_input": [
+        "35",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "36": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "15",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "37": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "36",
+        0
+      ],
+      "original_input": [
+        "37",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_name": "KnowLever 知识编译管道"
+}

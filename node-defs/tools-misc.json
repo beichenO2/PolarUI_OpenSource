@@ -1,0 +1,49 @@
+[
+  {
+    "class_type": "CostTracker",
+    "category": "Tools",
+    "display_name": "资金化追踪",
+    "description": "原子化元件：LLM 调用成本追踪（预算/消耗/余额可视化）",
+    "color": "#5a4a2d",
+    "inputs": [
+      {
+        "name": "usage_data",
+        "type": "object",
+        "description": "资金化追踪 · 输入「usage_data」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "cost_report",
+        "type": "object",
+        "description": "资金化追踪 · 输出「cost_report」（类型 object）"
+      },
+      {
+        "name": "budget_ok",
+        "type": "boolean",
+        "description": "资金化追踪 · 输出「budget_ok」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "budget_limit": {
+        "type": "number",
+        "default": 100,
+        "label": "预算上限(元)"
+      },
+      "alert_threshold": {
+        "type": "number",
+        "default": 80,
+        "label": "告警阈值(%)"
+      },
+      "pricing_source": {
+        "type": "select",
+        "default": "PolarPrivate",
+        "options": [
+          "PolarPrivate",
+          "manual"
+        ],
+        "label": "定价来源"
+      }
+    }
+  }
+]

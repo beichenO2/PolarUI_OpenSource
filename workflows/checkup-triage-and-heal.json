@@ -1,0 +1,161 @@
+{
+  "1": {
+    "class_type": "CheckupEventInbox",
+    "inputs": {
+      "agent_id": "@checkup-agent"
+    }
+  },
+  "2": {
+    "class_type": "CheckupTriage",
+    "inputs": {
+      "event": [
+        "1",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "ProjectContextGather",
+    "inputs": {
+      "triage_result": {
+        "project": [
+          "2",
+          0
+        ],
+        "page_url": [
+          "2",
+          1
+        ]
+      }
+    }
+  },
+  "4": {
+    "class_type": "CheckupDiagnoseChain",
+    "inputs": {
+      "diagnostic_input": {
+        "event": [
+          "1",
+          0
+        ],
+        "context": [
+          "3",
+          0
+        ],
+        "purpose": "检修分诊：结合截图批注与用户描述定位根因"
+      }
+    }
+  },
+  "5": {
+    "class_type": "Condition",
+    "inputs": {
+      "value": [
+        "4",
+        1
+      ]
+    },
+    "params": {
+      "operator": "gte",
+      "compare_value": 0.7
+    }
+  },
+  "6": {
+    "class_type": "CheckupFixChain",
+    "inputs": {
+      "diagnosis": [
+        "4",
+        0
+      ],
+      "context": [
+        "3",
+        0
+      ],
+      "branch_ok": [
+        "5",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "HumanApproval",
+    "inputs": {
+      "context": [
+        "4",
+        0
+      ],
+      "branch_alt": [
+        "5",
+        1
+      ]
+    },
+    "params": {
+      "auto_approve": false,
+      "prompt_text": "自动修复置信度不足或涉及生产变更，需人工介入"
+    }
+  },
+  "8": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": [
+        "6",
+        2
+      ],
+      "cwd": "."
+    },
+    "params": {
+      "timeout_s": 120
+    }
+  },
+  "9": {
+    "class_type": "GitCommit",
+    "inputs": {
+      "message": [
+        "6",
+        3
+      ],
+      "files": null
+    },
+    "params": {
+      "push": false
+    }
+  },
+  "10": {
+    "class_type": "CheckupReport",
+    "inputs": {
+      "report_context": {
+        "status": [
+          "6",
+          0
+        ],
+        "event_id": [
+          "1",
+          1
+        ],
+        "summary": [
+          "6",
+          1
+        ],
+        "approved": [
+          "7",
+          0
+        ],
+        "feedback": [
+          "7",
+          1
+        ],
+        "workflow_run_id": [
+          "1",
+          1
+        ],
+        "shell_success": [
+          "8",
+          3
+        ],
+        "commit_hash": [
+          "9",
+          0
+        ]
+      }
+    }
+  },
+  "_name": "检修事件：分诊 → 诊断 → 修复 → 汇报"
+}

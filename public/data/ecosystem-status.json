@@ -1,0 +1,77 @@
+{
+  "services": [
+    {
+      "name": "Hub",
+      "port": 8040,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:39.909Z"
+    },
+    {
+      "name": "AutoOffice",
+      "port": 3900,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.209Z"
+    },
+    {
+      "name": "design-bridge",
+      "port": 3920,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.218Z"
+    },
+    {
+      "name": "suggestion-bridge",
+      "port": 3921,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.220Z"
+    },
+    {
+      "name": "run-trace-bridge",
+      "port": 3922,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.221Z"
+    },
+    {
+      "name": "digist-api",
+      "port": 3800,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.354Z"
+    },
+    {
+      "name": "Clock",
+      "port": 15550,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.366Z"
+    },
+    {
+      "name": "PolarMemory",
+      "port": 3100,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.373Z"
+    },
+    {
+      "name": "PolarPort",
+      "port": 11050,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.377Z"
+    },
+    {
+      "name": "PolarProcess",
+      "port": 11055,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.378Z"
+    },
+    {
+      "name": "TQSDK",
+      "port": 8000,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.382Z"
+    },
+    {
+      "name": "KnowLever",
+      "port": 18080,
+      "online": true,
+      "checked_at": "2026-06-01T07:12:40.384Z"
+    }
+  ],
+  "updated_at": "2026-06-01T07:12:40.384Z"
+}

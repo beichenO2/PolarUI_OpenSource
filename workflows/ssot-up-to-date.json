@@ -1,0 +1,98 @@
+{
+  "1": {
+    "class_type": "SSoTQuery",
+    "inputs": {
+      "project": "PolarUI"
+    }
+  },
+  "2": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "你是项目状态检查器。根据收到的 polaris.json 数据，对每个 feature 评估实际 status 与 test_status。输出 JSON：{\"features\":[{\"name\":\"...\",\"status\":\"done|in_progress|planned\",\"test_status\":\"passed|failed|not_tested\"}]}"
+    }
+  },
+  "3": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "4": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "5": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "4",
+        0
+      ],
+      "original_input": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "6": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "2",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "7": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "6",
+        0
+      ],
+      "original_input": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "_name": "SSoT: Up to date",
+  "_description": "通过 PolarClaw 检查项目 feature 状态并更新 polaris.json",
+  "_category": "ssot"
+}

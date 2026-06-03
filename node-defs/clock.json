@@ -1,0 +1,844 @@
+[
+  {
+    "class_type": "ClockSnapshot",
+    "category": "Tools",
+    "display_name": "用户状态快照",
+    "description": "原子化元件：PolarClaw 同步 — 一次性获取用户完整状态（番茄钟/任务/日程/习惯/成就）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "optional": true,
+        "description": "用户状态快照 · 输入「username」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "snapshot",
+        "type": "object",
+        "description": "用户状态快照 · 输出「snapshot」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key（Clock 已启用 sync 认证时必填）"
+      }
+    }
+  },
+  {
+    "class_type": "ClockScheduleQuery",
+    "category": "Tools",
+    "display_name": "日程管理查询",
+    "description": "原子化元件：日程管理 — 查询当前日程和三餐提醒",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "日程管理查询 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "schedule",
+        "type": "object",
+        "description": "日程管理查询 · 输出「schedule」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key（Clock 已启用 sync 认证时必填）"
+      }
+    }
+  },
+  {
+    "class_type": "ClockHabitQuery",
+    "category": "Tools",
+    "display_name": "习惯追踪查询",
+    "description": "原子化元件：查询习惯追踪和打卡状态",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "习惯追踪查询 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "habits",
+        "type": "object",
+        "description": "习惯追踪查询 · 输出「habits」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key（Clock 已启用 sync 认证时必填）"
+      }
+    }
+  },
+  {
+    "class_type": "ClockStatsQuery",
+    "category": "Tools",
+    "display_name": "统计数据查询",
+    "description": "原子化元件：统计聚合 — 查询统计数据和高效时段",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "统计数据查询 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "stats",
+        "type": "object",
+        "description": "统计数据查询 · 输出「stats」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key（Clock 已启用 sync 认证时必填）"
+      }
+    }
+  },
+  {
+    "class_type": "ClockUserScope",
+    "category": "Tools",
+    "display_name": "按用户名隔离数据目录",
+    "description": "原子化元件：API 按用户隔离；每个 username 对应独立 data 目录",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "按用户名隔离数据目录 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "data_dir",
+        "type": "string",
+        "description": "按用户名隔离数据目录 · 输出「data_dir」（类型 string）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockTimerState",
+    "category": "Tools",
+    "display_name": "番茄钟计时",
+    "description": "原子化元件：获取番茄钟/运动计时/冥想模式计时器状态",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "番茄钟计时 · 输出「state」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockTimerStart",
+    "category": "Tools",
+    "display_name": "运动计时",
+    "description": "原子化元件：启动番茄钟/运动/冥想计时会话（POST /api/timer/start）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "mode",
+        "type": "string",
+        "description": "运动计时 · 输入「mode」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "运动计时 · 输出「state」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockMeditationMode",
+    "category": "Tools",
+    "display_name": "冥想模式",
+    "description": "原子化元件：以 meditation 模式启动计时",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "冥想模式 · 输出「state」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockTaskList",
+    "category": "Tools",
+    "display_name": "任务 CRUD",
+    "description": "原子化元件：列出用户任务（GET /api/tasks）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "tasks",
+        "type": "object",
+        "description": "任务 CRUD · 输出「tasks」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockAchievementList",
+    "category": "Tools",
+    "display_name": "成就系统",
+    "description": "原子化元件：查询成就列表（GET /api/achievements）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "achievements",
+        "type": "object",
+        "description": "成就系统 · 输出「achievements」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockBackup",
+    "category": "Tools",
+    "display_name": "数据备份恢复",
+    "description": "原子化元件：用户数据备份与恢复（GET/POST /api/backup）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "action",
+        "type": "string",
+        "description": "数据备份恢复 · 输入「action」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockFlipAnimation",
+    "category": "Tools",
+    "display_name": "翻页时钟动画",
+    "description": "原子化元件：翻页时钟 UI 状态（前端动画；经 snapshot 读取展示配置）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "翻页时钟动画 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "flip_config",
+        "type": "object",
+        "description": "翻页时钟动画 · 输出「flip_config」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "sync_key": {
+        "type": "text",
+        "default": "",
+        "label": "X-Sync-Key"
+      }
+    }
+  },
+  {
+    "class_type": "ClockAmbientSound",
+    "category": "Tools",
+    "display_name": "环境音",
+    "description": "原子化元件：环境音/白噪音配置（GET /api/timer/sounds）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "sounds",
+        "type": "object",
+        "description": "环境音 · 输出「sounds」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockCustomRingtone",
+    "category": "Tools",
+    "display_name": "自定义铃声",
+    "description": "原子化元件：上传自定义铃声（POST /api/timer/sounds/upload）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "filename",
+        "type": "string",
+        "description": "自定义铃声 · 输入「filename」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockMiniTimer",
+    "category": "Tools",
+    "display_name": "MiniTimer 浮窗",
+    "description": "原子化元件：MiniTimer 浮窗状态（timer state 子集）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "mini_state",
+        "type": "object",
+        "description": "MiniTimer 浮窗 · 输出「mini_state」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockGantt",
+    "category": "Tools",
+    "display_name": "甘特图",
+    "description": "原子化元件：任务甘特图数据（GET /api/tasks/gantt-data）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "gantt",
+        "type": "object",
+        "description": "甘特图 · 输出「gantt」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockQuadrantPriority",
+    "category": "Tools",
+    "display_name": "二象限优先级",
+    "description": "原子化元件：二象限任务优先级矩阵（tasks position API）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "matrix",
+        "type": "object",
+        "description": "二象限优先级 · 输出「matrix」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockHeatmap",
+    "category": "Tools",
+    "display_name": "热力图",
+    "description": "原子化元件：活动热力图（stats 子模块）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "热力图 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "heatmap",
+        "type": "object",
+        "description": "热力图 · 输出「heatmap」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockPeakHours",
+    "category": "Tools",
+    "display_name": "高效时段分析",
+    "description": "原子化元件：高效时段分析（stats 查询）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "description": "高效时段分析 · 输入「username」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "peak_hours",
+        "type": "object",
+        "description": "高效时段分析 · 输出「peak_hours」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockShareCard",
+    "category": "Tools",
+    "display_name": "分享卡片",
+    "description": "原子化元件：成就/统计分享卡片导出",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "card",
+        "type": "object",
+        "description": "分享卡片 · 输出「card」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockAchievementTrack",
+    "category": "Tools",
+    "display_name": "成就追踪",
+    "description": "原子化元件：成就进度追踪",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "progress",
+        "type": "object",
+        "description": "成就追踪 · 输出「progress」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockAchievementDisplay",
+    "category": "Tools",
+    "display_name": "成就展示",
+    "description": "原子化元件：成就墙展示（GET /api/achievements）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "wall",
+        "type": "object",
+        "description": "成就展示 · 输出「wall」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockRecurringTask",
+    "category": "Tools",
+    "display_name": "循环任务",
+    "description": "原子化元件：日/周/月循环任务（GET /api/tasks 过滤 recurrence）",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "tasks",
+        "type": "object",
+        "description": "循环任务 · 输出「tasks」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:15550",
+        "label": "Clock 地址"
+      },
+      "x_token": {
+        "type": "text",
+        "default": "",
+        "label": "X-Token（用户登录 token）"
+      }
+    }
+  },
+  {
+    "class_type": "ClockFeed",
+    "category": "Tools",
+    "display_name": "信息流 Feed",
+    "description": "原子化元件：Clock 信息消费工作台 Feed 入口",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "user_id",
+        "type": "string",
+        "description": "信息流 Feed · 输入「user_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "feed",
+        "type": "object",
+        "description": "信息流 Feed · 输出「feed」（类型 object）"
+      }
+    ],
+    "params": {
+      "digist_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3800",
+        "label": "DIGiST 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockFeedReport",
+    "category": "Tools",
+    "display_name": "推荐报告证据",
+    "description": "原子化元件：推荐 / 报告 / 证据（digist 推荐 + KnowLever 动态报告）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "user_id",
+        "type": "string",
+        "description": "推荐报告证据 · 输入「user_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "推荐报告证据 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "digist_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3800",
+        "label": "DIGiST 地址"
+      },
+      "knowlever_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:18080",
+        "label": "KnowLever 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockFeedSources",
+    "category": "Tools",
+    "display_name": "信息源配置",
+    "description": "原子化元件：信息源配置 — digist GET/POST /api/sources",
+    "color": "#8a6b2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "sources",
+        "type": "object",
+        "description": "信息源配置 · 输出「sources」（类型 object）"
+      }
+    ],
+    "params": {
+      "digist_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:3800",
+        "label": "DIGiST 地址"
+      }
+    }
+  },
+  {
+    "class_type": "ClockFeat_PWA离线_d9d461",
+    "category": "Tools",
+    "display_name": "PWA 离线",
+    "description": "原子化元件：PWA 离线（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "PWA 离线 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockFeat_国际化_bb81f9",
+    "category": "Tools",
+    "display_name": "国际化",
+    "description": "原子化元件：国际化（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "国际化 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockFeat_主题切换_a79e8b",
+    "category": "Tools",
+    "display_name": "主题切换",
+    "description": "原子化元件：主题切换（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "主题切换 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockFeat_命令面板_93e40c",
+    "category": "Tools",
+    "display_name": "命令面板",
+    "description": "原子化元件：命令面板（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "命令面板 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockFeat_国际象棋Puzzle_ffa7d6",
+    "category": "Tools",
+    "display_name": "国际象棋 Puzzle",
+    "description": "原子化元件：国际象棋 Puzzle（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "国际象棋 Puzzle · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "ClockFeat_视频队列与播放_d371f2",
+    "category": "Tools",
+    "display_name": "视频队列与播放",
+    "description": "原子化元件：视频队列与播放（coverage-gap 自动补全，对接 Clock API）",
+    "color": "#8a6b2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "视频队列与播放 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  }
+]

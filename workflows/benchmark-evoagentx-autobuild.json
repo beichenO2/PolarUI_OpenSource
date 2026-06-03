@@ -1,0 +1,122 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "你是 PolarUI WF 模式工作流编译器。从原模型规格出发，只输出最小可执行 workflow JSON（含 PromptInput、LLM、Output）。",
+      "expected_output": {
+        "body": "\"class_type\"\\s*:\\s*\"(PromptInput|LLM|Output)\""
+      },
+      "purpose": "EvoAgentX：单 prompt 自动构工作流（benchmark 用 StaticData 占位 Planner/AgenticUnit）"
+    },
+    "params": {}
+  },
+  "2": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{\"goal\":\"minimal wf\",\"constraints\":[\"PromptInput\",\"LLM\",\"Output\"],\"_stub\":\"Planner\"}",
+      "type": "json",
+      "_todo": "Planner"
+    }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "{\"1\":{\"class_type\":\"PromptInput\",\"inputs\":{},\"params\":{\"content\":\"hello\",\"expected_output\":\".\",\"purpose\":\"seed\"}},\"2\":{\"class_type\":\"LLM\",\"inputs\":{\"prompt\":[\"1\",0],\"context\":[\"1\",0]}},\"3\":{\"class_type\":\"Output\",\"inputs\":{\"content\":[\"2\",0]}}}",
+      "type": "json",
+      "_todo": "AgenticUnit(build)",
+      "_planner_context": "wired via node 2b"
+    }
+  },
+  "4": {
+    "class_type": "TextTransform",
+    "inputs": {
+      "text": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "operation": "trim"
+    }
+  },
+  "5": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "4",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "6": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "5",
+        0
+      ],
+      "original_input": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 3
+    }
+  },
+  "7": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "6b",
+        0
+      ]
+    },
+    "params": {
+      "format": "json",
+      "label": "Generated workflow JSON (≥3 nodes)"
+    }
+  },
+  "_name": "Benchmark R3 — EvoAgentX AutoBuild",
+  "_description": "seed prompt → Planner stub → AgenticUnit stub → Validator → workflow JSON",
+  "_category": "benchmark",
+  "_reference": "Reference/evoagentx/",
+  "2b": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "1",
+        0
+      ],
+      "input_b": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "6b": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "2b",
+        0
+      ],
+      "input_b": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  }
+}

@@ -1,0 +1,601 @@
+{
+  "1": {
+    "class_type": "Cron",
+    "inputs": {},
+    "params": {
+      "expression": "0 */3 6-23 * *",
+      "timezone": "Asia/Shanghai"
+    }
+  },
+  "2": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "执行 DiGist 信息消化管线",
+      "expected_output": {
+        "body": "\"pages_created\".*\"pages_updated\".*\"items_processed\""
+      },
+      "purpose": "多平台信息采集→SQLite存储→融合报告→自进化调度的AI信息管道"
+    }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "[{\"platform\":\"arxiv\",\"query\":\"large language model\",\"maxItems\":20},{\"platform\":\"hackernews\",\"query\":\"\",\"maxItems\":20},{\"platform\":\"reddit\",\"query\":\"programming\",\"maxItems\":20},{\"platform\":\"github\",\"query\":\"trending\",\"maxItems\":20},{\"platform\":\"bilibili\",\"query\":\"AI\",\"maxItems\":5},{\"platform\":\"twitter\",\"query\":\"AI\",\"maxItems\":5,\"riskWindow\":true},{\"platform\":\"zhihu\",\"query\":\"人工智能\",\"maxItems\":5,\"riskWindow\":true}]",
+      "type": "json"
+    }
+  },
+  "4": {
+    "class_type": "Condition",
+    "inputs": {
+      "data": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "expression": "data.filter(d => !d.riskWindow || (new Date().getHours() >= 1 && new Date().getHours() < 7))"
+    }
+  },
+  "5": {
+    "class_type": "ForLoop",
+    "inputs": {
+      "items": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "parallel": false,
+      "max_concurrent": 1,
+      "collect_results": true,
+      "max_items": 2
+    }
+  },
+  "6": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": [
+        "5b",
+        0
+      ],
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 120
+    },
+    "_comment": "对每个平台执行 npx tsx src/cli.ts scrape <platform> <query>"
+  },
+  "7": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "5",
+        2
+      ],
+      "input_b": [
+        "2",
+        2
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "8": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "信息标准化处理器",
+      "constraints": "执行 normalizeBatch() 数据标准化 + deduplicateByUrl() URL去重 + calculateInfoDensity() 信息密度评估",
+      "prior_knowledge": "标准化字段: id/title/body_markdown/author/timestamp/source_url/platform/tags/raw_metadata/scraped_at"
+    }
+  },
+  "9": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "echo '{\"total\":0,\"normalized\":true}'",
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 30
+    }
+  },
+  "10": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "9",
+        0
+      ],
+      "role": "消化层处理器",
+      "constraints": "三步消化: 1.compressBatch上下文压缩 2.evaluateDensity信息密度评估 3.filterByDensity密度过滤",
+      "prior_knowledge": "密度评分=词句比(0.3)+词汇多样性(0.3)+富文本指标(0.2)+长度(0.2), 阈值0.3"
+    }
+  },
+  "11": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "9",
+        0
+      ],
+      "context": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "system_prompt": "你是信息密度分析专家。分析采集到的内容,评估信息密度,执行LLM增强压缩。输出压缩后的摘要列表。",
+      "temperature": 0.3
+    }
+  },
+  "12": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "echo '{\"step\":\"digestion\",\"status\":\"complete\"}'",
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 60
+    }
+  },
+  "13": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "12",
+        0
+      ],
+      "role": "Raw Ingester",
+      "constraints": "ingestBatchToRaw: 将标准化数据写入 data/raw/ 目录的 Markdown 文件(含 frontmatter), 为 Wiki 编译准备原始素材",
+      "prior_knowledge": "Frontmatter 字段: title/platform/source_url/scraped_at/density_score/tags"
+    }
+  },
+  "14": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "echo '{\"pages_created\":0,\"pages_updated\":0,\"items_processed\":0}'",
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 180
+    },
+    "_comment": "Wiki编译: 读取raw/→按主题聚类→LLM增强合并→生成wiki/页面"
+  },
+  "15": {
+    "class_type": "JsonParse",
+    "inputs": {
+      "input": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "path": "$"
+    }
+  },
+  "16": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "14",
+        0
+      ],
+      "validation_spec": [
+        "2",
+        1
+      ]
+    },
+    "params": {
+      "strict": false
+    }
+  },
+  "17": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "16",
+        0
+      ],
+      "retry_hint": "Wiki编译输出不符合预期格式, 检查 raw/ 数据完整性",
+      "original_input": [
+        "14",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 2
+    }
+  },
+  "18": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "15",
+        0
+      ],
+      "context": [
+        "8",
+        0
+      ]
+    },
+    "params": {
+      "system_prompt": "基于Wiki编译结果和采集的所有内容, 生成跨源融合报告。报告应包含: 关键洞察/跨平台关联/冲突检测/趋势分析。输出 Markdown 格式。",
+      "temperature": 0.5
+    }
+  },
+  "19": {
+    "class_type": "ContentRender",
+    "inputs": {
+      "data": [
+        "34",
+        0
+      ],
+      "template_id": "融合报告"
+    },
+    "params": {
+      "format": "markdown"
+    }
+  },
+  "20": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "34",
+        0
+      ],
+      "role": "自进化调度器",
+      "constraints": "分析本轮采集效果, 执行自进化: 1.strategy-optimizer策略优化 2.source-discoverer新源发现 3.pipeline-tuner管道调参",
+      "prior_knowledge": "自进化三步: 优化现有策略(频率/查询词)→发现新信源(跨平台关联分析)→调参(压缩阈值/并发数)"
+    }
+  },
+  "21": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "34",
+        0
+      ],
+      "context": [
+        "20",
+        0
+      ]
+    },
+    "params": {
+      "system_prompt": "分析本轮信息消化结果,提出进化建议: 1.哪些信源产出高密度内容? 2.哪些查询词需要调整? 3.是否发现了新的值得追踪的主题? 输出 JSON {optimizations[], discoveries[], tunings[]}",
+      "temperature": 0.7
+    }
+  },
+  "22": {
+    "class_type": "Condition",
+    "inputs": {
+      "data": [
+        "36",
+        0
+      ]
+    },
+    "params": {
+      "expression": "data.discoveries && data.discoveries.length > 0"
+    }
+  },
+  "23": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": [
+        "22",
+        0
+      ],
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 30
+    },
+    "_comment": "高置信度发现自动添加为新的采集任务"
+  },
+  "24": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "19",
+        0
+      ],
+      "input_b": [
+        "36",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "merge_object"
+    }
+  },
+  "25": {
+    "class_type": "FileWrite",
+    "inputs": {
+      "path": "digist/data/reports/latest-pipeline-report.md",
+      "content": [
+        "24",
+        0
+      ]
+    },
+    "params": {
+      "create_dirs": true
+    }
+  },
+  "26": {
+    "class_type": "GitCommit",
+    "inputs": {
+      "message": [
+        "24",
+        0
+      ],
+      "files": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "push": true,
+      "branch": "main"
+    }
+  },
+  "27": {
+    "class_type": "Notification",
+    "inputs": {
+      "message": [
+        "24",
+        0
+      ]
+    },
+    "params": {
+      "channel": "desktop"
+    }
+  },
+  "28": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "24",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "29": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "4",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "30": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "22",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "31": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "11",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "32": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "31",
+        0
+      ],
+      "original_input": [
+        "32",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "33": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "18",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "34": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "33",
+        0
+      ],
+      "original_input": [
+        "34",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "35": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "21",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "36": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "35",
+        0
+      ],
+      "original_input": [
+        "36",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "37": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "11",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "38": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "37",
+        0
+      ],
+      "original_input": [
+        "38",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "39": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "18",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "40": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "39",
+        0
+      ],
+      "original_input": [
+        "40",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "41": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "21",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "42": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "41",
+        0
+      ],
+      "original_input": [
+        "42",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "5b": {
+    "class_type": "TextTransform",
+    "inputs": {
+      "text": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "operation": "shell_from_json"
+    }
+  },
+  "_name": "DiGist 编译管线",
+  "_description": "Digist 全流程编译：采集→标准化→消化→入库→Wiki编译→融合报告→自进化",
+  "14b": {
+    "_comment": "Wiki编译重试路径",
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": "cd digist && npx tsx src/cli.ts compile-wiki",
+      "cwd": "digist"
+    },
+    "params": {
+      "timeout_s": 180
+    }
+  }
+}

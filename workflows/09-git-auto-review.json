@@ -1,0 +1,331 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "审查最近 20 条 Git 提交",
+      "expected_output": {
+        "body": "\"verdict\"\\s*:\\s*\"(pass|fail|warning)\""
+      },
+      "purpose": "Git 自动审查：逐条分析 commit → 核验 → 汇总报告"
+    }
+  },
+  "2": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "abc1234 fix: audit sample commit one\ndef5678 feat: audit sample commit two\n9876543 docs: audit sample commit three",
+      "type": "string"
+    }
+  },
+  "3": {
+    "class_type": "TextTransform",
+    "inputs": {
+      "text": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "operation": "split_lines"
+    }
+  },
+  "4": {
+    "class_type": "ForLoop",
+    "inputs": {
+      "items": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "max_items": 2
+    }
+  },
+  "5": {
+    "class_type": "TextTransform",
+    "inputs": {
+      "text": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "operation": "trim"
+    }
+  },
+  "6": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是 Git 提交审查专家",
+      "constraints": "输出 JSON {commit, verdict: pass|fail|warning, issues[], suggestions[]}",
+      "prior_knowledge": "关注 commit message 规范、变更范围、潜在回归"
+    }
+  },
+  "7": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "5",
+        0
+      ],
+      "context": [
+        "6",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "7",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "9": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "8",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 2
+    }
+  },
+  "10": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "17",
+        0
+      ],
+      "input_b": [
+        "4",
+        2
+      ]
+    }
+  },
+  "11": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "17",
+        0
+      ],
+      "role": "你是审查报告汇总员",
+      "constraints": "汇总所有 commit 审查，输出总结",
+      "prior_knowledge": ""
+    }
+  },
+  "12": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "10",
+        0
+      ],
+      "context": [
+        "11",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "12",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"summary\""
+      }
+    }
+  },
+  "14": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "13",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "10",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "19",
+        0
+      ]
+    }
+  },
+  "16": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "7",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "17": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "16",
+        0
+      ],
+      "original_input": [
+        "17",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "18": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "12",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "19": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "18",
+        0
+      ],
+      "original_input": [
+        "19",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "20": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "7",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "21": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "20",
+        0
+      ],
+      "original_input": [
+        "21",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "22": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "12",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "23": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "22",
+        0
+      ],
+      "original_input": [
+        "23",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "7b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "9",
+        1
+      ],
+      "context": [
+        "6",
+        0
+      ]
+    }
+  },
+  "12b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "14",
+        1
+      ],
+      "context": [
+        "11",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "sug-demo-add-wf",
+    "kind": "ADD_WORKFLOW",
+    "status": "pending",
+    "created_at": "2026-05-23T10:00:00.000Z",
+    "source": "manual",
+    "title": "新增「Hello Report」工作流",
+    "rationale": "Seed 分化草案：PromptInput → LLM → Output 最小报告链",
+    "diff": {
+      "path": "PolarUI/workflows/hello-report-draft.json",
+      "after": {
+        "1": { "class_type": "PromptInput" },
+        "2": { "class_type": "LLM" },
+        "3": { "class_type": "Output" }
+      }
+    },
+    "apply_targets": [
+      { "id": "t1", "label": "写入 workflows/hello-report-draft.json", "checked": false },
+      { "id": "t2", "label": "追加 registry.json 条目", "checked": false }
+    ]
+  },
+  {
+    "id": "sug-demo-remove-node",
+    "kind": "REMOVE_NODE_DEF",
+    "status": "pending",
+    "created_at": "2026-05-23T11:00:00.000Z",
+    "source": "benchmark",
+    "title": "废弃 ReportGenerator 节点",
+    "rationale": "R2 提案链试跑：合并到 ContentRender，标记 deprecated",
+    "diff": {
+      "path": "node-defs/agentic.json",
+      "before": { "class_type": "ReportGenerator" },
+      "after": { "deprecated": true }
+    },
+    "apply_targets": [
+      { "id": "t1", "label": "标记 node-def deprecated", "checked": false },
+      { "id": "t2", "label": "从 palette 隐藏", "checked": false }
+    ]
+  },
+  {
+    "id": "sug-benchmark-r2",
+    "kind": "ADD_NODE_DEF",
+    "status": "pending",
+    "created_at": "2026-05-23T12:00:00.000Z",
+    "source": "benchmark",
+    "title": "注册 PatternDetect 占位节点",
+    "rationale": "benchmark-openclaw-proposal 联调：SessionLog → PatternDetect 正式化",
+    "diff": {
+      "path": "node-defs/evolve.json",
+      "after": { "class_type": "PatternDetect", "category": "Evolve" }
+    },
+    "apply_targets": [
+      { "id": "t1", "label": "append node-defs/evolve.json", "checked": false }
+    ]
+  }
+]

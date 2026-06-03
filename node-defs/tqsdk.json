@@ -1,0 +1,629 @@
+[
+  {
+    "class_type": "TQDataCollect",
+    "category": "Tools",
+    "display_name": "数据采集(量化)",
+    "description": "原子化元件：触发期货/加密市场数据采集",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "market",
+        "type": "string",
+        "description": "数据采集(量化) · 输入「market」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQBacktest",
+    "category": "Tools",
+    "display_name": "策略回测",
+    "description": "原子化元件：运行策略回测（Walk-Forward / Monte Carlo）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "策略回测 · 输入「strategy_id」（类型 string）"
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "optional": true,
+        "description": "策略回测 · 输入「config」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "optional": true,
+        "description": "策略回测 · 输出「report」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQStrategyList",
+    "category": "Tools",
+    "display_name": "策略库列表",
+    "description": "原子化元件：列出所有可用策略（期货 + 加密）",
+    "color": "#8a2d2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "strategies",
+        "type": "object",
+        "description": "策略库列表 · 输出「strategies」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQOptimize",
+    "category": "Tools",
+    "display_name": "参数优化",
+    "description": "原子化元件：触发 Optuna 超参数优化",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "参数优化 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "best_params",
+        "type": "object",
+        "description": "参数优化 · 输出「best_params」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      },
+      "n_trials": {
+        "type": "number",
+        "default": 100,
+        "label": "试验次数"
+      }
+    }
+  },
+  {
+    "class_type": "TQLiveTrade",
+    "category": "Tools",
+    "display_name": "实盘交易",
+    "description": "原子化元件：实盘交易控制（start/stop/status）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "action",
+        "type": "string",
+        "description": "实盘交易 · 输入「action」（类型 string）"
+      },
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "实盘交易 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQRiskCheck",
+    "category": "Tools",
+    "display_name": "风控检查",
+    "description": "原子化元件：执行风控检查（限额/持仓/回撤监控）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "风控检查 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "passed",
+        "type": "boolean",
+        "description": "校验是否通过（boolean）。"
+      },
+      {
+        "name": "report",
+        "type": "object",
+        "optional": true,
+        "description": "风控检查 · 输出「report」（类型 object），可选"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQResearchRun",
+    "category": "Tools",
+    "display_name": "策略研究",
+    "description": "原子化元件：创建自然语言策略研究 Run",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "description",
+        "type": "string",
+        "description": "策略研究 · 输入「description」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "run",
+        "type": "object",
+        "description": "策略研究 · 输出「run」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQMLTrain",
+    "category": "Tools",
+    "display_name": "ML 模型训练",
+    "description": "原子化元件：ML 模型训练（POST /api/v1/ml/train）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "ML 模型训练 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "job",
+        "type": "object",
+        "description": "ML 模型训练 · 输出「job」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQRLPPO",
+    "category": "Tools",
+    "display_name": "RL PPO 训练",
+    "description": "原子化元件：强化学习 PPO 策略训练",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "RL PPO 训练 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "metrics",
+        "type": "object",
+        "description": "RL PPO 训练 · 输出「metrics」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQExperiment",
+    "category": "Tools",
+    "display_name": "实验管理",
+    "description": "原子化元件：研究实验 Run 管理（GET /api/v1/research/runs）",
+    "color": "#8a2d2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "runs",
+        "type": "object",
+        "description": "实验管理 · 输出「runs」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQSharpeReward",
+    "category": "Tools",
+    "display_name": "Differential Sharpe Ratio 奖励",
+    "description": "原子化元件：DSR 奖励函数配置（回测 metrics 子模块）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "returns",
+        "type": "object",
+        "description": "Differential Sharpe Ratio 奖励 · 输入「returns」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "reward",
+        "type": "number",
+        "description": "Differential Sharpe Ratio 奖励 · 输出「reward」（类型 number）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQObsSpace",
+    "category": "Tools",
+    "display_name": "增强观测空间",
+    "description": "原子化元件：策略增强观测空间维度配置",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "增强观测空间 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "observation_space",
+        "type": "object",
+        "description": "增强观测空间 · 输出「observation_space」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQEventBacktest",
+    "category": "Tools",
+    "display_name": "事件驱动回测引擎",
+    "description": "原子化元件：事件驱动回测（复用 TQBacktest）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "事件驱动回测引擎 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "事件驱动回测引擎 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQCourseTrain",
+    "category": "Tools",
+    "display_name": "课程学习 + 多品种训练",
+    "description": "原子化元件：课程进度与多品种联合训练",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "course_id",
+        "type": "string",
+        "description": "课程学习 + 多品种训练 · 输入「course_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "progress",
+        "type": "object",
+        "description": "课程学习 + 多品种训练 · 输出「progress」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQPerpetualEvolver",
+    "category": "Tools",
+    "display_name": "永续自进化优化器",
+    "description": "原子化元件：策略永续自进化（TQEvolutionPipeline 子模块）",
+    "color": "#8a2d2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "evolution",
+        "type": "object",
+        "description": "永续自进化优化器 · 输出「evolution」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQChampionSave",
+    "category": "Tools",
+    "display_name": "冠军保存体系",
+    "description": "原子化元件：回测冠军策略持久化保存",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "冠军保存体系 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "champion",
+        "type": "object",
+        "description": "冠军保存体系 · 输出「champion」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQLobsterAdapter",
+    "category": "Tools",
+    "display_name": "Lobster SDK 适配",
+    "description": "原子化元件：PolarClaw Lobster SDK 与 TQSDK 桥接",
+    "color": "#8a2d2d",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "bridge",
+        "type": "object",
+        "description": "Lobster SDK 适配 · 输出「bridge」（类型 object）"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQLiveScheduler",
+    "category": "Tools",
+    "display_name": "LiveScheduler 实盘通道",
+    "description": "原子化元件：实盘调度 LiveScheduler（TQLiveTrade 编排）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "strategy_id",
+        "type": "string",
+        "description": "LiveScheduler 实盘通道 · 输入「strategy_id」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "schedule",
+        "type": "object",
+        "description": "LiveScheduler 实盘通道 · 输出「schedule」（类型 object）"
+      }
+    ],
+    "params": {
+      "api_base": {
+        "type": "text",
+        "default": "http://127.0.0.1:8000",
+        "label": "TQSDK 地址"
+      }
+    }
+  },
+  {
+    "class_type": "TQ_统一实时数据源_ac565d",
+    "category": "Tools",
+    "display_name": "统一实时数据源",
+    "description": "原子化元件：统一实时数据源（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "统一实时数据源 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_WebSocket实时推_56b642",
+    "category": "Tools",
+    "display_name": "WebSocket 实时推送",
+    "description": "原子化元件：WebSocket 实时推送（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "WebSocket 实时推送 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_参数部署API_89bcc3",
+    "category": "Tools",
+    "display_name": "参数部署 API",
+    "description": "原子化元件：参数部署 API（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "参数部署 API · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_攻防力量估计引擎_1980d7",
+    "category": "Tools",
+    "display_name": "攻防力量估计引擎",
+    "description": "原子化元件：攻防力量估计引擎（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "攻防力量估计引擎 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_攻防交易信号_2e67d4",
+    "category": "Tools",
+    "display_name": "攻防交易信号",
+    "description": "原子化元件：攻防交易信号（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "攻防交易信号 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_多模式庄家行为检测引擎_924633",
+    "category": "Tools",
+    "display_name": "多模式庄家行为检测引擎",
+    "description": "原子化元件：多模式庄家行为检测引擎（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "多模式庄家行为检测引擎 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  },
+  {
+    "class_type": "TQ_Swarm审计委员会_2a68cc",
+    "category": "Tools",
+    "display_name": "Swarm 审计委员会",
+    "description": "原子化元件：Swarm 审计委员会（coverage-gap 自动补全，对接 tqsdk API）",
+    "color": "#8a2d2d",
+    "inputs": [
+      {
+        "name": "payload",
+        "type": "object",
+        "description": "Swarm 审计委员会 · 输入「payload」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "object",
+        "description": "处理结果输出。"
+      }
+    ],
+    "params": {}
+  }
+]

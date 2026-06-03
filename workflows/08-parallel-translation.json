@@ -1,0 +1,313 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "将文档翻译为英文和日文",
+      "expected_output": {
+        "body": "\"translation\"\\s*:"
+      },
+      "purpose": "并行翻译：读取文件 → 分段 → 并行翻译 → 核验 → 写入"
+    }
+  },
+  "2": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": "input/source.txt"
+    }
+  },
+  "3": {
+    "class_type": "LogicChainDecompose",
+    "inputs": {
+      "complex_goal": [
+        "2",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "ForLoop",
+    "inputs": {
+      "items": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "parallel": true,
+      "max_items": 2
+    }
+  },
+  "5": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": "",
+      "role": "你是专业翻译",
+      "constraints": "输出 JSON {original, en, ja}",
+      "prior_knowledge": "保持专业术语一致性"
+    }
+  },
+  "6": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "4",
+        0
+      ],
+      "context": [
+        "5",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": [
+        "1",
+        1
+      ]
+    }
+  },
+  "8": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "7",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "4",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "16",
+        0
+      ],
+      "role": "你是翻译审校专家",
+      "constraints": "检查翻译质量、术语一致性、语法正确性",
+      "prior_knowledge": ""
+    }
+  },
+  "10": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "16",
+        0
+      ],
+      "context": [
+        "9",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "10",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": "\"quality\"\\s*:\\s*\"(good|excellent)\""
+      }
+    }
+  },
+  "12": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "11",
+        0
+      ],
+      "retry_hint": "",
+      "original_input": [
+        "16",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "FileWrite",
+    "inputs": {
+      "path": "output/translated.txt",
+      "content": [
+        "16",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "13",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "16": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "15",
+        0
+      ],
+      "original_input": [
+        "16",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "17": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "10",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "18": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "17",
+        0
+      ],
+      "original_input": [
+        "18",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "19": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "20": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "19",
+        0
+      ],
+      "original_input": [
+        "20",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "21": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "10",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "22": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "21",
+        0
+      ],
+      "original_input": [
+        "22",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "6b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "8",
+        1
+      ],
+      "context": [
+        "5",
+        0
+      ]
+    }
+  },
+  "10b": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "12",
+        1
+      ],
+      "context": [
+        "9",
+        0
+      ]
+    }
+  }
+}
