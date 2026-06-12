@@ -1,7 +1,7 @@
 {
   "name": "polar-ui",
   "version": "0.1.0",
-  "description": "PolarUI — Open-source ComfyUI-style workflow IDE for visual Agent orchestration (WF + LG, Claude Code parity validated)",
+  "description": "PolarUI — ComfyUI-style workflow editor for Polarisor Agent orchestration",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,8 +16,6 @@
     "test:gate:260526": "node scripts/run-260526-gate.mjs",
     "test:gate:260527": "node scripts/run-260527-gate.mjs",
     "test:tools-system": "npx tsx scripts/run-tools-system-matrix-smoke.mjs",
-    "test:claude-code": "npx tsx scripts/run-claude-code-lg-smoke.mjs && npx tsx scripts/run-claude-code-wf-smoke.mjs",
-    "test:claude-code:parity": "npx tsx scripts/run-claude-code-parity.mjs",
     "test:coverage": "ECOLOGY_COVERAGE_MIN=100 node scripts/audit-ecology-coverage.mjs",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",

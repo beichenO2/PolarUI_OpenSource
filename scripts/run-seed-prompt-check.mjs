@@ -33,7 +33,7 @@ function promptContent(graph, file) {
   }
 }
 
-for (const rel of ['workflows/mvp-seed-wf.json', 'workflows/mvp-seed-lg.lg.json']) {
+for (const rel of ['workflows/mvp-seed-wf.json']) {
   const graph = loadWorkflowJson(readFileSync(join(ROOT, rel), 'utf8'))
   promptContent(graph, rel)
 }

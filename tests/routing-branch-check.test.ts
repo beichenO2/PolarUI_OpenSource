@@ -3,7 +3,7 @@ import { Graph } from '../src/engine/graph'
 import { registry } from '../src/engine/registry'
 import { validateRoutingBranches } from '../src/engine/routing-branch-check'
 import type { NodeDef } from '../src/engine/types'
-import coreDefs from '../../node-defs/core.json'
+import coreDefs from '../node-defs/core.json'
 
 beforeAll(() => {
   for (const def of coreDefs as NodeDef[]) {

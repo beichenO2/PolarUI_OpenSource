@@ -11,7 +11,7 @@ import {
 import { registry } from '../src/engine/registry'
 import type { Link, NodeInstance, NodeDef } from '../src/engine/types'
 
-import coreDefs from '../../node-defs/core.json'
+import coreDefs from '../node-defs/core.json'
 
 beforeAll(() => {
   for (const def of coreDefs as NodeDef[]) {

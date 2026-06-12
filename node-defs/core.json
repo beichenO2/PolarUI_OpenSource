@@ -18,22 +18,27 @@
         "description": "可选背景上下文（RAG、记忆块等），拼入 system 或 user 消息。"
       },
       {
-        "name": "intra_round_hint",
-        "type": "string",
+        "name": "tools",
+        "type": "object",
         "optional": true,
-        "description": "RetryLoop 轮内修正提示；非轮间 SSOT，仅本轮迭代注入。"
+        "description": "可选工具定义列表（JSON 数组）。传入后模型使用 function calling 返回 tool_calls。"
       }
     ],
     "outputs": [
       {
         "name": "response",
         "type": "string",
-        "description": "模型生成的文本结果，供下游 Validator / Output 等消费。"
+        "description": "模型生成的文本结果（无 tool_call 时为纯文本；有 tool_call 时为含 tool_calls 的对象）。"
       },
       {
         "name": "usage",
         "type": "object",
         "description": "Token 用量等元数据；蒸馏采集可悬空不连线。"
+      },
+      {
+        "name": "max_context",
+        "type": "number",
+        "description": "当前模型的最大上下文窗口大小（token 数）。供 ContextWindow 用于 auto-compact 阈值计算。"
       }
     ],
     "params": {
@@ -104,6 +109,81 @@
           "qwen-plus"
         ],
         "label": "模型"
+      }
+    }
+  },
+  {
+    "class_type": "AgenticToolCall",
+    "category": "LLM",
+    "display_name": "Agentic 工具执行",
+    "description": "内建 ReAct 循环的工具执行器。检测 LLM 返回中的 tool_use blocks，并发执行工具，将 tool_results 回注 LLM 继续循环，直到 LLM 不再调用工具。对齐 Claude Code StreamingToolExecutor。",
+    "color": "#1a7a3a",
+    "inputs": [
+      {
+        "name": "llm_response",
+        "type": "object",
+        "description": "LLM 完整返回（content blocks 数组），用于检测 tool_use。"
+      },
+      {
+        "name": "tools_list",
+        "type": "object",
+        "description": "可用工具定义列表（JSON），含 name、description、input_schema、concurrency_safe。"
+      },
+      {
+        "name": "messages",
+        "type": "object",
+        "optional": true,
+        "description": "当前对话消息历史，供内部循环时重新调用 LLM 使用。"
+      },
+      {
+        "name": "system_prompt",
+        "type": "string",
+        "optional": true,
+        "description": "LLM 的 system prompt，供内部循环时保持一致。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "final_text",
+        "type": "string",
+        "description": "slot 0: LLM 最终文本输出（无 tool 调用时）。连线到 Output。"
+      },
+      {
+        "name": "updated_messages",
+        "type": "object",
+        "description": "slot 1: 包含 tool_results 的完整消息历史。连线回 ContextWindow.tool_feedback 形成 ReAct 循环。"
+      }
+    ],
+    "params": {
+      "max_iterations": {
+        "type": "number",
+        "default": 50,
+        "label": "最大迭代轮次"
+      },
+      "concurrency": {
+        "type": "boolean",
+        "default": true,
+        "label": "启用并行工具执行"
+      },
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "内部循环 LLM 模型"
+      },
+      "error_strategy": {
+        "type": "select",
+        "default": "cancel_siblings",
+        "options": [
+          "cancel_siblings",
+          "continue",
+          "abort_all"
+        ],
+        "label": "工具报错策略"
       }
     }
   },
@@ -377,6 +457,12 @@
         "description": "本步或总体任务目的（用户需求 SSOT 片段）。"
       },
       {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
+      },
+      {
         "name": "validation_spec",
         "type": "object",
         "optional": true,
@@ -603,6 +689,12 @@
         "type": "object",
         "optional": true,
         "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      },
+      {
+        "name": "channel",
+        "type": "string",
+        "optional": true,
+        "description": "消息来源通道标识（cli/web/telegram/discord/vscode）。用于下游多平台路由。"
       }
     ],
     "params": {
@@ -620,6 +712,12 @@
         "type": "text",
         "default": "",
         "label": "Prompt 内容"
+      },
+      "channel": {
+        "type": "select",
+        "default": "cli",
+        "options": ["cli", "web", "telegram", "discord", "vscode"],
+        "label": "通道"
       },
       "variables": {
         "type": "text",
@@ -768,6 +866,12 @@
         "name": "content",
         "type": "any",
         "description": "汇聚到终点的交付内容（任意类型）。"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [],

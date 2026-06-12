@@ -1,0 +1,186 @@
+{
+  "name": "PolarUI",
+  "description": "工作流 IDE：统一组件 palette 与编译门。结构进化双路径——培养皿（PetriDish，slave 子图 + 人审）与干细胞（StemCell，WF 权柄入口，执行经过时准许直接增删改主工作流）。三种迭代：结构进化、反馈重跑（RetryLoop 默认 7 轮）、结果迭代。",
+  "tier": "app",
+  "status": "active",
+  "version": "0.3.0",
+  "requirements": [
+    {
+      "id": "R1",
+      "need": "节点图可视化编辑器",
+      "approach": "多范式 IDE：WF 主路线（ComfyUI 式拓扑 + Switch/Condition 预先布线）+ LG 可选库（Spec/Run 双 JSON · Pluripotent 分化）。LLM 为管道内算子；WF execute 期 frozen，LG execute 期可变",
+      "features": [
+        { "name": "Canvas 图引擎", "status": "done" },
+        { "name": "节点注册表", "status": "done" },
+        { "name": "拖拽连线", "status": "done" },
+        { "name": "拓扑排序执行", "status": "done" },
+        { "name": "属性面板编辑", "status": "done" }
+      ]
+    },
+    {
+      "id": "R2",
+      "need": "正则化元件体系",
+      "approach": "所有基础组件均为正则化元件：一个输入→一个输出，无智能体，机械化执行。LLM 本身也是正则化元件。分为 LLM / Control / Input / Output / Transform 五个正则化分类 + Tools（生态封装模块）+ Agent Take（预组建工作流）",
+      "features": [
+        { "name": "LLM 正则化元件（LLM/LLMParse/LLMToolCall）", "status": "done" },
+        { "name": "Control 正则化元件（人工审批/条件分支/正则匹配/核验器/重试循环）", "status": "done" },
+        { "name": "Input 正则化元件（Prompt植入/静态数据/反身性上下文）", "status": "done" },
+        { "name": "Output 正则化元件", "status": "done" },
+        { "name": "Transform 正则化元件（文本处理/JSON解析/列表迭代/延时/合并/逻辑链分解）", "status": "done" },
+        { "name": "Tools 生态封装模块（WebSearch/File/Git/SSoT/知识检索/Shell + 9 项目原子组件 47 个）", "status": "done" },
+        { "name": "Agent Take 预组建工作流（调用工作流/Agentic单元/飞书接线员/IDE模式/Web模式/规划器）", "status": "done" },
+        { "name": "PolarClaw 组件移除", "status": "done" },
+        { "name": "node-defs 树状拆分（单文件→索引+15子文件，registry.ts 支持 v2）", "status": "done" },
+        { "name": "Annotation 分类（NoteCard 注释卡片）", "status": "done", "note": "category 已改为 特殊" },
+        { "name": "ReportGenerator 废弃（由 ContentRender 取代）", "status": "done" }
+      ]
+    },
+    {
+      "id": "R3",
+      "need": "Hub API 对接",
+      "approach": "通过 HTTP 连接现有 PolarCopilot Hub Express 后端，复用 /api/ui/* 接口",
+      "features": [
+        { "name": "Hub 健康检查", "status": "done" },
+        { "name": "工作流提交执行", "status": "done" },
+        { "name": "SSE 实时事件监听", "status": "done" },
+        { "name": "Agent 列表查询", "status": "done" }
+      ]
+    },
+    {
+      "id": "R4",
+      "need": "桌面应用打包",
+      "approach": "Electron 壳 + electron-builder macOS DMG",
+      "features": [
+        { "name": "Electron main process", "status": "done" },
+        { "name": "macOS DMG 打包", "status": "done" }
+      ]
+    },
+    {
+      "id": "R5",
+      "need": "SSoT 生态地图与文件编译",
+      "approach": "SSoT 模式下左侧面板切换为生态地图，点击项目可编译 polaris.json 为画布节点图",
+      "features": [
+        { "name": "生态地图面板（项目列表 + 进度）", "status": "done" },
+        { "name": "节点 / 生态地图双模式切换", "status": "done" },
+        { "name": "polaris.json → PolarUI 节点图编译器", "status": "done" },
+        { "name": "Hub API 生态数据源（/api/polaris）", "status": "done" }
+      ]
+    },
+    {
+      "id": "R6",
+      "need": "工作层+核验层质量门（非 Agent 自治）",
+      "approach": "AgenticUnit 是预组装的确定性复合节点：工作层（LLM 一次性调用）+ 核验层（regex/LLM 校验）+ RetryLoop。流程路由由图中 Switch/Condition 预先定义，不由 LLM 决定下一步",
+      "features": [
+        { "name": "Validator 核验器正则化元件", "status": "done" },
+        { "name": "RetryLoop 重试循环正则化元件", "status": "done" },
+        { "name": "AgenticUnit 预组建 Agent Take（工作层+核验层）", "status": "done" },
+        { "name": "核验层 3 层输入协议实现（purpose/expected_pattern/actual_output）", "status": "done" },
+        { "name": "真实执行引擎 executor.ts（替代 simulateNodeExecution）", "status": "done" },
+        { "name": "ExecutorRegistry 按 class_type 注册执行函数", "status": "done" },
+        { "name": "LLM/ToolCall → PolarPrivate API 真实调用", "status": "done" },
+        { "name": "Control 节点本地逻辑执行（Condition/Switch/Validator）", "status": "done" },
+        { "name": "Tools → 各生态项目 HTTP API 调用", "status": "done" },
+        { "name": "Agentic Pipeline 一键执行（internal_workflow + executeGraph）", "status": "done" },
+        { "name": "ExecutorRegistry 覆盖率提升（控制流/生态/Pipeline）", "status": "done" }
+      ]
+    },
+    {
+      "id": "R7",
+      "need": "角色规定与 Master/Slave 模式",
+      "approach": "Agent 开发 Agent 场景下身份经常混淆。明确角色规定：master（主控，更新调试 slave）与 slave（只执行，遇到问题反馈 master 并建立 CLI 控制链）。每个 Agent Take 节点声明 mode 参数",
+      "features": [
+        { "name": "IDE 模式 Agent Take（含 master/slave 角色参数）", "status": "done" },
+        { "name": "Web 模式 Agent Take（含 master/slave 角色参数）", "status": "done" },
+        { "name": "Master→Slave CLI 控制链协议", "status": "done" },
+        { "name": "Slave 主动反馈机制（遇到问题自动上报 master）", "status": "done" },
+        { "name": "角色边界隔离（防止 agent 越权执行不属于自己的任务）", "status": "done" },
+        { "name": "role-protocol.ts 权限检查 + executor 集成", "status": "done" },
+        { "name": "IDEAgent/WebAgent mode 参数注册角色", "status": "done" }
+      ]
+    },
+    {
+      "id": "R8",
+      "need": "复杂模块展开交互",
+      "approach": "Agent Take 和 Tools 中的复杂模块，点击展开按钮后将其展开为由正则化元件组成的子图连接图，相当于把一个复杂课题展开成多个小课题",
+      "features": [
+        { "name": "节点面板 expand 按钮（hover 显示）", "status": "done" },
+        { "name": "画布双击展开为子图", "status": "done" },
+        { "name": "AgenticUnit 展开为 PromptInput→LLM→Validator→RetryLoop→Output", "status": "done" },
+        { "name": "通用展开子图模板（Input→LLM→Output fallback）", "status": "done" },
+        { "name": "展开后可编辑子图并回存为自定义 Agent Take", "status": "done" },
+        { "name": "多层嵌套展开（子图中的复杂节点可继续展开）", "status": "done" }
+      ]
+    },
+    {
+      "id": "R9",
+      "need": "系统健康状态可视化",
+      "approach": "用 PolarUI 节点图描述整个生态的系统性健康状态，作为 SSoT。所有有输入产生输出的场景都可描述为 PolarUI 框架图，包括多输入和中间环节有输入的情况",
+      "features": [
+        { "name": "HealthCheck / ErrorClassifier / ProcessRestart 原子节点", "status": "done" },
+        { "name": "SelfHealUnit Agentic 复合组件", "status": "done" },
+        { "name": "不健康节点排查机制（扫描所有节点状态）", "status": "done" },
+        { "name": "健康状态总览面板（服务/Watchdog/Hub 告警）", "status": "done" },
+        { "name": "健康状态 SSoT 视图（在 SSoT 模式下展示生态健康总览）", "status": "done" },
+        { "name": "控制流程类复杂系统的 PolarUI 框架图表示", "status": "done" },
+        { "name": "多输入/中间输入场景的架构图支持", "status": "done" },
+        { "name": "总项目生态架构图", "status": "done" },
+        { "name": "检修工作流 CheckupTriageAndHeal（inbox SSE → 分诊→上下文→诊断→Condition→修复→ShellExec→GitCommit|人工→汇报，10 节点）", "status": "done" },
+        { "name": "检修队列四态指标（HealthOverview + GET /api/ui/checkup-events stats）", "status": "done" },
+        { "name": "PolarUI 嵌入 polar-checkup Widget（data-project=PolarUI，POST /api/checkup-event）", "status": "done" },
+        { "name": "CheckupTriage VLM 分诊（L101 PolarPrivate + Ollama qwen3-vl 回退，use_vlm 默认开启）", "status": "done" }
+      ]
+    },
+    {
+      "id": "R10",
+      "need": "便捷接入模式（预组建默认工作流）",
+      "approach": "飞书接线员/IDE模式/Web模式本质上都是调用预组建好的工作流，默认即可用无需手动组建。区分：(a) 便捷接入模式（开箱即用） (b) 普通工作流（在工作界面打开/新建后执行）",
+      "features": [
+        { "name": "飞书接线员 Agent Take", "status": "done" },
+        { "name": "IDE 模式 Agent Take", "status": "done" },
+        { "name": "Web 模式 Agent Take", "status": "done" },
+        { "name": "便捷模式一键启用（无需进入工作区）", "status": "done" },
+        { "name": "Agent_core rules 触发引擎 + 多端适配器", "status": "done" },
+        { "name": "角色声明 role_declaration + Output 接地点重设计", "status": "done" },
+        { "name": "WorkflowMeta 画中画 meta-executor", "status": "done" },
+        { "name": "NoteCard / CostTracker / ExperienceCapture 节点", "status": "done" },
+        { "name": "普通工作流打开/新建/执行流程", "status": "done" }
+      ]
+    },
+    {
+      "id": "R11",
+      "need": "Skills 双线（社区精选 + PolarUI 原生）",
+      "approach": "社区 Skill 写入 polaris.json 清单；workflows/registry.json 用 category 区分 community-skill 与 polar-native；Chat 壳 + RetryLoop(7) 为 PolarUI 主方案",
+      "features": [
+        {
+          "name": "社区 Skill 清单",
+          "status": "done",
+          "skills": [
+            { "id": "skill-brainstorming", "skills_ref": ".agents/skills/brainstorming/SKILL.md", "priority": "P0", "use": "创意/需求澄清" },
+            { "id": "skill-verification-before-completion", "skills_ref": ".agents/skills/verification-before-completion/SKILL.md", "priority": "P0", "use": "验收门禁" },
+            { "id": "skill-systematic-debugging", "skills_ref": ".agents/skills/systematic-debugging/SKILL.md", "priority": "P0", "use": "排障" },
+            { "id": "skill-officecli", "skills_ref": ".cursor/skills/officecli/SKILL.md", "priority": "P1", "use": "文档产出" },
+            { "id": "skill-humanizer-zh", "skills_ref": ".agents/skills/humanizer-zh/SKILL.md", "priority": "P1", "use": "去 AI 味" }
+          ]
+        },
+        {
+          "name": "PolarUI 原生 Skill 清单",
+          "status": "done",
+          "skills": [
+            { "id": "skill-polarui-component", "skills_ref": ".cursor/skills/polarui-component/SKILL.md", "backup_ref": "skills/polarui-component/SKILL.md", "use": "新建/维护 node-def + registerExecutor" },
+            { "id": "skill-polarui-workflow", "skills_ref": ".cursor/skills/polarui-workflow/SKILL.md", "backup_ref": "skills/polarui-workflow/SKILL.md", "use": "新建/维护 WF/LG workflow JSON + registry" },
+            { "id": "skill-polarui-planner", "skills_ref": ".cursor/skills/polarui-planner/SKILL.md", "backup_ref": "skills/polarui-planner/SKILL.md", "use": "LLM 自动生成逻辑链（Planner 模块）" }
+          ]
+        },
+        { "name": "registry community-skill vs polar-native 分类", "status": "done" },
+        { "name": "PolarUI 可视化生成 WF（Planner + Chat 部署）", "status": "done" },
+        { "name": "研究型 RetryLoop(7) 默认", "status": "done" }
+      ]
+    }
+  ],
+  "service_management": {
+    "install_command": "npm ci",
+    "start_command": "npm run dev -- --port 5170",
+    "restart_command": "npm run dev -- --port 5170",
+    "health_endpoint": "http://127.0.0.1:5170"
+  }
+}

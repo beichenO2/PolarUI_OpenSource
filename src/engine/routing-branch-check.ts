@@ -29,20 +29,10 @@ function nodeLabel(node: NodeInstance): string {
   return def?.display_name || node.class_type
 }
 
-/** 数据流连线槽位 + 可选 _lg_edges 条件出口（与 library 标签无关） */
 function countDistinctOutgoingBranches(graph: Graph, nodeId: string): number {
   const keys = new Set<string | number>()
   for (const link of graph.links) {
     if (link.from_node === nodeId) keys.add(link.from_slot)
-  }
-  if (graph.lgEdges?.length) {
-    for (const edge of graph.lgEdges) {
-      if (edge.from !== nodeId) continue
-      const key = edge.when != null && String(edge.when).trim() !== ''
-        ? String(edge.when)
-        : edge.to
-      keys.add(key)
-    }
   }
   return keys.size
 }

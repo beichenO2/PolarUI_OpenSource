@@ -2,7 +2,7 @@
 /**
  * validate-node-defs.cjs
  *
- * 验证 ~/Polarisor/node-defs.json 的格式完整性。
+ * 验证 ~/Polarisor/PolarUI/node-defs.json 的格式完整性。
  * node-defs.json 是生态级唯一信源（SSoT），不再从 TS 硬编码导出。
  *
  * 用法: node scripts/export-node-defs.cjs [--fix]

@@ -7,10 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { registry } from '../src/engine/registry.ts'
 import type { NodeDef } from '../src/engine/types.ts'
 
-/** Open-source bundle: repo root = project root (node-defs/ + prompts/ sibling to scripts/) */
-const ECOSYSTEM_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ECOSYSTEM_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 process.env.POLARISOR_ROOT = process.env.POLARISOR_ROOT ?? ECOSYSTEM_ROOT
-const PROMPTS = join(ECOSYSTEM_ROOT, 'prompts')
+const PROMPTS = join(ECOSYSTEM_ROOT, 'PolarUI/prompts')
 
 function injectModeFrames(): void {
   const g = globalThis as Record<string, string>
@@ -22,7 +21,7 @@ injectModeFrames()
 
 import '../src/engine/executor.ts'
 
-export function bootstrapHeadlessEngine(nodeDefsDir = join(ECOSYSTEM_ROOT, 'node-defs')): number {
+export function bootstrapHeadlessEngine(nodeDefsDir = join(ECOSYSTEM_ROOT, 'PolarUI', 'node-defs')): number {
   const indexPath = join(nodeDefsDir, 'index.json')
   if (!existsSync(indexPath)) {
     throw new Error(`node-defs index not found: ${indexPath}`)

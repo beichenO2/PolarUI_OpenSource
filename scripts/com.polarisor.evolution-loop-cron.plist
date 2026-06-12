@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.polarisor.evolution-loop-cron</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>scripts/evolution-loop-cron-tick.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>~/Polarisor/PolarUI</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>~/.nvm/versions/node/v22.22.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>~</string>
+        <key>POLAR_EVOLUTION_LIVE_LLM</key>
+        <string>0</string>
+    </dict>
+
+    <!-- 对齐 evolution-loop.json Cron: 0 */30 * * * * → 每 30 分钟 -->
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <key>StandardOutPath</key>
+    <string>~/Polarisor/PolarUI/logs/evolution-loop-cron.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>~/Polarisor/PolarUI/logs/evolution-loop-cron.stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

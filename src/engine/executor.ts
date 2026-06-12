@@ -16,7 +16,6 @@ import { wrapModeSystemPrompt } from './mode-prompt'
 import { resolveSystemPromptBase, extractWorkflowJson } from './resolve-system-prompt'
 import type { WorkflowLibrary } from './types'
 import { registerPipelineExecutors } from './pipeline-executor'
-import { registerLGExecutors } from './lg-runner'
 import {
   hubFileRead,
   hubFileWrite,
@@ -69,11 +68,10 @@ export interface ExecutionContext {
   links: Link[]
   agentId?: string
   role?: RoleType
-  workflowLibrary?: WorkflowLibrary  // 当前画布执行模式（WF / LG），用于双套 prompt
+  workflowLibrary?: WorkflowLibrary
   runContext?: RunContext  // 多轮对话上下文（Chat 壳 / workflow/chat 注入）
   runTrace?: RunTraceEnvelope  // History 四层 log 采集（executeGraph 写入）
   onStreamChunk?: (nodeId: string, chunk: string) => void  // LLM stream:true 时逐 token 回调
-  lgAccumulatedState?: Record<string, unknown>  // LG step loop 累积 state（ReAct 回边时优先于静态 link）
   /** 可变工作流图；仅 StemCell 等权柄节点写入 nodes/links */
   graph?: import('./graph').Graph
 }
@@ -85,6 +83,9 @@ export interface RunContext {  // 多轮 Chat 执行上下文 — 贯穿 Working
   user_message?: string
   /** headless / benchmark：对齐 Claude Code --dangerously-skip-permissions */
   skip_permissions?: boolean
+  /** ReAct 循环：AgenticToolCall 返回的 updated_messages（JSON string / array） */
+  react_messages?: string | unknown[]
+  react_iteration?: number
 }
 
 export interface NodeTraceEntry {
@@ -160,10 +161,6 @@ function resolveNodeInputs(
   const inputs: Record<string, unknown> = {}
   for (let i = 0; i < def.inputs.length; i++) {
     const inputDef = def.inputs[i]
-    if (inputDef.name === 'state' && ctx.lgAccumulatedState && ctx.workflowLibrary === 'LG') {
-      inputs[inputDef.name] = ctx.lgAccumulatedState
-      continue
-    }
     if (bindings[inputDef.name]) {
       inputs[inputDef.name] = resolveBindingValue(bindings[inputDef.name], ctx, idMap)
       continue
@@ -212,6 +209,7 @@ export async function executeNode(
     result.duration_ms = Date.now() - start
     return result
   } catch (err) {
+    if (err instanceof Error && err.stack) process.stderr?.write?.(`[executeNode:${node.class_type}] ${err.stack}\n`)
     return {
       outputs: {},
       duration_ms: Date.now() - start,
@@ -236,43 +234,124 @@ function buildSystemPrompt(node: NodeInstance, base: string, library: WorkflowLi
  *
  * @param inputs.prompt 用户任务正文
  * @param inputs.context 可选背景上下文
- * @param inputs.intra_round_hint RetryLoop 轮内修正（非轮间 SSOT）
+ * @param inputs.tools 可选工具定义列表
  * @returns outputs.response 模型文本；outputs.usage Token 用量
  */
-registerExecutor('LLM', async (node, inputs, ctx) => {  // LLM 调用：原子化元件：一次大模型 API 调用。输入 prompt → 输出 response。最小粒度，不含工具调用、不含结构化解析。 | 入:prompt|context|intra_round_hint 出:response|usage
-  const model = node.params.model as string || 'GLM-5.1'  // 模型名：节点参数优先，缺省走生态默认 GLM-5.1
-  const library = ctx.workflowLibrary ?? 'WF'  // 工作流库类型决定 system prompt 模板分支（WF / LG）
-  const basePrompt = await resolveSystemPromptBase(node)  // 从角色声明 / 规则服务拉取 system 基底文案
-  const systemPrompt = buildSystemPrompt(node, basePrompt, library)  // 合并库别、角色约束后的最终 system 段
-  const rawPrompt = inputs.prompt  // 用户任务正文：来自 prompt 槽（可能为对象，需序列化）
-  const prompt = rawPrompt == null
-    ? ''
-    : typeof rawPrompt === 'string'
-      ? rawPrompt
-      : typeof rawPrompt === 'object'
-        ? JSON.stringify(rawPrompt)
-        : String(rawPrompt)
-  const intraHint = String(inputs.intra_round_hint ?? '').trim()  // RetryLoop 轮内修正提示（非轮间 SSOT，仅本轮注入 user 消息）
-  const userContent = intraHint  // 有轮内提示则追加段落；空 prompt 用占位避免 API 拒空消息
-    ? `${prompt}\n\n## 轮内修正提示\n${intraHint}`
-    : (prompt.trim() || '(无输入内容，请基于上下文简要说明无法审查的原因)')
-  const messages = [  // 组装 chat messages：有 system 则前置
-    ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-    { role: 'user' as const, content: userContent },
-  ]
-  const useStream = node.params.stream === true  // 是否走流式回调（画布实时刷 token）
+registerExecutor('LLM', async (node, inputs, ctx) => {
+  const model = node.params.model as string || 'GLM-5.1'
+  const library = ctx.workflowLibrary ?? 'WF'
+  const basePrompt = await resolveSystemPromptBase(node)
+  const systemPrompt = buildSystemPrompt(node, basePrompt, library) || String(node.params.system_prompt ?? '')
+  const rawPrompt = inputs.prompt
+
+  let messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+
+  if (Array.isArray(rawPrompt)) {
+    messages = [
+      ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+      ...rawPrompt.map((m: unknown) => {
+        const msg = m as Record<string, unknown>
+        const role = String(msg.role ?? 'user') as 'system' | 'user' | 'assistant'
+        if (role === 'assistant' && msg.tool_calls) {
+          return { role, content: msg.content ?? null, tool_calls: msg.tool_calls } as unknown as { role: 'assistant'; content: string }
+        }
+        if (msg.role === 'tool') {
+          return { role: 'tool', tool_call_id: msg.tool_call_id, content: String(msg.content ?? '') } as unknown as { role: 'assistant'; content: string }
+        }
+        return { role, content: String(msg.content ?? '') }
+      }),
+    ]
+  } else {
+    const prompt = rawPrompt == null
+      ? ''
+      : typeof rawPrompt === 'string'
+        ? rawPrompt
+        : typeof rawPrompt === 'object'
+          ? JSON.stringify(rawPrompt)
+          : String(rawPrompt)
+    const userContent = prompt.trim() || '(无输入内容，请基于上下文简要说明无法审查的原因)'
+    messages = [
+      ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+      { role: 'user' as const, content: userContent },
+    ]
+  }
+
+  let tools: unknown[] | undefined
+  const rawTools = inputs.tools ?? inputs.tools_list
+  if (rawTools) {
+    if (typeof rawTools === 'string') { try { tools = JSON.parse(rawTools) } catch { /* */ } }
+    else if (Array.isArray(rawTools)) {
+      tools = rawTools.map((t: unknown) => {
+        const tool = t as Record<string, unknown>
+        if (tool.type === 'function') return tool
+        return { type: 'function', function: { name: tool.name, description: tool.description ?? '', parameters: tool.parameters ?? tool.input_schema ?? { type: 'object', properties: {} } } }
+      })
+    }
+  }
+
+  const useStream = node.params.stream === true
   const result = await getLLMClient().chat(model, messages, {
-    temperature: node.params.temperature as number ?? 0.7,  // 温度：参数默认 0.7
-    timeoutMs: Number(node.params.timeout_ms ?? process.env.LLM_TIMEOUT_MS ?? 180_000),  // 超时：节点参数 > 环境变量 > 180s
+    temperature: node.params.temperature as number ?? 0.7,
+    timeoutMs: Number(node.params.timeout_ms ?? process.env.LLM_TIMEOUT_MS ?? 180_000),
+    tools: tools && tools.length > 0 ? tools : undefined,
+    toolChoice: tools && tools.length > 0 ? 'auto' : undefined,
     stream: useStream,
-    onChunk: useStream && ctx.onStreamChunk  // 流式时把 chunk 回传给执行上下文供 UI 展示
+    onChunk: useStream && ctx.onStreamChunk
       ? (chunk) => ctx.onStreamChunk!(node.id, chunk)
       : undefined,
   })
+  const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+    'GLM-5.1': 128_000,
+    'MiniMax-2.7-HighSpeed': 200_000,
+    'qwen-plus': 128_000,
+    'qwen-max': 128_000,
+    'deepseek-chat': 128_000,
+    'deepseek-reasoner': 64_000,
+  }
+  const maxContext = MODEL_CONTEXT_WINDOWS[model] ?? 128_000
+
+  const TOOL_NAME_ALIASES: Record<string, string> = {
+    read_file: 'FileRead', file_read: 'FileRead', readfile: 'FileRead',
+    write_file: 'FileWrite', file_write: 'FileWrite', writefile: 'FileWrite',
+    shell_exec: 'ShellExec', shellexec: 'ShellExec', run_command: 'ShellExec', execute_command: 'ShellExec',
+    glob_search: 'GlobSearch', globsearch: 'GlobSearch', find_files: 'GlobSearch',
+    grep_search: 'GrepSearch', grepsearch: 'GrepSearch', search_files: 'GrepSearch',
+    web_search: 'WebSearch', websearch: 'WebSearch',
+    web_fetch: 'WebFetch', webfetch: 'WebFetch', fetch_url: 'WebFetch',
+    git_commit: 'GitCommit', gitcommit: 'GitCommit',
+    mcp_call: 'MCPCall', mcpcall: 'MCPCall',
+    code_exec: 'CodeExec', codeexec: 'CodeExec',
+    notification: 'Notification',
+  }
+  function normalizeToolName(raw: string): string {
+    const lower = raw.toLowerCase().replace(/[-\s]/g, '_')
+    return TOOL_NAME_ALIASES[lower] ?? raw
+  }
+
+  let toolCalls = result.toolCalls ?? []
+  if (toolCalls.length === 0 && result.content && tools && tools.length > 0) {
+    const xmlParsed = parseXmlToolCalls(result.content)
+    if (xmlParsed.length > 0) {
+      toolCalls = xmlParsed.map((tc, i) => ({
+        id: tc.id ?? `xml_tc_${i}`,
+        type: 'function' as const,
+        function: {
+          name: normalizeToolName(tc.name),
+          arguments: JSON.stringify(tc.input ?? {}),
+        },
+      }))
+    }
+  }
+
+  const hasToolCalls = toolCalls.length > 0
+  const response = hasToolCalls
+    ? { content: result.content, tool_calls: toolCalls }
+    : result.content
   return {
     outputs: {
-      response: result.content,
+      response,
       usage: result.usage,
+      max_context: maxContext,
     },
     duration_ms: 0,
   }
@@ -322,6 +401,389 @@ registerExecutor('ToolCall', async (node, inputs) => {  // 工具调用：原子
     outputs: {
       tool_calls: result.toolCalls,
       raw: result.content,
+    },
+    duration_ms: 0,
+  }
+})
+
+// ─── AgenticToolCall Executor ─────────────────────────────────────
+
+interface ToolCallBlock {
+  id?: string
+  type?: string
+  name: string
+  input?: Record<string, unknown>
+  arguments?: string
+  function?: { name: string; arguments: string }
+}
+
+interface ToolExecutionLog {
+  iteration: number
+  tool_name: string
+  args: unknown
+  result: unknown
+  duration_ms: number
+  success: boolean
+}
+
+const CONCURRENCY_SAFE_TOOLS = new Set([
+  'FileRead', 'GrepSearch', 'GlobSearch', 'WebSearch', 'WebFetch', 'SessionSearch',
+])
+
+function extractToolCalls(response: unknown): ToolCallBlock[] {
+  if (!response) return []
+  if (Array.isArray(response)) {
+    return response.filter((b: unknown) => {
+      const block = b as Record<string, unknown>
+      return block.type === 'tool_use' || block.function || block.name
+    }).map((b: unknown) => b as ToolCallBlock)
+  }
+  if (typeof response === 'object') {
+    const obj = response as Record<string, unknown>
+    if (obj.tool_calls && Array.isArray(obj.tool_calls)) return obj.tool_calls as ToolCallBlock[]
+    if (obj.content && Array.isArray(obj.content)) {
+      return (obj.content as Record<string, unknown>[])
+        .filter(b => b.type === 'tool_use')
+        .map(b => b as unknown as ToolCallBlock)
+    }
+    if (typeof obj.content === 'string') {
+      return parseXmlToolCalls(obj.content)
+    }
+  }
+  if (typeof response === 'string') {
+    try {
+      const parsed = JSON.parse(response)
+      if (parsed && typeof parsed === 'object') return extractToolCalls(parsed)
+    } catch { /* not JSON, try XML */ }
+    return parseXmlToolCalls(response)
+  }
+  return []
+}
+
+function parseXmlToolCalls(text: string): ToolCallBlock[] {
+  const results: ToolCallBlock[] = []
+  const patterns = [
+    /<tool_call[^>]*>\s*<tool_name>([^<]+)<\/tool_name>\s*<parameters>([\s\S]*?)<\/parameters>\s*<\/tool_call[^>]*>?/g,
+    /<tool_use[^>]*>\s*<name>([^<]+)<\/name>\s*<input>([\s\S]*?)<\/input>\s*<\/tool_use/g,
+    /<tool_call_node[^>]*>\s*<name>([^<]+)<\/name>\s*<args>([\s\S]*?)<\/args>\s*<\/tool_call_node/g,
+  ]
+  for (const pattern of patterns) {
+    let match
+    while ((match = pattern.exec(text)) !== null) {
+      const name = match[1].trim()
+      const paramsRaw = match[2].trim()
+      let input: Record<string, unknown> = {}
+      try { input = JSON.parse(paramsRaw) } catch {
+        const xmlParams: Record<string, string> = {}
+        const paramPattern = /<(\w+)>([\s\S]*?)<\/\1>/g
+        let pm
+        while ((pm = paramPattern.exec(paramsRaw)) !== null) {
+          xmlParams[pm[1]] = pm[2].trim()
+        }
+        input = xmlParams
+      }
+      results.push({ name, input, id: `xml_call_${results.length}` })
+    }
+  }
+  // JSON-in-XML format: <tool_use>\n{"name":"FileRead","arguments":{...}}\n</tool_use>
+  const jsonInXmlPattern = /<tool_use>\s*(\{[\s\S]*?\})\s*<\/tool_use>/g
+  let jm
+  while ((jm = jsonInXmlPattern.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(jm[1]) as { name?: string; arguments?: Record<string, unknown>; input?: Record<string, unknown> }
+      if (parsed.name) {
+        results.push({ name: parsed.name, input: parsed.arguments ?? parsed.input ?? {}, id: `json_xml_call_${results.length}` })
+      }
+    } catch { /* not valid JSON */ }
+  }
+  // <tool_call> with nested XML params (GLM variant)
+  const glmPattern = /<tool_call[^>]*>([\s\S]*?)<\/tool_call/g
+  let gm
+  while ((gm = glmPattern.exec(text)) !== null) {
+    const inner = gm[1].trim()
+    if (results.length > 0) continue
+    const nameMatch = inner.match(/<tool_name>([^<]+)<\/tool_name>/)
+    if (!nameMatch) continue
+    const name = nameMatch[1].trim()
+    const xmlParams: Record<string, string> = {}
+    const paramPattern = /<(\w+)>([^<]*)<\/\1>/g
+    let pm
+    while ((pm = paramPattern.exec(inner)) !== null) {
+      if (pm[1] !== 'tool_name') xmlParams[pm[1]] = pm[2].trim()
+    }
+    results.push({ name, input: xmlParams, id: `glm_call_${results.length}` })
+  }
+
+  // <tool_call tool_name> with inline JSON body (GLM-5.1 compact variant)
+  if (results.length === 0) {
+    const compactPattern = /<tool_call\s+(\w+)>\s*([\s\S]*?)\s*<\/tool_call/g
+    let cm
+    while ((cm = compactPattern.exec(text)) !== null) {
+      const rawName = cm[1].trim()
+      const body = cm[2].trim()
+      let input: Record<string, unknown> = {}
+      try { input = JSON.parse(body) } catch {
+        const xmlParams: Record<string, string> = {}
+        const pp = /<(\w+)>([\s\S]*?)<\/\1>/g
+        let pm2
+        while ((pm2 = pp.exec(body)) !== null) xmlParams[pm2[1]] = pm2[2].trim()
+        input = xmlParams
+      }
+      const name = rawName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')
+      results.push({ name, input, id: `compact_call_${results.length}` })
+    }
+  }
+
+  // Catch-all: <tool_call*> with JSON body containing name+arguments (GLM wildcard)
+  if (results.length === 0) {
+    const catchAll = /<tool_call[^>]*>\s*([\s\S]*?)\s*<\/tool_call[^>]*>?/g
+    let ca
+    while ((ca = catchAll.exec(text)) !== null) {
+      const body = ca[1].trim()
+      try {
+        const parsed = JSON.parse(body) as { name?: string; arguments?: Record<string, unknown>; input?: Record<string, unknown>; args?: Record<string, unknown> }
+        if (parsed.name) {
+          results.push({ name: parsed.name, input: parsed.arguments ?? parsed.args ?? parsed.input ?? {}, id: `catchall_call_${results.length}` })
+        }
+      } catch { /* not JSON */ }
+    }
+  }
+
+  // Universal: <tool_use> with any combination of name/tool_name + arguments/input/parameters
+  if (results.length === 0) {
+    const universalPattern = /<tool_use[^>]*>([\s\S]*?)<\/tool_use>/g
+    let um
+    while ((um = universalPattern.exec(text)) !== null) {
+      const inner = um[1].trim()
+      const nameMatch = inner.match(/<(?:tool_name|name|function)>([^<]+)<\/(?:tool_name|name|function)>/)
+      if (!nameMatch) continue
+      const name = nameMatch[1].trim()
+      const argsMatch = inner.match(/<(?:arguments|input|parameters|params)>([\s\S]*?)<\/(?:arguments|input|parameters|params)>/)
+      let input: Record<string, unknown> = {}
+      if (argsMatch) {
+        const raw = argsMatch[1].trim()
+        try { input = JSON.parse(raw) } catch {
+          const xmlParams: Record<string, string> = {}
+          const pp = /<(\w+)>([\s\S]*?)<\/\1>/g
+          let pm3
+          while ((pm3 = pp.exec(raw)) !== null) xmlParams[pm3[1]] = pm3[2].trim()
+          input = xmlParams
+        }
+      }
+      results.push({ name, input, id: `universal_call_${results.length}` })
+    }
+  }
+
+  return results
+}
+
+function extractFinalText(response: unknown): string {
+  if (typeof response === 'string') return response
+  if (Array.isArray(response)) {
+    const textBlocks = response.filter((b: unknown) => (b as Record<string, unknown>).type === 'text')
+    return textBlocks.map((b: unknown) => String((b as Record<string, unknown>).text ?? '')).join('\n')
+  }
+  if (typeof response === 'object' && response !== null) {
+    const obj = response as Record<string, unknown>
+    if (typeof obj.content === 'string') return obj.content
+    if (Array.isArray(obj.content)) {
+      return (obj.content as Record<string, unknown>[])
+        .filter(b => b.type === 'text')
+        .map(b => String(b.text ?? '')).join('\n')
+    }
+  }
+  return String(response ?? '')
+}
+
+async function executeOneTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; success: boolean }> {
+  try {
+    let result: unknown
+    const path = String(args.path ?? args.file_path ?? args.filename ?? '')
+    switch (name) {
+      case 'FileRead': result = await hubFileRead(path); break
+      case 'FileWrite': result = await hubFileWrite(path || String(args.file_path ?? ''), String(args.content ?? '')); break
+      case 'ShellExec': result = await hubShellExec(String(args.command ?? ''), String(args.cwd ?? '.'), Number(args.timeout_s ?? 30)); break
+      case 'GlobSearch': result = await hubGlobSearch(String(args.pattern ?? '*')); break
+      case 'GrepSearch': result = await hubGrepSearch(String(args.pattern ?? ''), String(args.path ?? '.')); break
+      case 'GitCommit': result = await hubGitCommit({ message: String(args.message ?? ''), files: args.files, push: Boolean(args.push), cwd: String(args.cwd ?? '.') }); break
+      case 'Notification': result = await hubNotification(String(args.message ?? ''), String(args.level ?? 'info') as 'info'); break
+      case 'WebSearch': result = { content: `[WebSearch mock] query: ${args.query}` }; break
+      case 'WebFetch': result = { content: `[WebFetch mock] url: ${args.url}` }; break
+      case 'MCPCall': result = { content: `[MCPCall] server: ${args.server}, tool: ${args.tool}` }; break
+      case 'CodeExec': result = await hubShellExec(`node -e ${JSON.stringify(String(args.code ?? ''))}`, '.', 30); break
+      case 'BrowserAction':
+      case 'DigestCrawl': {
+        const port = Number(process.env.DIGIST_PORT ?? 4880)
+        const platform = String(args.platform ?? 'twitter')
+        const query = String(args.query ?? '')
+        const res = await fetch(`http://127.0.0.1:${port}/api/crawl/trigger`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform, query }),
+          signal: AbortSignal.timeout(60_000),
+        })
+        if (!res.ok) throw new Error(`Digist crawl ${res.status}: ${await res.text()}`)
+        result = await res.json()
+        break
+      }
+      case 'Vision':
+      case 'DescribeImage': {
+        const vlmModel = String(args.model ?? 'qwen3-vl')
+        const imageUrl = String(args.image_url ?? args.image ?? '')
+        const prompt = String(args.prompt ?? '描述这张图片')
+        if (!imageUrl) { result = { content: 'Error: image_url is required' }; break }
+        const vlmRes = await fetch('http://127.0.0.1:11434/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: vlmModel,
+            messages: [{ role: 'user', content: prompt, images: [imageUrl] }],
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        })
+        if (!vlmRes.ok) throw new Error(`Ollama VLM ${vlmRes.status}`)
+        const vlmData = await vlmRes.json() as { message?: { content?: string } }
+        result = { content: vlmData.message?.content ?? '' }
+        break
+      }
+      case 'SubAgent': {
+        const workflowRef = String(args.workflow ?? 'claude-code')
+        const task = String(args.task ?? '')
+        const timeoutMs = Number(args.timeout_s ?? 300) * 1000
+        try {
+          const { loadWorkflowByRef } = await import('./workflow-loader')
+          const { executeGraph } = await import('./workflow-runner')
+          const subGraph = await loadWorkflowByRef(workflowRef)
+          if (!subGraph) throw new Error(`Workflow "${workflowRef}" not found`)
+          const subResult = await Promise.race([
+            executeGraph(subGraph, {
+              externalInputs: { userMessage: task, input: task },
+            }),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('SubAgent timeout')), timeoutMs)),
+          ])
+          result = { content: typeof subResult.merged_output === 'string' ? subResult.merged_output : JSON.stringify(subResult.merged_output ?? '') }
+        } catch (err) {
+          result = { content: `[SubAgent error] ${err instanceof Error ? err.message : String(err)}` }
+        }
+        break
+      }
+      default: result = { error: `Unknown tool: ${name}` }; return { result, success: false }
+    }
+    return { result, success: true }
+  } catch (err) {
+    return { result: { error: String(err) }, success: false }
+  }
+}
+
+registerExecutor('AgenticToolCall', async (node, inputs) => {
+  const concurrencyEnabled = node.params.concurrency !== false
+  const errorStrategy = String(node.params.error_strategy ?? 'cancel_siblings')
+
+  let toolsList: unknown[] = []
+  const rawTools = inputs.tools_list
+  if (typeof rawTools === 'string') { try { toolsList = JSON.parse(rawTools) } catch { /* */ } }
+  else if (Array.isArray(rawTools)) { toolsList = rawTools }
+
+  const currentResponse = inputs.llm_response
+
+  let parsedMessages: unknown = inputs.messages
+  if (typeof parsedMessages === 'string') { try { parsedMessages = JSON.parse(parsedMessages) } catch { parsedMessages = [] } }
+  const messages: Record<string, unknown>[] = Array.isArray(parsedMessages) ? [...parsedMessages as Record<string, unknown>[]] : []
+
+  const toolCalls = extractToolCalls(currentResponse)
+
+  if (toolCalls.length === 0) {
+    return {
+      outputs: {
+        final_text: extractFinalText(currentResponse),
+        updated_messages: JSON.stringify(messages),
+        has_tool: false,
+      },
+      duration_ms: 0,
+    }
+  }
+
+  const executionLog: ToolExecutionLog[] = []
+  const toolResults: { tool_use_id: string; content: string }[] = []
+
+  if (concurrencyEnabled) {
+    const safeTools = toolCalls.filter(tc => CONCURRENCY_SAFE_TOOLS.has(tc.name ?? tc.function?.name ?? ''))
+    const exclusiveTools = toolCalls.filter(tc => !CONCURRENCY_SAFE_TOOLS.has(tc.name ?? tc.function?.name ?? ''))
+
+    const runOne = async (tc: ToolCallBlock) => {
+      const name = tc.name ?? tc.function?.name ?? ''
+      let args: Record<string, unknown> = {}
+      if (tc.input) args = tc.input
+      else if (tc.arguments) { try { args = JSON.parse(tc.arguments) } catch { /* */ } }
+      else if (tc.function?.arguments) { try { args = JSON.parse(tc.function.arguments) } catch { /* */ } }
+
+      const start = Date.now()
+      const { result, success } = await executeOneTool(name, args)
+      executionLog.push({ iteration: 1, tool_name: name, args, result, duration_ms: Date.now() - start, success })
+
+      if (!success && errorStrategy === 'abort_all') throw new Error(`Tool ${name} failed: ${JSON.stringify(result)}`)
+
+      toolResults.push({
+        tool_use_id: tc.id ?? `call_1_${name}`,
+        content: typeof result === 'string' ? result : JSON.stringify(result),
+      })
+    }
+
+    if (safeTools.length > 0) await Promise.all(safeTools.map(runOne))
+    for (const tc of exclusiveTools) await runOne(tc)
+  } else {
+    for (const tc of toolCalls) {
+      const name = tc.name ?? tc.function?.name ?? ''
+      let args: Record<string, unknown> = {}
+      if (tc.input) args = tc.input
+      else if (tc.arguments) { try { args = JSON.parse(tc.arguments) } catch { /* */ } }
+      else if (tc.function?.arguments) { try { args = JSON.parse(tc.function.arguments) } catch { /* */ } }
+
+      const start = Date.now()
+      const { result, success } = await executeOneTool(name, args)
+      executionLog.push({ iteration: 1, tool_name: name, args, result, duration_ms: Date.now() - start, success })
+      toolResults.push({
+        tool_use_id: tc.id ?? `call_1_${name}`,
+        content: typeof result === 'string' ? result : JSON.stringify(result),
+      })
+    }
+  }
+
+  let parsedResponse: Record<string, unknown> | null = null
+  if (typeof currentResponse === 'string') {
+    try { parsedResponse = JSON.parse(currentResponse) } catch { /* not JSON, treat as text */ }
+  } else if (typeof currentResponse === 'object' && currentResponse !== null) {
+    parsedResponse = currentResponse as Record<string, unknown>
+  }
+
+  if (parsedResponse && (parsedResponse.tool_calls || toolCalls.length > 0)) {
+    const assistantToolCalls = (parsedResponse.tool_calls as unknown[]) ?? toolCalls.map(tc => ({
+      id: tc.id ?? `call_${tc.name ?? tc.function?.name}`,
+      type: 'function',
+      function: { name: tc.name ?? tc.function?.name, arguments: tc.arguments ?? tc.function?.arguments ?? JSON.stringify(tc.input ?? {}) },
+    }))
+    messages.push({
+      role: 'assistant',
+      content: (parsedResponse.content as string) || null,
+      tool_calls: assistantToolCalls,
+    } as Record<string, unknown>)
+  } else {
+    messages.push({ role: 'assistant', content: typeof currentResponse === 'string' ? currentResponse : JSON.stringify(currentResponse) })
+  }
+  for (const tr of toolResults) {
+    messages.push({
+      role: 'tool',
+      tool_call_id: tr.tool_use_id,
+      content: tr.content,
+    })
+  }
+
+  return {
+    outputs: {
+      final_text: undefined,
+      updated_messages: JSON.stringify(messages),
+      has_tool: true,
     },
     duration_ms: 0,
   }
@@ -635,15 +1097,17 @@ registerExecutor('StaticData', async (node) => {  // 静态数据：原子化元
   return { outputs: { data: value }, duration_ms: 0 }
 })
 
-registerExecutor('PromptInput', async (node) => {  // Prompt 植入：原子化元件：定义初始输入（User Prompt）。必须填写输出预期正则，未填则编译报错。 | 入:— 出:prompt|expected_pattern|context
-  const text = String(node.params.prompt_text ?? node.params.content ?? '')  // 任务正文 SSOT（编辑期来自节点参数）
-  const expectedPattern = String(node.params.expected_output ?? node.params.expected_pattern ?? '')  // Validator / RetryLoop 用的期望正则
+registerExecutor('PromptInput', async (node) => {  // Prompt 植入：原子化元件：定义初始输入（User Prompt）。必须填写输出预期正则，未填则编译报错。 | 入:— 出:prompt|expected_pattern|context|channel
+  const text = String(node.params.prompt_text ?? node.params.content ?? '')
+  const expectedPattern = String(node.params.expected_output ?? node.params.expected_pattern ?? '')
   const purpose = String(node.params.purpose ?? '')
+  const channel = String(node.params.channel ?? 'cli')
   return {
     outputs: {
       prompt: text,
       expected_pattern: expectedPattern,
       context: purpose ? { purpose, content: text } : { content: text },
+      channel,
     },
     duration_ms: 0,
   }
@@ -1047,7 +1511,7 @@ registerExecutor('ErrorClassifier', async (node, inputs) => {  // 错误分类�
   return { outputs: { classification }, duration_ms: 0 }
 })
 
-registerExecutor('IDEAgent', async (node) => {  // IDE 模式：PolarClaw IDE Agent：MCP/IDE ReAct 环。须用 LG 模式工作流（*.lg.json）。 | 入:task_context 出:result|files_changed
+registerExecutor('IDEAgent', async (node) => {  // IDE 模式：PolarClaw IDE Agent：MCP/IDE ReAct 环。 | 入:task_context 出:result|files_changed
   const mode = node.params.mode as string  // 组件运行模式（ask/whitelist 等）
   const agentId = (node.params.agent_id as string) || 'ide-agent'
   return {
@@ -1056,7 +1520,7 @@ registerExecutor('IDEAgent', async (node) => {  // IDE 模式：PolarClaw IDE Ag
   }
 })
 
-registerExecutor('WebAgent', async (node) => {  // Web 模式：PolarClaw Hub Web Solo Agent ReAct。须用 LG 模式工作流（*.lg.json）。 | 入:hub_message 出:result|prompt_sent
+registerExecutor('WebAgent', async (node) => {  // Web 模式：PolarClaw Hub Web Solo Agent ReAct。 | 入:hub_message 出:result|prompt_sent
   const mode = node.params.mode as string  // 组件运行模式（ask/whitelist 等）
   const agentId = (node.params.agent_id as string) || 'web-agent'
   return {
@@ -1319,7 +1783,7 @@ registerExecutor('KnowLeverBuild', async (node, inputs) => {  // 站点构建：
   const topic = String(inputs.topic ?? '')  // DIGiST/KnowLever 主题
   const user = String(node.params.user ?? 'admin')  // KnowLever/PolarMemory 用户 id
   const cmd = `node wiki-engine/build.js --topic ${JSON.stringify(topic)} --user ${JSON.stringify(user)}`
-  const result = await hubShellExec(cmd, join(polarisorRoot(), 'KnowLever'), 120)
+  const result = await hubShellExec(cmd, '~/Polarisor/KnowLever', 120)
   const buildPath = result.stdout.split('\n').find(l => l.includes('site/') || l.includes('.html'))?.trim() ?? result.stdout.trim()
   return {
     outputs: { build_path: buildPath, success: result.success },
@@ -1496,7 +1960,16 @@ registerExecutor('PromptInject', async (node, inputs) => {  // Prompt 注入：�
   const triggerText = String(
     inputs.prior_context ?? memoryText ?? inputs.trigger_text ?? node.params.trigger_text ?? ''
   )
-  let inject = String(node.params.prior_knowledge ?? inputs.inject_text ?? '')
+  let inject = String(inputs.prior_knowledge ?? node.params.prior_knowledge ?? inputs.inject_text ?? '')
+  if (!inject.trim() && typeof window === 'undefined') {
+    try {
+      const { PROMPT_EVOLVE_LATEST_PATH } = await import('./prompt-evolve-utils')
+      const { readFileSync, existsSync } = await import('node:fs')
+      const { resolve } = await import('node:path')
+      const p = resolve(process.cwd(), PROMPT_EVOLVE_LATEST_PATH)
+      if (existsSync(p)) inject = readFileSync(p, 'utf8').trim()
+    } catch { /* no evolved prompt available */ }
+  }
   if (memoryText && inject && !inject.includes(memoryText)) {
     inject = `${inject}\n\n## 记忆检索\n${memoryText}`
   } else if (memoryText && !inject) {
@@ -1992,10 +2465,11 @@ registerExecutor('GrepSearch', async (node, inputs) => {  // Grep 搜索：原�
   return { outputs: { matches: data.matches, count: data.count }, duration_ms: 0 }
 })
 
-registerExecutor('Notification', async (node, inputs) => {  // 通知推送：原子化元件：发送桌面/手机通知。 | 入:message 出:sent
-  const message = String(inputs.message ?? '')  // Git 提交说明或通知正文
-  const channel = String(node.params.channel ?? 'desktop')
-  const data = await hubNotification(message, channel)  // 接口 JSON 正文
+registerExecutor('Notification', async (node, inputs) => {  // 通知推送：原子化元件：发送桌面/手机通知。 | 入:message,channel 出:sent
+  const message = String(inputs.message ?? '')
+  const paramChannel = String(node.params.channel ?? 'desktop')
+  const channel = paramChannel === 'auto' ? String(inputs.channel ?? 'desktop') : paramChannel
+  const data = await hubNotification(message, channel)
   return { outputs: { sent: data.sent, channel: data.channel }, duration_ms: 0 }
 })
 
@@ -2285,10 +2759,27 @@ registerExecutor('BrowserAction', async (node, inputs) => runBrowserAction(node.
 
 registerExecutor('MCPCall', async (node, inputs) => runMcpCall(node.params, inputs))  // MCPCall：原子化元件：调用外部 MCP Server 的工具。mcp_request = { server, tool_name, arguments }。
 
-registerExecutor('SubAgent', async (node, inputs) => ({  // SubAgent：原子化元件：将子任务委派给独立 Agent 进程。输入任务描述 → 输出结果。
-  outputs: { delegated: true, task: inputs.task ?? inputs, agent: node.params.agent_type },
-  duration_ms: 0,
-}))
+registerExecutor('SubAgent', async (node, inputs) => {  // SubAgent：原子化元件：将子任务委派给独立 Agent 进程。输入任务描述 → 输出结果。
+  const task = String(inputs.task ?? '')
+  const workflowRef = String(node.params.workflow ?? node.params.agent_type ?? 'claude-code')
+  const timeoutMs = Number(node.params.timeout_s ?? 300) * 1000
+  try {
+    const { loadWorkflowByRef } = await import('./workflow-loader')
+    const { executeGraph } = await import('./workflow-runner')
+    const subGraph = await loadWorkflowByRef(workflowRef)
+    if (!subGraph) throw new Error(`Workflow "${workflowRef}" not found`)
+    const subResult = await Promise.race([
+      executeGraph(subGraph, {
+        externalInputs: { userMessage: task, input: task, ...(inputs.context && typeof inputs.context === 'object' ? inputs.context as Record<string, unknown> : {}) },
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('SubAgent timeout')), timeoutMs)),
+    ])
+    const output = typeof subResult.merged_output === 'string' ? subResult.merged_output : JSON.stringify(subResult.merged_output ?? '')
+    return { outputs: { result: output, status: 'completed' }, duration_ms: 0 }
+  } catch (err) {
+    return { outputs: { result: `[SubAgent error] ${err instanceof Error ? err.message : String(err)}`, status: 'error' }, duration_ms: 0 }
+  }
+})
 
 registerExecutor('ImageGenerate', async (node, inputs) => ({  // ImageGenerate：原子化元件：输入 prompt → 调用图片生成 API → 输出图片路径。
   outputs: {
@@ -2506,7 +2997,7 @@ registerExecutor('PolarPilot', async (node, inputs) => ({  // PolarPilot：生�
   duration_ms: 0,
 }))
 
-registerExecutor('FeishuRelay', async (node, inputs) => ({  // FeishuRelay：PolarClaw 飞书模式：webhook → ReAct 环 → 回传。须用 LG 模式工作流（*.lg.json）。
+registerExecutor('FeishuRelay', async (node, inputs) => ({  // FeishuRelay：PolarClaw 飞书模式：webhook → ReAct 环 → 回传。
   outputs: { relayed: true, message: inputs.message ?? inputs },
   duration_ms: 0,
 }))
@@ -3253,7 +3744,7 @@ registerExecutor('KnowLeverExportPDF', async (node, inputs) => {  // 导出PDF�
   const topic = String(inputs.topic ?? '')  // DIGiST/KnowLever 主题
   const user = String(node.params.user ?? 'admin')  // KnowLever/PolarMemory 用户 id
   const cmd = `node wiki-engine/export-pdf.js --topic ${JSON.stringify(topic)} --user ${JSON.stringify(user)}`
-  const result = await hubShellExec(cmd, join(polarisorRoot(), 'KnowLever'), 180)
+  const result = await hubShellExec(cmd, '~/Polarisor/KnowLever', 180)
   const pdfPath = result.stdout.split('\n').find(l => l.includes('.pdf'))?.trim() ?? result.stdout.trim()
   return {
     outputs: { pdf_path: pdfPath, success: result.success },
@@ -3399,19 +3890,69 @@ registerExecutor('PortFacadeContract', async (node) => {  // facade 同形契约
   }
 })
 
-registerExecutor('ContextWindow', async (node, inputs) => {  // 上下文窗口：原子化元件：管理对话历史。输入消息 → 压缩/截断/缓存 → 输出可用上下文。 | 入:messages|new_message 出:context|compressed
-  const maxTokens = Number(node.params.max_tokens ?? 128000)
-  const threshold = Number(node.params.compress_threshold ?? 0.5)
-  const raw = inputs.messages
-  const messages = Array.isArray(raw) ? [...raw] : raw && typeof raw === 'object' ? [raw] : []
-  if (inputs.new_message !== undefined && inputs.new_message !== null && inputs.new_message !== '') {
-    messages.push(inputs.new_message)
+registerExecutor('ContextWindow', async (node, inputs, ctx) => {
+  const maxContext = Number(inputs.max_context ?? node.params.max_tokens ?? 128_000)
+  const BUFFER_TOKENS = 13_000
+  const SUMMARY_RESERVE = 20_000
+  const MAX_COMPACT_FAILURES = 3
+
+  const toolFeedback = inputs.tool_feedback
+  const reactMessages = toolFeedback ?? ctx.runContext?.react_messages
+  const raw = reactMessages ? (typeof reactMessages === 'string' ? JSON.parse(reactMessages) : reactMessages) : inputs.messages
+  const messages: unknown[] = Array.isArray(raw) ? [...raw] : raw && typeof raw === 'object' ? [raw] : []
+  if (!reactMessages && inputs.new_message !== undefined && inputs.new_message !== null && inputs.new_message !== '') {
+    messages.push(typeof inputs.new_message === 'string'
+      ? { role: 'user', content: inputs.new_message }
+      : inputs.new_message)
   }
-  const serialized = JSON.stringify(messages)
-  const budget = Math.floor(maxTokens * threshold * 4)
-  const compressed = serialized.length > budget
-  const context = compressed ? messages.slice(-Math.max(1, Math.floor(messages.length / 2))) : messages
-  return { outputs: { context, compressed }, duration_ms: 0 }
+
+  const estimateTokens = (msgs: unknown[]) => Math.ceil(JSON.stringify(msgs).length / 4)
+  const tokenCount = estimateTokens(messages)
+  const effectiveWindow = maxContext - SUMMARY_RESERVE
+  const compactThreshold = effectiveWindow - BUFFER_TOKENS
+
+  let compressed = false
+  if (tokenCount > compactThreshold && messages.length > 2) {
+    const strategy = String(node.params.strategy ?? 'summary')
+    if (strategy === 'summary') {
+      let failures = 0
+      let compacted = false
+      while (!compacted && failures < MAX_COMPACT_FAILURES) {
+        try {
+          const splitPoint = Math.floor(messages.length * 0.6)
+          const oldMessages = messages.slice(0, splitPoint)
+          const summaryPrompt = `Summarize the following conversation concisely, preserving key decisions, code changes, and task progress. Output ONLY the summary, no preamble:\n\n${JSON.stringify(oldMessages).slice(0, 50_000)}`
+          const summaryResult = await getLLMClient().chat(
+            node.params.compact_model as string || 'GLM-5.1',
+            [{ role: 'user', content: summaryPrompt }],
+            { temperature: 0.3, timeoutMs: 60_000 },
+          )
+          if (!summaryResult.content?.trim()) throw new Error('empty summary')
+          const kept = messages.slice(splitPoint)
+          messages.length = 0
+          messages.push({ role: 'system', content: `[Conversation summary]: ${summaryResult.content}` })
+          messages.push(...kept)
+          compacted = true
+          compressed = true
+        } catch {
+          failures++
+        }
+      }
+      if (!compacted) {
+        const kept = messages.slice(-Math.max(2, Math.floor(messages.length / 2)))
+        messages.length = 0
+        messages.push(...kept)
+        compressed = true
+      }
+    } else {
+      const kept = messages.slice(-Math.max(2, Math.floor(messages.length / 2)))
+      messages.length = 0
+      messages.push(...kept)
+      compressed = true
+    }
+  }
+
+  return { outputs: { context: messages, compressed }, duration_ms: 0 }
 })
 
 async function aoGenerateDocument(
@@ -3767,7 +4308,7 @@ registerExecutor('RecursionGuard', async (node, inputs) => {  // 递归保护：
   return { outputs: { pass_value: inputs.value, stop_reason: stopReason }, duration_ms: 0 }
 })
 
-registerExecutor('HistorySink', async (node, inputs, ctx) => {  // History 落盘：聚合一次 execute 的全链路 trace，输出 log_json + log_path + summary（WF/LG 共用）。 | 入:run_envelope|node_traces 出:log_json|log_path|summary
+registerExecutor('HistorySink', async (node, inputs, ctx) => {  // History 落盘：聚合一次 execute 的全链路 trace，输出 log_json + log_path + summary。 | 入:run_envelope|node_traces 出:log_json|log_path|summary
   const runsDir = String(node.params.runs_dir ?? 'PolarUI/runs/')
   const trace = ctx.runTrace
   const runId = trace?.run_id ?? `run_${Date.now()}`
@@ -3967,7 +4508,7 @@ registerExecutor('PluripotentCell', async (node, inputs, ctx) => {  // 干细胞
       state: { ...state, last_differentiation: pick },
       materialized_class: pick,
       node_id: nodeId,
-      library: ctx.workflowLibrary ?? 'LG',
+      library: ctx.workflowLibrary ?? 'WF',
       note: '干细胞（PluripotentCell 旧名）：准许结构改变信号（分化占位）',
     },
     duration_ms: 0,
@@ -3975,4 +4516,3 @@ registerExecutor('PluripotentCell', async (node, inputs, ctx) => {  // 干细胞
 })
 
 registerPipelineExecutors(registerExecutor)
-registerLGExecutors(registerExecutor)

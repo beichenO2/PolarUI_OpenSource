@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 
 const PORT = Number(process.env.DESIGN_BRIDGE_PORT ?? 3920)
-const POLAR_DESIGN_DIR = resolve(process.env.POLARISOR_ROOT ?? process.env.HOME ?? '.', 'PolarDesign')
+const POLAR_DESIGN_DIR = resolve(process.env.HOME ?? '~', 'Polarisor/PolarDesign')
 
 let designMod = null
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dir, '../..')
 const EXECUTOR = join(__dir, '../src/engine/executor.ts')
-const NODE_DEFS = join(ROOT, 'node-defs')
+const NODE_DEFS = join(ROOT, 'PolarUI', 'node-defs')
 
 const index = JSON.parse(readFileSync(join(NODE_DEFS, 'index.json'), 'utf8'))
 const DESC = {}

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-/** 03 批次外：空壳节点审计 — pipeline/LG 节点允许无单文件 executor */
+/** 03 批次外：空壳节点审计 — pipeline 节点允许无单文件 executor */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const NODE_DEFS = join(ROOT, 'node-defs')
+const NODE_DEFS = join(ROOT, 'PolarUI', 'node-defs')
 
 const PIPELINE_SUFFIX = /Pipeline$/
 const LG_PREFIX = /^LG_/

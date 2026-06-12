@@ -8,7 +8,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const NODE_DEFS = path.resolve(__dirname, '../../node-defs')
+const NODE_DEFS = path.resolve(__dirname, '../node-defs')
 const dryRun = process.argv.includes('--dry-run')
 
 const IO_HINTS = {

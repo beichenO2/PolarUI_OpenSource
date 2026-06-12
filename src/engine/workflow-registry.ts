@@ -20,7 +20,6 @@ export interface WorkflowEntry {
   category: string
   nodeCount: number
   file: string
-  /** 默认 WF；*.lg.json 须标 LG */
   library?: WorkflowLibrary
   registeredAt: string
   updatedAt: string

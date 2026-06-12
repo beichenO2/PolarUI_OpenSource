@@ -16,7 +16,7 @@ export interface ChatMessage {
 }
 
 export interface ChatOptions {
-  /** cloud = upstream APIs; local = L000 8B / L100 32B / L101 VLM */
+  /** cloud = upstream APIs; local = L0000 embedding */
   tier?: 'cloud' | 'local'
   temperature?: number
   maxTokens?: number
@@ -28,46 +28,47 @@ export interface ChatOptions {
   stream?: boolean
 }
 
-/** 3-bit QCS → opaque cloud id (no vendor model names). */
+/** 4-bit QCSA or V-prefix → opaque cloud id (no vendor model names). */
 export function cloudCapabilityToModelId(code: string): string {
-  return (code ?? '000').padEnd(3, '0').slice(0, 3).replace(/[^01]/g, '0')
+  const c = (code ?? '').trim()
+  if (c.toUpperCase().startsWith('V') && c.length === 5) return c.toUpperCase()
+  if (/^[01]{4}$/.test(c)) return c
+  return '0001'
 }
 
-/** 3-bit QCS → local L-code (L000 8B / L100 32B / L101 VLM). */
-export function localCapabilityToModelId(code: string): string {
-  const qcs = cloudCapabilityToModelId(code)
-  if (qcs === '101') return 'L101'
-  if (qcs === '100') return 'L100'
-  return 'L000'
+/** Local: only L0000 (embedding). */
+export function localCapabilityToModelId(_code: string): string {
+  return 'L0000'
 }
 
 function resolveModelId(code: string, tier: 'cloud' | 'local'): string {
   return tier === 'local' ? localCapabilityToModelId(code) : cloudCapabilityToModelId(code)
 }
 
-/** Human-readable aliases → PolarPrivate capability codes */
+/** Human-readable aliases → PolarPrivate 4-bit QCSA capability codes */
 const MODEL_ALIASES: Record<string, string> = {
-  'GLM-5.1': '100',
-  'GLM-5': '100',
-  'GLM-5-TURBO': '001',
-  'GLM-TURBO': '001',
-  'ASTRON-CODE-LATEST': '100',
-  'CLAUDE-SONNET': '100',
-  'CLAUDE-3-SONNET': '100',
-  'CLAUDE-3-5-SONNET': '100',
-  'QWEN-PLUS': '100',
-  'QWEN-MAX': '100',
+  'GLM-5.1': '1000',
+  'GLM-5': '1000',
+  'GLM-5-TURBO': '0001',
+  'GLM-TURBO': '0001',
+  'ASTRON-CODE-LATEST': '1001',
+  'CLAUDE-SONNET': '1001',
+  'CLAUDE-3-SONNET': '1001',
+  'CLAUDE-3-5-SONNET': '1001',
+  'QWEN-PLUS': '1000',
+  'QWEN-MAX': '1000',
 }
 
-/** Opaque codes: cloud 000–111; local L000/L100/L101; embed E000. */
+/** Opaque codes: cloud 4-bit QCSA / V-prefix; local L0000; embed E000. */
 export function toModelId(model: string, tier: 'cloud' | 'local' = 'cloud'): string {
   const raw = (model ?? '').trim()
   const aliased = MODEL_ALIASES[raw.toUpperCase()] ?? raw
   const m = aliased.toUpperCase()
-  if (m === 'L000' || m === 'L100' || m === 'L101') return m
+  if (m === 'L0000') return m
   if (m === 'E000') return 'E000'
-  if (/^[01]{3}$/.test(m)) return tier === 'local' ? `L${m}` : m
-  throw new Error(`Unknown model code "${m}". Cloud: 000–111. Local: L000, L100, L101. Embed: E000.`)
+  if (m.startsWith('V') && m.length === 5) return m
+  if (/^[01]{4}$/.test(m)) return tier === 'local' ? 'L0000' : m
+  throw new Error(`Unknown model code "${m}". Cloud: 4-bit QCSA (0000–1111) or V-prefix (V0000). Local: L0000. Embed: E000.`)
 }
 
 export interface ChatResult {
@@ -87,16 +88,16 @@ function chatUrl(): string {
   return `${LLM_PROXY_V1}/chat/completions`
 }
 
-/** 天翼云 llm.ctyun.codingplan 不可达时，按 CAPABILITY_CODES 降级到可用云端码 */
-const CTYUN_QUALITY_FALLBACK = ['001', '000'] as const
+/** 上游 502 时降级到可用云端码 */
+const QUALITY_FALLBACK = ['0001', '0000'] as const
 
-function isCtyunUpstreamFailure(status: number, text: string): boolean {
+function isUpstreamFailure(status: number, text: string): boolean {
   return status === 502 && /ctyun|Cannot connect to upstream/i.test(text)
 }
 
 function qualityFallbackCodes(modelId: string): readonly string[] {
-  if (modelId === '100' || modelId === '110' || modelId === '111') {
-    return [modelId, ...CTYUN_QUALITY_FALLBACK]
+  if (modelId === '1000' || modelId === '1110' || modelId === '1001') {
+    return [modelId, ...QUALITY_FALLBACK]
   }
   return [modelId]
 }
@@ -110,6 +111,8 @@ async function readSseChatCompletion(
   const decoder = new TextDecoder()
   let buffer = ''
   let content = ''
+  const toolCallAccum: Map<number, { id: string; type: string; function: { name: string; arguments: string } }> = new Map()
+  let usage: Record<string, unknown> = {}
 
   while (true) {
     const { done, value } = await reader.read()
@@ -124,18 +127,42 @@ async function readSseChatCompletion(
       if (payload === '[DONE]') continue
       try {
         const parsed = JSON.parse(payload) as {
-          choices?: Array<{ delta?: { content?: string } }>
+          choices?: Array<{
+            delta?: {
+              content?: string
+              tool_calls?: Array<{ index?: number; id?: string; type?: string; function?: { name?: string; arguments?: string } }>
+            }
+          }>
+          usage?: Record<string, unknown>
         }
-        const delta = parsed.choices?.[0]?.delta?.content ?? ''
-        if (delta) {
-          content += delta
-          onChunk?.(delta)
+        const delta = parsed.choices?.[0]?.delta
+        if (delta?.content) {
+          content += delta.content
+          onChunk?.(delta.content)
         }
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index ?? 0
+            if (!toolCallAccum.has(idx)) {
+              toolCallAccum.set(idx, {
+                id: tc.id ?? `call_${idx}`,
+                type: tc.type ?? 'function',
+                function: { name: tc.function?.name ?? '', arguments: '' },
+              })
+            }
+            const existing = toolCallAccum.get(idx)!
+            if (tc.id) existing.id = tc.id
+            if (tc.function?.name) existing.function.name = tc.function.name
+            if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
+          }
+        }
+        if (parsed.usage) usage = parsed.usage
       } catch { /* skip malformed SSE line */ }
     }
   }
 
-  return { content, toolCalls: [], usage: {}, model: modelId }
+  const toolCalls = [...toolCallAccum.values()]
+  return { content, toolCalls, usage, model: modelId }
 }
 
 export function createLLMClient(): LLMProxyClient {
@@ -175,7 +202,7 @@ export function createLLMClient(): LLMProxyClient {
 
             if (!res.ok) {
               const text = await res.text().catch(() => '')
-              if (isCtyunUpstreamFailure(res.status, text) && ci < codesToTry.length - 1) {
+              if (isUpstreamFailure(res.status, text) && ci < codesToTry.length - 1) {
                 lastErr = new Error(`LLM Proxy ${res.status}: ${text.slice(0, 400)}`)
                 break
               }
@@ -205,13 +232,13 @@ export function createLLMClient(): LLMProxyClient {
             }
           } catch (err) {
             lastErr = err instanceof Error ? err : new Error(String(err))
-            if (isCtyunUpstreamFailure(502, lastErr.message) && ci < codesToTry.length - 1) break
+            if (isUpstreamFailure(502, lastErr.message) && ci < codesToTry.length - 1) break
             const retryable = /500006|并发|rate.?limit|429/i.test(lastErr.message)
             if (retryable && attempt < maxAttempts) {
               await new Promise(r => setTimeout(r, attempt * 5000))
               continue
             }
-            if (ci < codesToTry.length - 1 && /502|ctyun|Cannot connect to upstream/i.test(lastErr.message)) break
+            if (ci < codesToTry.length - 1 && /502|Cannot connect to upstream/i.test(lastErr.message)) break
             throw lastErr
           }
         }

@@ -31,7 +31,7 @@ class NodeRegistry {
   /**
    * Load node definitions from an external JSON URL.
    *
-   * SSoT 唯一信源：~/Polarisor/node-defs/（树状结构）
+   * SSoT 唯一信源：~/Polarisor/PolarUI/node-defs/（树状结构）
    * 支持两种格式：
    *   v1: NodeDef[]（单文件平铺数组，兼容旧 node-defs.json）
    *   v2: { version: 2, files: string[] }（索引 + 多子文件）
@@ -128,7 +128,7 @@ class NodeRegistry {
     return Array.from(this._nodes.values())
   }
 
-  /** 左栏 palette：统一组件集（仅隐藏 Internal / palette_hidden；不再按 WF|LG 切换） */
+  /** 左栏 palette：统一组件集（仅隐藏 Internal / palette_hidden） */
   getPaletteNodes(_executionMode?: WorkflowLibrary): NodeDef[] {
     return this.getAll().filter(n => {
       if (n.palette_hidden || n.deprecated) return false

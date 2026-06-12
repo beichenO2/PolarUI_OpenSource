@@ -1,9 +1,0 @@
-{
-  "id": "q2-package-name",
-  "workflow_id": "claude-code-lg",
-  "elapsed_ms": 46497,
-  "content": "`polar-ui`",
-  "pass": true,
-  "unhealthy_nodes": [],
-  "status": "completed"
-}

@@ -29,7 +29,7 @@ export const DEFAULT_WIRE_ROUTING_OPTIONS = {
   idealNudgingDistance: 14,
   cornerRadius: 0,
   reverseApproachOvershoot: 72,
-  stubSize: 40,
+  stubSize: 20,
 } as const
 
 /** 平行线最小中心距（px）— libavoid nudging + 后处理 resolveWireCollisions 共用 */

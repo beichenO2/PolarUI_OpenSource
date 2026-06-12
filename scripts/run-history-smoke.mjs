@@ -74,7 +74,7 @@ else {
 }
 
 // History category in node-defs
-const evolve = JSON.parse(readFileSync(join(ROOT, '..', 'node-defs', 'evolve.json'), 'utf8'))
+const evolve = JSON.parse(readFileSync(join(ROOT, 'node-defs', 'evolve.json'), 'utf8'))
 const hist = evolve.filter(d => d.category === 'History')
 if (hist.length < 2) fail('HistorySink/HistoryReader not category History')
 else ok(`History nodes: ${hist.map(h => h.class_type).join(', ')}`)

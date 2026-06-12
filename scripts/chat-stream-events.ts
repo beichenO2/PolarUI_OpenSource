@@ -6,6 +6,8 @@ export type ChatStreamEvent =
   | { type: 'tool_use'; name: string; input?: unknown; node_id?: string }
   | { type: 'tool_result'; content: string; is_error?: boolean; node_id?: string }
   | { type: 'step_done'; node_id: string; class_type: string; duration_ms?: number; error?: string }
+  | { type: 'data_flow'; from_node: string; to_node: string; from_class: string; to_class: string; slot: number; preview: string }
+  | { type: 'node_output'; node_id: string; class_type: string; outputs: Record<string, string> }
   | { type: 'final'; content: string | null; status: string; unhealthy_nodes?: unknown[]; conversation_id?: string; workflow_id?: string }
   | { type: 'error'; message: string }
 

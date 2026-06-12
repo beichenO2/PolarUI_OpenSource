@@ -65,7 +65,7 @@ else ok('GET deployments empty')
 r = await fetch(`${base}/api/deployments`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ workflow_id: 'hermes-lg', display_name: 'Hermes Agent', library: 'LG' }),
+  body: JSON.stringify({ workflow_id: 'hermes-1to1', display_name: 'Hermes Agent', library: 'WF' }),
 })
 if (!r.ok) fail('PUT deployment')
 else ok('PUT deployment')

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 260527 Phase 2 — 全量 WF/LG compile + wire + headless execute（mock LLM）
+ * 260527 Phase 2 — 全量 WF compile + wire + headless execute（mock LLM）
  * trace: 任务书/Done/260527_整理归档/260527/trace/all-workflows-matrix.jsonl
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'node:fs'
@@ -10,7 +10,6 @@ import { execSync } from 'node:child_process'
 import { bootstrapHeadlessEngine } from './headless-bootstrap.ts'
 import { loadWorkflowJson } from '../src/engine/loader.ts'
 import { executeGraph } from '../src/engine/workflow-runner.ts'
-import { executeLGSpec } from '../src/engine/lg-runner.ts'
 import { loadNodeDefs, validateWorkflowWiring } from '../cli/wire-integrity-check.mjs'
 import { setLLMClient } from '../src/sdk/llm-proxy.ts'
 
@@ -18,7 +17,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const WF_DIR = join(ROOT, 'workflows')
 const TRACE_DIR = join(ROOT, '..', '任务书', 'Done', '260527_整理归档', '260527', 'trace')
 const TRACE_FILE = join(TRACE_DIR, 'all-workflows-matrix.jsonl')
-const NODE_DEFS = join(ROOT, '..', 'node-defs')
+const NODE_DEFS = join(ROOT, 'node-defs')
 const EXECUTE = !process.argv.includes('--compile-only')
 const TIMEOUT_MS = Number(process.env.WF_GATE_TIMEOUT_MS ?? 90_000)
 
@@ -70,9 +69,7 @@ async function executeWorkflow(graph, rel) {
     return { status: 'SKIP', note: 'env dependency' }
   }
   const ctrl = AbortSignal.timeout(TIMEOUT_MS)
-  const run = graph.library === 'LG'
-    ? executeLGSpec(graph, { agentId: 'all-wf-gate' })
-    : executeGraph(graph, { agentId: 'all-wf-gate' })
+  const run = executeGraph(graph, { agentId: 'all-wf-gate' })
 
   try {
     const result = await Promise.race([
@@ -85,7 +82,7 @@ async function executeWorkflow(graph, rel) {
       const err = result.unhealthy_nodes.map(u => u.error).join('; ').slice(0, 200)
       return { status: 'FAIL', note: err }
     }
-    return { status: 'PASS', note: graph.library === 'LG' ? `lg ${result.steps?.length ?? 0} steps` : 'wf ok' }
+    return { status: 'PASS', note: 'wf ok' }
   } catch (e) {
     return { status: 'FAIL', note: e instanceof Error ? e.message : String(e) }
   }
@@ -132,7 +129,7 @@ for (const abs of files) {
   const line = {
     ts: new Date().toISOString(),
     workflow: rel.replace(/\.json$/, ''),
-    library: rel.includes('.lg.json') ? 'LG' : 'WF',
+    library: 'WF',
     compile: compile.status,
     wire: wire.status,
     execute: execute.status,

@@ -8,7 +8,7 @@ export function validateLlmValidatorRetryLoops(graph: Graph): string[] {
   const byId = new Map(graph.nodes.map(n => [n.id, n]))
 
   const nodeIds = new Set(graph.nodes.map(n => n.id))
-  const agenticTypes = new Set(['AgenticUnit', 'AgentWorkflow', 'AgenticChain'])
+  const agenticTypes = new Set(['AgenticUnit', 'AgentWorkflow', 'AgenticChain', 'AgenticToolCall'])
   for (const llm of graph.nodes.filter(n => n.class_type === 'LLM')) {
     if (/b$/.test(llm.id) && nodeIds.has(llm.id.slice(0, -1))) continue
     const feedsAgentic = graph.links

@@ -1,11 +1,12 @@
 /**
- * workflow-runner.ts — 共享工作流图执行（拓扑序 + executeNode）
+ * workflow-runner.ts — 共享工作流图执行（拓扑序 + executeNode / 状态机）
  */
 import type { Graph } from './graph'
 import type { NodeInstance } from './types'
 import { executeNode, type ExecutionContext, type ExecutionResult, type NodeTraceEntry, normalizeLoopItems } from './executor'
 import { resolveWorkflowRole } from './role-protocol'
 import { computeBackLinks } from './loader'
+import { executeStateMachine } from './state-machine-runner'
 
 export interface ExecuteGraphOptions {
   agentId?: string
@@ -13,7 +14,8 @@ export interface ExecuteGraphOptions {
   skipClassTypes?: Set<string>
   onStreamChunk?: (nodeId: string, chunk: string) => void
   onNodeStart?: (payload: { nodeId: string; classType: string; attempt: number }) => void
-  onNodeDone?: (payload: { nodeId: string; classType: string; result: ExecutionResult; attempt: number }) => void
+  onNodeDone?: (payload: { nodeId: string; classType: string; result: ExecutionResult; attempt: number; duration_ms: number }) => void
+  onNodeSkipped?: (payload: { nodeId: string; classType: string; reason: string }) => void
   /** 多轮 Chat：conversation_id / user_message 等 */
   runContext?: import('./executor').RunContext
   /** 注入 PromptInput / WorkingMemory / StaticData 占位符 */
@@ -65,6 +67,24 @@ export function markInactiveConditionBranches(
   return skipped
 }
 
+/** After Switch: skip all branches except the matched slot. */
+export function markInactiveSwitchBranches(
+  graph: Graph,
+  switchNodeId: string,
+  matchedSlot: number,
+  mergeNodeIds: Set<string>,
+): Set<string> {
+  const skipped = new Set<string>()
+  for (const link of graph.links) {
+    if (link.from_node !== switchNodeId) continue
+    if (link.from_slot === matchedSlot) continue
+    for (const id of collectBranchNodes(graph, link.to_node, mergeNodeIds)) {
+      skipped.add(id)
+    }
+  }
+  return skipped
+}
+
 export function topologicalSort(graph: Graph): string[] {
   const visited = new Set<string>()
   const result: string[] = []
@@ -103,6 +123,9 @@ export function injectPipelineInputs(
       }
       if (fallback !== undefined && fallback !== null) {
         text = text.replace(/\{brief\}/g, String(fallback))
+        text = text.replace(/\{input\}/g, String(fallback))
+        text = text.replace(/\{query\}/g, String(fallback))
+        text = text.replace(/\{topic\}/g, String(fallback))
       }
       node.params.prompt_text = text
       node.params.content = text
@@ -238,7 +261,7 @@ async function runForwardPass(
   skip: Set<string>,
   mergeNodeIds: Set<string>,
   attempt: number,
-  hooks?: Pick<ExecuteGraphOptions, 'onNodeStart' | 'onNodeDone'>,
+  hooks?: Pick<ExecuteGraphOptions, 'onNodeStart' | 'onNodeDone' | 'onNodeSkipped'>,
 ): Promise<Set<string>> {
   const skippedNodes = new Set<string>()
   const forLoopBodyNodes = new Set<string>()
@@ -257,6 +280,8 @@ async function runForwardPass(
       if (!allResults.has(nodeId)) {
         allResults.set(nodeId, { outputs: { skipped: true }, duration_ms: 0 })
       }
+      const reason = skip.has(node.class_type) ? 'class_skip' : skippedNodes.has(nodeId) ? 'branch_skip' : 'loop_body'
+      hooks?.onNodeSkipped?.({ nodeId, classType: node.class_type, reason })
       continue
     }
 
@@ -280,8 +305,11 @@ async function runForwardPass(
     }
 
     hooks?.onNodeStart?.({ nodeId, classType: node.class_type, attempt })
+    const t0 = Date.now()
     const result = await executeNode(node, ctx)
-    hooks?.onNodeDone?.({ nodeId, classType: node.class_type, result, attempt })
+    const duration_ms = Date.now() - t0
+    result.duration_ms = result.duration_ms || duration_ms
+    hooks?.onNodeDone?.({ nodeId, classType: node.class_type, result, attempt, duration_ms: result.duration_ms })
     allResults.set(nodeId, result)
     ctx.runTrace?.node_traces.push({
       node_id: nodeId,
@@ -300,6 +328,17 @@ async function runForwardPass(
       )
       for (const id of branch) skippedNodes.add(id)
     }
+
+    if (node.class_type === 'Switch') {
+      const matched = Number(result.outputs.matched_slot ?? result.outputs.active_branch ?? 0)
+      const branch = markInactiveSwitchBranches(
+        graph,
+        nodeId,
+        matched,
+        mergeNodeIds,
+      )
+      for (const id of branch) skippedNodes.add(id)
+    }
   }
   return skippedNodes
 }
@@ -308,6 +347,11 @@ export async function executeGraph(
   graph: Graph,
   opts: ExecuteGraphOptions = {}
 ): Promise<ExecuteGraphResult> {
+  // Dispatch: state machine mode if graph has stateMachine config
+  if (graph.stateMachine) {
+    return executeStateMachine(graph, graph.stateMachine, opts)
+  }
+
   const skip = opts.skipClassTypes ?? new Set(['NoteCard'])
   const allResults = new Map<string, ExecutionResult>()
 
@@ -372,6 +416,7 @@ export async function executeGraph(
     await runForwardPass(graph, ctx, allResults, skip, mergeNodeIds, attempt, {
       onNodeStart: opts.onNodeStart,
       onNodeDone: opts.onNodeDone,
+      onNodeSkipped: opts.onNodeSkipped,
     })
     if (backLinks.size === 0) break
     if (graphPassed(allResults, graph) || graphExhausted(allResults, graph)) break

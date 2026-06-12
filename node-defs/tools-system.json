@@ -257,24 +257,42 @@
       {
         "name": "messages",
         "type": "object",
-        "description": "上下文窗口 · 输入「messages」（类型 object）"
+        "description": "对话历史消息数组。每轮循环累积 assistant + tool_result。"
       },
       {
         "name": "new_message",
         "type": "string",
-        "description": "上下文窗口 · 输入「new_message」（类型 string）"
+        "description": "本轮新消息（用户输入或工具结果），追加到 messages 末尾。"
+      },
+      {
+        "name": "max_context",
+        "type": "number",
+        "optional": true,
+        "description": "模型最大上下文窗口（token 数）。来自 LLM 节点的 max_context 输出。优先于 params.max_tokens。"
+      },
+      {
+        "name": "tool_feedback",
+        "type": "object",
+        "optional": true,
+        "description": "AgenticToolCall 回传的 updated_messages。接收此输入时表示处于 ReAct 循环中，优先使用此消息历史。"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [
       {
         "name": "context",
         "type": "object",
-        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+        "description": "处理后的消息数组，可直接作为 LLM prompt 使用。"
       },
       {
         "name": "compressed",
         "type": "boolean",
-        "description": "上下文窗口 · 输出「compressed」（类型 boolean）"
+        "description": "本次是否触发了 auto-compact 压缩。"
       }
     ],
     "params": {
@@ -363,12 +381,20 @@
       {
         "name": "key",
         "type": "string",
-        "description": "持久记忆 · 输入「key」（类型 string）"
+        "optional": true,
+        "description": "记忆块 key。可由连线传入或在 params 中静态指定。"
       },
       {
         "name": "content",
         "type": "string",
-        "description": "汇聚到终点的交付内容（任意类型）。"
+        "optional": true,
+        "description": "写入内容（write/append 时必填）。read 时可空。"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [
@@ -517,6 +543,12 @@
         "name": "query",
         "type": "string",
         "description": "会话搜索 · 输入「query」（类型 string）"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [
@@ -671,6 +703,12 @@
         "name": "message",
         "type": "string",
         "description": "通知推送 · 输入「message」（类型 string）"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [

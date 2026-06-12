@@ -19,7 +19,7 @@ else ok(`node-defs v2: ${idx.files.length} files`)
 
 let nodeCount = 0
 for (const f of idx.files) {
-  const arr = JSON.parse(fs.readFileSync(path.join(root, 'node-defs', f), 'utf8'))
+  const arr = JSON.parse(fs.readFileSync(path.join(root, 'PolarUI', 'node-defs', f), 'utf8'))
   nodeCount += arr.length
 }
 if (nodeCount < 120) fail(`node count ${nodeCount} < 120`)

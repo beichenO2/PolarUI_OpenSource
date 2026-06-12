@@ -1,29 +1,26 @@
 ---
 name: polarui-workflow
 description: >-
-  PolarUI 工作流 JSON（WF / LG）手写创建与维护规范。
+  PolarUI 工作流 JSON（WF）手写创建与维护规范。
   触发：新建工作流、改 workflow JSON、registry 注册、compile-check、RetryLoop 编排。
 ---
 
 # PolarUI 工作流编写与维护（SSOT）
 
-> 适用范围：`PolarUI/workflows/*.json`、`* .lg.json` 及 `workflows/registry.json` 注册条目。  
+> 适用范围：`PolarUI/workflows/*.json` 及 `workflows/registry.json` 注册条目。  
 > 关联：`PolarUI/.cursor/skills/polarui-component/SKILL.md`（缺节点先建组件）、`PolarUI/.cursor/skills/polarui-planner/SKILL.md`（LLM 自动生成 WF）、`任务书/Done/260523_整理归档/260523/00_PolarUI_口径与设计整合.md`。
 
 **与 Planner 的边界**：本 Skill 管**手写 / 维护** workflow JSON + registry + 编译门；Planner 管 **LLM 自动生成**逻辑链。Planner 产出仍须按本 Skill 验收。
 
 ---
 
-## 0. 模式分流（硬约束）
+## 0. 执行模式
 
-| 模式 | 文件 | 执行引擎 | 禁止 |
-|------|------|----------|------|
-| **WF** | `*.json`（无 `.lg` 后缀） | `executeGraph`，拓扑 **frozen**（可含回边） | 写 LG 专属 conditional 路由语义 |
-| **LG** | `*.lg.json` | `executeLGSpec` step loop | 当 WF 写 Switch/Condition 确定性路由 |
+| 模式 | 文件 | 执行引擎 |
+|------|------|----------|
+| **WF** | `*.json` | `executeGraph`，拓扑 DAG（可含回边） |
 
-- PolarUI 左栏 **WF 与 LG 共用同一套节点 palette**；切换模式 **清空画布**，禁止混写。
-- JSON 根可设 `"_library": "LG"`（LG 文件）；WF 默认不写或写 `"WF"`。
-- registry 条目须含 `"library": "WF"` 或 `"LG"`，与文件后缀 / `_library` 一致。
+- registry 条目含 `"library": "WF"`。
 
 ---
 
@@ -102,7 +99,7 @@ PromptInput(用户需求 + expected_output + purpose)
 
 ## 4. 工作流交付清单
 
-1. **JSON 文件** — `PolarUI/workflows/<kebab-name>.json` 或 `<name>.lg.json`
+1. **JSON 文件** — `PolarUI/workflows/<kebab-name>.json`
 2. **registry 条目** — `PolarUI/workflows/registry.json`（按 `category` + 首字母排序插入）  
    必填字段示例：
 
@@ -143,29 +140,18 @@ PromptInput(用户需求 + expected_output + purpose)
 
 ---
 
-## 6. LG 额外规则（仅 `*.lg.json`）
-
-- 执行期 **state + 路由** 可变；Spec 骨架 + Run **materialized_graph**
-- 结构进化槽位：**StemCell**（LG）vs **PetriDish**（WF 培养皿改 slave 图）
-- **Pluripotent** 分化：`LG_Pluripotent` → 运行期长出具体节点
-- 稳定 trace 可 **export → WF frozen**（`LGRunExportWF`）
-- 详设：`任务书/Done/260523_整理归档/260523/08_LG_Spec与Run双JSON.md`
-- 参考：`workflows/hermes.lg.json`、`workflows/polarclaw-ide.lg.json`
-
----
-
-## 7. 常见 category 与示例
+## 6. 常见 category 与示例
 
 | category | 用途 | 示例文件 |
 |----------|------|----------|
 | `mind-audit` | 心智审计标准 WF | `01-rag-report.json` … `10-agentic-chain-debug.json` |
 | `ssot` | 生态 SSoT 操作 | `ssot-up-to-date.json` |
-| `polarclaw` | PolarClaw 预制 LG | `polarclaw-ide.lg.json` |
+| `polarclaw` | PolarClaw 预制工作流 | `polarclaw-ide.json` |
 | `test` | smoke / 回归 | `test-retry-loop-backedge.json` |
 
 ---
 
-## 8. 验收（自查）
+## 7. 验收（自查）
 
 - [ ] `node cli/compile-check.mjs <file>` → **0 errors**
 - [ ] `registry.json` 的 `file` / `library` / `nodeCount` 与实际一致
@@ -176,7 +162,7 @@ PromptInput(用户需求 + expected_output + purpose)
 
 ---
 
-## 9. 参考实现
+## 8. 参考实现
 
 - 编译门：`PolarUI/cli/compile-check.mjs`、`cli/wire-integrity-check.mjs`
 - 分支检查：`PolarUI/src/engine/routing-branch-check.ts`

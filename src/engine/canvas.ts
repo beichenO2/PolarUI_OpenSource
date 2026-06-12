@@ -44,12 +44,9 @@ import { routeAllLinks, routeSingleDrag, offsetParallelSegments } from './wire-r
 import { detectCrossings, type CrossingPoint } from './wire-crossings'
 import type { ExecutionState } from './types'
 import { outputNodeHasResult } from './output-result'
-import {
-  isStemCellClass,
-  lgSpecEdgeKind,
-  isLgMaterializedVirtualLink,
-  type MaterializedLink,
-} from './lg-canvas-utils'
+function isStemCellClass(classType: string): boolean {
+  return classType === 'StemCell' || classType === 'PluripotentCell'
+}
 import { buildCanvasRoutingLinks } from './wire-routing-links'
 import { linkHoverAlpha } from './link-hover'
 import {
@@ -120,20 +117,18 @@ export class GraphCanvas {
   private crossingCache: CrossingPoint[] = []
   private routeValid = false
   private executionResults: ExecutionState['results']
+  private nodeStates: ExecutionState['node_states']
   private clickProbe: { nodeId: string; sx: number; sy: number } | null = null
   private dragMoved = false
   private noteCardResizing: { nodeId: string; startHeight: number; startMouseY: number } | null = null
   /** §2 260531：悬停节点 id，关联边高亮 */
   private hoverNodeId: string | null = null
-  /** LG Run 物化 overlay（执行中 / 回放） */
-  private lgMaterializedLinks: MaterializedLink[] = []
-  private lgReplayStep: number | null = null
-  private lgDifferentiatedNodes = new Set<string>()
 
   onNodeSelected?: (nodeId: string | null) => void
   onLinkSelected?: (linkId: string | null) => void
   onWorkflowChanged?: () => void
   onOutputPreview?: (nodeId: string) => void
+  onNodeInspect?: (nodeId: string, outputs: Record<string, unknown>) => void
 
   private onKeyDownBound = (e: KeyboardEvent) => this.onKeyDown(e)
   private onWheelBound = (e: WheelEvent) => this.onWheel(e)
@@ -163,10 +158,7 @@ export class GraphCanvas {
   }
 
   private rebuildLinkColors(): void {
-    const links = buildCanvasRoutingLinks(this.graph, {
-      materializedLinks: this.lgMaterializedLinks,
-      replayStep: this.lgReplayStep,
-    })
+    const links = buildCanvasRoutingLinks(this.graph)
     this.linkColorMaps = buildLinkColorMaps(
       links,
       this.graph.nodes,
@@ -206,10 +198,7 @@ export class GraphCanvas {
   }
 
   private recomputeRouting(): void {
-    const links = buildCanvasRoutingLinks(this.graph, {
-      materializedLinks: this.lgMaterializedLinks,
-      replayStep: this.lgReplayStep,
-    })
+    const links = buildCanvasRoutingLinks(this.graph)
     const backLinks = this.getBackLinks()
     const paths = routeAllLinks(this.graph.nodes, links, backLinks)
 
@@ -270,32 +259,17 @@ export class GraphCanvas {
     this.runningNode = nodeId
   }
 
-  /** LG Run 回放高亮节点（拖动 slider 时） */
-  private lgReplayHighlightNode: string | null = null
-
-  /** LG 执行步进 / Run 回放（08 §3.4 onLGStep） */
-  setLGRunOverlay(opts: {
-    materializedLinks?: MaterializedLink[]
-    replayStep?: number | null
-    differentiatedNodeIds?: string[]
-    replayHighlightNodeId?: string | null
-  }): void {
-    this.lgMaterializedLinks = opts.materializedLinks ?? []
-    this.lgReplayStep = opts.replayStep ?? null
-    this.lgDifferentiatedNodes = new Set(opts.differentiatedNodeIds ?? [])
-    this.lgReplayHighlightNode = opts.replayHighlightNodeId ?? null
-  }
-
-  clearLGRunOverlay(): void {
-    this.lgMaterializedLinks = []
-    this.lgReplayStep = null
-    this.lgDifferentiatedNodes.clear()
-    this.lgReplayHighlightNode = null
-  }
-
   setExecutionResults(results: ExecutionState['results']): void {
     this.executionResults = results
     this.rebuildLinkColors()
+  }
+
+  setNodeStates(states: ExecutionState['node_states']): void {
+    this.nodeStates = states
+    if (states) {
+      const running = Object.entries(states).find(([, s]) => s.status === 'running')
+      this.runningNode = running ? running[0] : null
+    }
   }
 
   getSelectedNode(): string | null {
@@ -498,10 +472,7 @@ export class GraphCanvas {
   }
 
   private getLinkAt(sx: number, sy: number): Link | null {
-    const links = buildCanvasRoutingLinks(this.graph, {
-      materializedLinks: this.lgMaterializedLinks,
-      replayStep: this.lgReplayStep,
-    })
+    const links = buildCanvasRoutingLinks(this.graph)
     const threshold = 8
     for (let i = links.length - 1; i >= 0; i--) {
       const link = links[i]
@@ -734,6 +705,13 @@ export class GraphCanvas {
         this.onWorkflowChanged?.()
         return
       }
+      const ns = this.nodeStates?.[hit.id]
+      const r = this.executionResults?.[hit.id]
+      if ((ns?.status === 'completed' || r) && this.onNodeInspect) {
+        const outputs = r?.outputs ?? (typeof r === 'object' ? r : {})
+        this.onNodeInspect(hit.id, outputs as Record<string, unknown>)
+        return
+      }
       const def = registry.get(hit.class_type)
       if (def?.expandable === true || def?.params?.expandable?.default === true) {
         this.onExpandNode?.(hit.id, hit.class_type)
@@ -753,6 +731,38 @@ export class GraphCanvas {
     this.drawWireSlotLabels()
     this.drawNodes()
     if (this.linkDrag) this.drawLinkDrag()
+    this.drawExecutionProgress(w, h)
+  }
+
+  private drawExecutionProgress(w: number, h: number): void {
+    if (!this.nodeStates) return
+    const states = Object.values(this.nodeStates)
+    if (states.length === 0) return
+    const total = this.graph.nodes.filter(n => n.class_type !== 'NoteCard').length
+    const completed = states.filter(s => s.status === 'completed').length
+    const running = states.filter(s => s.status === 'running').length
+    if (completed === 0 && running === 0) return
+
+    const ctx = this.ctx
+    const barH = 4
+    const barY = h - barH - 8
+    const barW = Math.min(200, w * 0.3)
+    const barX = w - barW - 16
+
+    ctx.save()
+    ctx.fillStyle = '#e2e8f0'
+    ctx.fillRect(barX, barY, barW, barH)
+    const progress = total > 0 ? completed / total : 0
+    ctx.fillStyle = running > 0 ? COLORS.running : '#16a34a'
+    ctx.fillRect(barX, barY, barW * progress, barH)
+
+    ctx.font = '11px -apple-system, sans-serif'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'bottom'
+    ctx.fillStyle = COLORS.textMuted
+    const label = running > 0 ? `${completed}/${total} nodes` : `Done (${completed}/${total})`
+    ctx.fillText(label, barX + barW, barY - 2)
+    ctx.restore()
   }
 
   private drawGrid(w: number, h: number): void {
@@ -807,35 +817,62 @@ export class GraphCanvas {
     const sh = node.height * this.scale
     const isSelected = node.id === this.selectedNode
     const isRunning = node.id === this.runningNode
-    const isReplayHighlight = node.id === this.lgReplayHighlightNode && !isRunning
+    const nodeState = this.nodeStates?.[node.id]
+    const isSkipped = nodeState?.status === 'skipped'
+    const isCompleted = nodeState?.status === 'completed'
+    const isError = nodeState?.status === 'error'
+    const isReplayHighlight = false
     const isStemCell = isStemCellClass(node.class_type)
-    const isDifferentiated = this.lgDifferentiatedNodes.has(node.id)
+    const isDifferentiated = false
 
     ctx.save()
+
+    if (isSkipped) ctx.globalAlpha = 0.4
 
     // Body background (no shadow to avoid ghosting)
     ctx.fillStyle = isOutputEnd
       ? (hasOutputResult ? '#dcfce7' : '#f0fdf4')
-      : isStemCell
-        ? (isDifferentiated ? '#f3e8ff' : '#faf5ff')
-        : (isSelected ? COLORS.nodeSelected : COLORS.node)
+      : isSkipped
+        ? '#f1f5f9'
+        : isError
+          ? '#fef2f2'
+          : isCompleted
+            ? '#f0fdf4'
+            : isStemCell
+              ? (isDifferentiated ? '#f3e8ff' : '#faf5ff')
+              : (isSelected ? COLORS.nodeSelected : COLORS.node)
     const radius = 8 * this.scale
     this.roundRect(sp.x, sp.y, sw, sh, radius)
     ctx.fill()
 
     // Selection/running/replay glow: outer stroke ring
-    if (isSelected || isRunning || isReplayHighlight) {
-      const glowColor = isRunning ? COLORS.running : isReplayHighlight ? '#f59e0b' : COLORS.borderSelected
+    if (isSelected || isRunning || isReplayHighlight || isError || isCompleted) {
+      const glowColor = isRunning ? COLORS.running : isError ? COLORS.error : isCompleted ? '#16a34a' : isReplayHighlight ? '#f59e0b' : COLORS.borderSelected
       ctx.save()
-      ctx.strokeStyle = glowColor
-      ctx.lineWidth = 3 * this.scale
-      ctx.globalAlpha = 0.6
-      this.roundRect(sp.x - 2 * this.scale, sp.y - 2 * this.scale, sw + 4 * this.scale, sh + 4 * this.scale, radius + 2 * this.scale)
-      ctx.stroke()
-      ctx.globalAlpha = 0.25
-      ctx.lineWidth = 6 * this.scale
-      this.roundRect(sp.x - 4 * this.scale, sp.y - 4 * this.scale, sw + 8 * this.scale, sh + 8 * this.scale, radius + 4 * this.scale)
-      ctx.stroke()
+      if (isRunning) {
+        const pulse = 0.4 + 0.4 * Math.sin(Date.now() / 400)
+        ctx.strokeStyle = glowColor
+        ctx.lineWidth = 3 * this.scale
+        ctx.globalAlpha = pulse
+        this.roundRect(sp.x - 2 * this.scale, sp.y - 2 * this.scale, sw + 4 * this.scale, sh + 4 * this.scale, radius + 2 * this.scale)
+        ctx.stroke()
+        ctx.globalAlpha = pulse * 0.4
+        ctx.lineWidth = 8 * this.scale
+        this.roundRect(sp.x - 5 * this.scale, sp.y - 5 * this.scale, sw + 10 * this.scale, sh + 10 * this.scale, radius + 5 * this.scale)
+        ctx.stroke()
+      } else {
+        ctx.strokeStyle = glowColor
+        ctx.lineWidth = isCompleted ? 2 * this.scale : 3 * this.scale
+        ctx.globalAlpha = isCompleted ? 0.8 : 0.6
+        this.roundRect(sp.x - 2 * this.scale, sp.y - 2 * this.scale, sw + 4 * this.scale, sh + 4 * this.scale, radius + 2 * this.scale)
+        ctx.stroke()
+        if (!isCompleted) {
+          ctx.globalAlpha = 0.25
+          ctx.lineWidth = 6 * this.scale
+          this.roundRect(sp.x - 4 * this.scale, sp.y - 4 * this.scale, sw + 8 * this.scale, sh + 8 * this.scale, radius + 4 * this.scale)
+          ctx.stroke()
+        }
+      }
       ctx.restore()
     }
 
@@ -980,25 +1017,30 @@ export class GraphCanvas {
     ctx.restore()
   }
 
-  /** Dify 式：标题行右侧运行状态（非变量名） */
   private drawComponentRunBadge(sp: Vec2, sw: number, headerH: number, componentId: string): void {
+    const ns = this.nodeStates?.[componentId]
     const r = this.executionResults?.[componentId]
-    if (!r && this.runningNode !== componentId) return
+    if (!ns && !r && this.runningNode !== componentId) return
     const ctx = this.ctx
     const x = sp.x + sw - 10 * this.scale
     const y = sp.y + headerH / 2
     ctx.font = `bold ${18 * this.scale}px "SimSun", "宋体", "Songti SC", sans-serif`
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    if (this.runningNode === componentId) {
+    if (ns?.status === 'running' || this.runningNode === componentId) {
       ctx.fillStyle = COLORS.running
       ctx.fillText('…', x, y)
-    } else if (r?.error) {
+    } else if (ns?.status === 'error' || r?.error) {
       ctx.fillStyle = COLORS.error
       ctx.fillText('✕', x, y)
-    } else if (r) {
+    } else if (ns?.status === 'skipped') {
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillText('⊘', x, y)
+    } else if (ns?.status === 'completed' || r) {
       ctx.fillStyle = '#16a34a'
-      ctx.fillText('✓', x, y)
+      const dur = ns?.duration_ms ?? r?.duration_ms
+      const badge = dur && dur > 100 ? `✓ ${(dur / 1000).toFixed(1)}s` : '✓'
+      ctx.fillText(badge, x, y)
     }
     ctx.textAlign = 'left'
   }
@@ -1098,14 +1140,12 @@ export class GraphCanvas {
   private drawLinks(): void {
     this.rebuildLinkColors()
     const backLinks = this.getBackLinks()
-    const links = buildCanvasRoutingLinks(this.graph, {
-      materializedLinks: this.lgMaterializedLinks,
-      replayStep: this.lgReplayStep,
-    })
+    const links = buildCanvasRoutingLinks(this.graph)
     for (const link of links) {
       this.drawLink(link, backLinks)
     }
   }
+
 
   private drawLink(
     link: Link,
@@ -1132,33 +1172,25 @@ export class GraphCanvas {
     const isLinkSelected = link.id === this.selectedLink
     const isActive = this.runningNode === link.from_node || this.runningNode === link.to_node
     const isBackward = isBackwardLink(link, this.graph.nodes, backLinks)
-    const lgMat = isLgMaterializedVirtualLink(link.id)
-    const lgSpecKind = this.graph.library === 'LG'
-      ? lgSpecEdgeKind(link.id, this.graph.lgEdges)
-      : null
-    const isLgConditional = lgSpecKind === 'conditional'
 
     const graphPts = this.getRoutedPath(link)
     const screenPts = graphPts.map(wp => this.graphToScreen(wp.x, wp.y))
 
-    const dashed = isBackward || isLgConditional
+    const dashed = isBackward
     const strokeColor = isActive
       ? COLORS.linkActive
-      : lgMat
-        ? '#16a34a'
-        : isLgConditional
-          ? '#a78bfa'
-          : isBackward
+      : isBackward
             ? linkBackwardColor(link.id, this.linkColorMaps)
             : linkForwardColor(link.id, this.linkColorMaps)
     const hovered = this.hoverNodeId != null
       && (link.from_node === this.hoverNodeId || link.to_node === this.hoverNodeId)
+    const backLinkExtraWidth = isBackward ? 0.8 : 0
     const baseWidth =
-      (lgMat ? 3 : isActive ? 2.5 : hovered ? DEFAULT_LINK_LINE_WIDTH + 0.75 : DEFAULT_LINK_LINE_WIDTH)
+      (isActive ? 2.5 : hovered ? DEFAULT_LINK_LINE_WIDTH + 0.75 : DEFAULT_LINK_LINE_WIDTH + backLinkExtraWidth)
       * this.scale
 
     if (isLinkSelected && screenPts.length >= 2) this.drawLinkHighlight(screenPts, baseWidth + 4)
-    const baseAlpha = isActive ? 1 : lgMat ? 0.9 : isLgConditional ? 0.55 : 0.95
+    const baseAlpha = isActive ? 1 : 0.95
     ctx.strokeStyle = hovered && !isActive ? COLORS.linkActive : strokeColor
     ctx.lineWidth = baseWidth
     ctx.lineCap = 'butt'
@@ -1183,10 +1215,7 @@ export class GraphCanvas {
     const normalPx = 8 * this.scale
     const font = `bold ${fontPx}px "SimSun", "宋体", "Songti SC", sans-serif`
 
-    const links = buildCanvasRoutingLinks(this.graph, {
-      materializedLinks: this.lgMaterializedLinks,
-      replayStep: this.lgReplayStep,
-    })
+    const links = buildCanvasRoutingLinks(this.graph)
 
     const placements: Array<{
       linkId: string

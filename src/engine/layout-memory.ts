@@ -33,7 +33,7 @@ export interface LastSession {
   viewMode: 'workflow' | 'ssot' | 'health'
   registryId?: string
   ssotProject?: string
-  libraryMode?: 'WF' | 'LG'
+  libraryMode?: 'WF'
 }
 
 export function layoutScopeKey(scope: LayoutScope): string {

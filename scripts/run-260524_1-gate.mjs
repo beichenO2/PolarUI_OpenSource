@@ -8,7 +8,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const steps = [
   ['vault-probe', 'npx', ['tsx', 'scripts/run-polarprivate-vault-probe.mjs']],
   ['seed-compile-wf', 'node', ['cli/compile-check.mjs', 'workflows/mvp-seed-wf.json']],
-  ['seed-compile-lg', 'node', ['cli/compile-check.mjs', 'workflows/mvp-seed-lg.lg.json']],
   ['seed-prompt', 'npx', ['tsx', 'scripts/run-seed-prompt-check.mjs']],
   ['seed-smoke', 'npx', ['tsx', 'scripts/run-seed-smoke.mjs']],
   ['mvp-seed-live', 'npx', ['tsx', 'scripts/run-mvp-seed-live-smoke.mjs']],

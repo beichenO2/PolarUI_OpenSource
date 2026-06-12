@@ -1,0 +1,7 @@
+## 蒸馏经验（PromptEvolve）
+## 蒸馏经验（PromptEvolve）
+- trigger: success
+- context: {"capture_context":{"capture_id":"lc-mqadjxcl","ts":"2026-06-12T03:36:17.301Z","decision":null,"result":null,"validation_report":null}}
+
+## 近期 Run（History）
+[{"run_id":"smoke_1780297936665","workflow_id":"history-smoke","started_at":"2026-06-01T07:12:16.665Z","finished_at":"2026-06-01T07:12:16.666Z","status":"completed","trigger":"cli_smoke","node_traces":[{"node_id":"1","class_type":"StaticData","library":"WF","duration_ms":0}],"loop_traces":[],"usage_traces":[],"differentiation_traces":[]},{"run_id":"smoke_1780296096272","workflow_id":"history-smoke","started_at":"2026-06-01T06:41:36.272Z","finished_at":"2026-06-01T06:41:36.273Z","status":"completed","trigger":"cli_smoke","node_traces":[{"node_id":"1","class_type":"StaticData","library":"WF","duration_ms":0}],"loop_traces":[],"usage_traces":[],"differentiation_traces":[]},{"run_id":"smoke_1780219069917","workflow_id":"history-smoke","started_at":"2026-05-31T09:17:49.917Z","finished_at":"2026-05-31T09:17:49.917Z","status":"completed","trigger":"cli_smoke","node_traces":[{"node_id":"1","class_type":"StaticData","library":"WF","duration_ms":0}],"loop_traces":[],"usage_traces":[],"differentiation_traces":[]},{"run_id":"smoke_1780218840584","workflow_id":"history-smoke","started_at":"2026-05-31T09:14:00.584Z","finished_at":"2026-05-31T09:14:00.585Z","status":"completed","trigger":"cli_smo

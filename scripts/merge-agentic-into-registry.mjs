@@ -9,10 +9,10 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '../..')
-const AGENTIC = join(ROOT, 'node-defs/registry-paradigms.json')
+const AGENTIC = join(ROOT, 'PolarUI', 'node-defs/registry-paradigms.json')
 const REGISTRY = join(ROOT, 'PolarUI/workflows/registry.json')
-const OUT_PARADIGMS = join(ROOT, 'node-defs/registry-paradigms.json')
-const INDEX = join(ROOT, 'node-defs/index.json')
+const OUT_PARADIGMS = join(ROOT, 'PolarUI', 'node-defs/registry-paradigms.json')
+const INDEX = join(ROOT, 'PolarUI', 'node-defs/index.json')
 
 const agentic = JSON.parse(readFileSync(AGENTIC, 'utf8'))
 const registry = JSON.parse(readFileSync(REGISTRY, 'utf8'))

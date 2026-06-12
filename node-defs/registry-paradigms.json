@@ -1168,6 +1168,12 @@
         "name": "task_description",
         "type": "string",
         "description": "技能捕获 · 输入「task_description」（类型 string）"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [

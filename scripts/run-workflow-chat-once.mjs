@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url'
 import { bootstrapHeadlessEngine } from './headless-bootstrap.ts'
 import { loadWorkflowJson } from '../src/engine/loader.ts'
 import { executeGraph } from '../src/engine/workflow-runner.ts'
-import { executeLGSpec } from '../src/engine/lg-runner.ts'
 import { emitStreamLine, toolEventFromNode } from './chat-stream-events.ts'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -64,53 +63,75 @@ const externalInputs = {
   user_id: userId,
   message,
   user_message: message,
+  input: message,
+}
+
+function makeHooks() {
+  return {
+    onStreamChunk: (nodeId, chunk) => {
+      if (streamMode) emitStreamLine({ type: 'text_delta', delta: chunk, node_id: nodeId })
+    },
+    onNodeStart: ({ nodeId, classType, attempt }) => {
+      if (streamMode) emitStreamLine({ type: 'step_start', node_id: nodeId, class_type: classType, attempt })
+    },
+    onNodeDone: ({ nodeId, classType, result }) => {
+      if (!streamMode) return
+      for (const ev of toolEventFromNode(classType, result.outputs ?? {}, result.error)) {
+        emitStreamLine({ ...ev, node_id: nodeId })
+      }
+      if (result.outputs && Object.keys(result.outputs).length > 0) {
+        const outputPreviews = {}
+        for (const [k, v] of Object.entries(result.outputs)) {
+          if (v === undefined) continue
+          const s = typeof v === 'string' ? v : (JSON.stringify(v) ?? '')
+          outputPreviews[k] = s.length > 150 ? s.slice(0, 147) + '...' : s
+        }
+        emitStreamLine({ type: 'node_output', node_id: nodeId, class_type: classType, outputs: outputPreviews })
+      }
+      for (const link of graph.links || []) {
+        if (link.from_node === nodeId) {
+          const toNode = graph.nodes?.find(n => n.id === link.to_node)
+          if (toNode) {
+            const outKeys = Object.keys(result.outputs || {})
+            const val = result.outputs?.[outKeys[link.from_slot] ?? outKeys[0]]
+            const preview = val == null ? '(null)' : (typeof val === 'string' ? val : JSON.stringify(val))
+            emitStreamLine({
+              type: 'data_flow',
+              from_node: nodeId,
+              to_node: link.to_node,
+              from_class: classType,
+              to_class: toNode.class_type,
+              slot: link.from_slot ?? 0,
+              preview: preview.length > 120 ? preview.slice(0, 117) + '...' : preview,
+            })
+          }
+        }
+      }
+      emitStreamLine({
+        type: 'step_done',
+        node_id: nodeId,
+        class_type: classType,
+        duration_ms: result.duration_ms,
+        ...(result.error ? { error: result.error } : {}),
+      })
+    },
+  }
 }
 
 try {
-  const result = graph.library === 'LG'
-    ? await executeLGSpec(graph, {
-        runContext,
-        externalInputs,
-        onStep: ({ nodeId, stepIndex, classType }) => {
-          if (!streamMode) return
-          emitStreamLine({
-            type: 'step_start',
-            node_id: nodeId,
-            class_type: classType ?? 'LGStep',
-            attempt: stepIndex + 1,
-          })
-        },
-      })
-    : await executeGraph(graph, {
-        runContext,
-        externalInputs,
-        onStreamChunk: (nodeId, chunk) => {
-          if (streamMode) emitStreamLine({ type: 'text_delta', delta: chunk, node_id: nodeId })
-        },
-        onNodeStart: ({ nodeId, classType, attempt }) => {
-          if (streamMode) emitStreamLine({ type: 'step_start', node_id: nodeId, class_type: classType, attempt })
-        },
-        onNodeDone: ({ nodeId, classType, result }) => {
-          if (!streamMode) return
-          for (const ev of toolEventFromNode(classType, result.outputs ?? {}, result.error)) {
-            emitStreamLine({ ...ev, node_id: nodeId })
-          }
-          emitStreamLine({
-            type: 'step_done',
-            node_id: nodeId,
-            class_type: classType,
-            duration_ms: result.duration_ms,
-            ...(result.error ? { error: result.error } : {}),
-          })
-        },
-      })
+  // State machine execution: single call to executeGraph handles all loops internally
+  const result = await executeGraph(graph, {
+    runContext,
+    externalInputs,
+    ...makeHooks(),
+  })
 
   const payload = {
     conversation_id: conversationId,
     workflow_id: workflowId,
     content: result.merged_output != null ? String(result.merged_output) : null,
-    unhealthy_nodes: result.unhealthy_nodes,
-    status: result.unhealthy_nodes.length ? 'error' : 'completed',
+    unhealthy_nodes: result.unhealthy_nodes ?? [],
+    status: (result.unhealthy_nodes ?? []).length ? 'error' : 'completed',
   }
 
   if (streamMode) {
@@ -126,7 +147,7 @@ try {
     console.log(JSON.stringify(payload))
   }
 
-  process.exit(result.unhealthy_nodes.length ? 1 : 0)
+  process.exit((result.unhealthy_nodes ?? []).length ? 1 : 0)
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err)
   if (streamMode) emitStreamLine({ type: 'error', message: msg })

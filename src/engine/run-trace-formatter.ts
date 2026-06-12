@@ -1,5 +1,5 @@
 /**
- * Execution / LG step → Claude Code CLI 风格 terminal 行
+ * Execution step → Claude Code CLI 风格 terminal 行
  * 对齐 PolarClaw/reference/open-design/.../claude-stream.ts 块类型语义
  */
 import type { ExecutionState } from './types'
@@ -81,13 +81,6 @@ export function formatExecutionToTerminal(execution: ExecutionState): TerminalLi
         const preview = JSON.stringify(result.outputs).slice(0, 200)
         if (preview.length > 2) lines.push(formatToolResult(preview))
       }
-    }
-  }
-
-  if (execution.lg_run?.steps?.length) {
-    for (const step of execution.lg_run.steps) {
-      lines.push(formatNodeStepStart(step.node_id, step.class_type))
-      if (step.routing) lines.push(formatTextDelta(`routing: ${step.routing}`))
     }
   }
 

@@ -52,7 +52,7 @@ const ZH_HINTS = {
 function loadNodes() {
   const byProject = {}
   const allNames = []
-  const dir = path.join(ROOT, 'node-defs')
+  const dir = path.join(ROOT, 'PolarUI', 'node-defs')
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'index.json')) {
     const arr = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
     byProject[f.replace('.json', '')] = arr

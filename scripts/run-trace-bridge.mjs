@@ -18,17 +18,10 @@ function writeTrace(envelope) {
   mkdirSync(dir, { recursive: true })
   const logPath = join(dir, 'trace.jsonl')
   writeFileSync(logPath, JSON.stringify(envelope) + '\n')
-  const result = {
+  return {
     log_path: `PolarUI/runs/${runId}/trace.jsonl`,
     abs_path: logPath,
   }
-  if (envelope.library === 'LG' || envelope.materialized_graph) {
-    const runJsonPath = join(dir, 'run.json')
-    writeFileSync(runJsonPath, JSON.stringify(envelope, null, 2) + '\n')
-    result.run_path = `PolarUI/runs/${runId}/run.json`
-    result.run_abs_path = runJsonPath
-  }
-  return result
 }
 
 function listRuns(limit = 10) {

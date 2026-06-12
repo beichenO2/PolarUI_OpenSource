@@ -1,4 +1,4 @@
-import type { NodeInstance, Link, Workflow, WorkflowLibrary } from './types'
+import type { NodeInstance, Link, Workflow, WorkflowLibrary, StateMachineConfig, ConditionalEdge } from './types'
 import { registry } from './registry'
 import { calcNodeHeight, NODE_DEFAULT_WIDTH, normalizeOutputTerminalSize, normalizeAllOutputTerminals } from './node-geometry'
 import { applyNoteCardLayout } from './note-card-layout'
@@ -16,10 +16,9 @@ export class Graph {
   links: Link[] = []
   createdAt: number
   updatedAt: number
-  /** WF（默认）或 LG Spec */
   library: WorkflowLibrary = 'WF'
-  lgEntry?: string
-  lgEdges?: Array<{ from: string; to: string; kind: string; when?: string; label?: string }>
+  /** State machine execution config (present when _execution === 'state_machine') */
+  stateMachine?: StateMachineConfig
 
   constructor(name = 'Untitled Workflow') {
     this.id = genId()
@@ -141,15 +140,6 @@ export class Graph {
       result[node.id] = { class_type: node.class_type, inputs }
     }
 
-    if (this.library === 'LG') {
-      return {
-        _library: 'LG',
-        _name: this.name,
-        _entry: this.lgEntry ?? '1',
-        _lg_edges: this.lgEdges ?? [],
-        ...result,
-      }
-    }
     return result
   }
 

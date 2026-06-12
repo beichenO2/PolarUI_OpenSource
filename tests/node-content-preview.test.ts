@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { buildNodeContentPreviewLines, maxContentPreviewLines } from '../src/engine/node-content-preview'
 import { registry } from '../src/engine/registry'
 import type { NodeDef, NodeInstance } from '../src/engine/types'
-import coreDefs from '../../node-defs/core.json'
+import coreDefs from '../node-defs/core.json'
 
 beforeAll(() => {
   for (const def of coreDefs as NodeDef[]) {

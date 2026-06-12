@@ -59,20 +59,6 @@
             💡 建议
             <span v-if="suggestionPending > 0" class="suggestion-badge" />
           </button>
-          <div v-if="libraryMode === 'LG' && lgReplayMax >= 0" class="lg-replay-bar" :title="lgReplayHelp">
-            <span class="lg-replay-label">Run 回放</span>
-            <input
-              type="range"
-              min="0"
-              :max="lgReplayMax"
-              v-model.number="lgReplayStep"
-              class="lg-replay-slider"
-            />
-            <span class="lg-replay-step">{{ lgReplayStep + 1 }}/{{ lgReplayMax + 1 }}</span>
-            <span v-if="lgReplayStepDetail" class="lg-replay-detail">
-              {{ lgReplayStepDetail }}
-            </span>
-          </div>
         </template>
         <template v-else>
           <button class="btn btn-uptodate" @click="handleUpToDate" :disabled="ssotUpdating">
@@ -816,44 +802,6 @@ const suggestionInboxOpen = ref(false)
 const suggestionPending = ref(pendingCount(loadSuggestions()))
 /** bump after dynamic model list refresh — palette param options react */
 const registryVersion = ref(0)
-const lgReplayStep = ref(0)
-const lgReplayMax = computed(() => {
-  const run = workflowStore.execution.lg_run
-  if (!run?.steps?.length) return -1
-  return Math.max(0, run.steps.length - 1)
-})
-
-const lgReplayHelp = '拖动滑块逐步查看 LG 实际走过的节点（橙框）与绿色 Run 轨迹边'
-
-const lgReplayStepDetail = computed(() => {
-  const run = workflowStore.execution.lg_run
-  if (!run?.steps?.length) return ''
-  const step = run.steps[lgReplayStep.value]
-  if (!step) return ''
-  const def = registry.get(step.class_type)
-  const name = def?.display_name ?? step.class_type
-  const route = step.routing ? ` → 分支「${step.routing}」` : ''
-  return `Step ${step.index + 1}: #${step.node_id} ${name}${route}`
-})
-
-function syncLgCanvasOverlay() {
-  const run = workflowStore.execution.lg_run
-  if (!run || libraryMode.value !== 'LG') {
-    graphCanvas?.clearLGRunOverlay()
-    subGraphCanvas?.clearLGRunOverlay()
-    return
-  }
-  const diffIds = run.differentiation_traces?.map(d => d.to_node) ?? []
-  const highlightId = run.steps[lgReplayStep.value]?.node_id ?? null
-  const overlay = {
-    materializedLinks: run.materialized_graph.links,
-    replayStep: lgReplayMax.value >= 0 ? lgReplayStep.value : null,
-    differentiatedNodeIds: diffIds,
-    replayHighlightNodeId: highlightId,
-  }
-  graphCanvas?.setLGRunOverlay(overlay)
-  subGraphCanvas?.setLGRunOverlay(overlay)
-}
 watch(
   () => suggestionInboxOpen.value,
   (open) => {
@@ -888,15 +836,8 @@ const registryWorkflowGroups = computed(() => {
     .sort((a, b) => a.category.localeCompare(b.category, 'zh'))
 })
 
-const LG_QUICK_REGISTRY: Record<'IDEAgent' | 'WebAgent' | 'FeishuRelay', string> = {
-  IDEAgent: 'pc-lg-ide',
-  WebAgent: 'pc-lg-web',
-  FeishuRelay: 'pc-lg-feishu',
-}
-
-const SEED_REGISTRY: Record<'WF' | 'LG', string> = {
+const SEED_REGISTRY: Record<'WF', string> = {
   WF: 'mvp-seed-wf',
-  LG: 'mvp-seed-lg',
 }
 
 async function quickLoadSeed() {
@@ -916,22 +857,6 @@ function onSuggestionApproved(_sug: EvolutionSuggestion) {
   suggestionPending.value = pendingCount(loadSuggestions())
 }
 
-async function quickStartAgentMode(classType: 'IDEAgent' | 'WebAgent' | 'FeishuRelay') {
-  workflowPanelMode.value = 'registry'
-  const targetId = LG_QUICK_REGISTRY[classType]
-  let wf = registryWorkflows.value.find(w => w.id === targetId)
-  if (!wf) {
-    const entries = await loadRegistry()
-    registryWorkflows.value = entries
-    wf = entries.find(w => w.id === targetId)
-  }
-  if (wf) {
-    await loadRegisteredWorkflow(wf)
-    viewMode.value = 'workflow'
-    return
-  }
-  alert(`未找到 LG 注册项 ${targetId}，请检查 workflows/registry.json`)
-}
 
 async function loadRegisteredWorkflow(wf: WorkflowEntry) {
   const json = await loadWorkflowFile(wf)
@@ -939,9 +864,9 @@ async function loadRegisteredWorkflow(wf: WorkflowEntry) {
     activeRegistryId.value = wf.id
     subgraphStack.value = []
     const newGraph = loadWorkflowJson(json)
-    newGraph.library = wf.library ?? newGraph.library ?? 'WF'
+    newGraph.library = 'WF'
     await setMainGraph(newGraph, { kind: 'registry', id: wf.id })
-    writeLastSession({ viewMode: 'workflow', registryId: wf.id, libraryMode: newGraph.library })
+    writeLastSession({ viewMode: 'workflow', registryId: wf.id, libraryMode: 'WF' })
   } else {
     alert(`无法加载: ${wf.file}`)
   }
@@ -1355,6 +1280,8 @@ function closeOutputPip() {
 function syncCanvasExecutionResults() {
   graphCanvas?.setExecutionResults(workflowStore.execution.results)
   subGraphCanvas?.setExecutionResults(workflowStore.execution.results)
+  graphCanvas?.setNodeStates(workflowStore.execution.node_states)
+  subGraphCanvas?.setNodeStates(workflowStore.execution.node_states)
 }
 
 const selectedNodeParams = computed((): Record<string, any> => {
@@ -1981,14 +1908,10 @@ watch(() => workflowStore.execution.results, () => {
   syncCanvasExecutionResults()
 }, { deep: true })
 
-watch(() => workflowStore.execution.lg_run, (run) => {
-  lgReplayStep.value = 0
-  syncLgCanvasOverlay()
+watch(() => workflowStore.execution.node_states, () => {
+  graphCanvas?.setNodeStates(workflowStore.execution.node_states)
+  subGraphCanvas?.setNodeStates(workflowStore.execution.node_states)
 }, { deep: true })
-
-watch(lgReplayStep, () => {
-  syncLgCanvasOverlay()
-})
 
 watch(viewMode, (mode, oldMode) => {
   if (mode !== oldMode) {

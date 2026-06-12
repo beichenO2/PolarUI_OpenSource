@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 批量试跑 benchmark 工作流 — 对齐 09 用户原话：组建成 WF 并 **试跑** 确认能用
- * compile-check + headless executeGraph / executeLGSpec + trace
+ * compile-check + headless executeGraph + trace
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -10,7 +10,6 @@ import { execSync } from 'node:child_process'
 import { bootstrapHeadlessEngine } from './headless-bootstrap.ts'
 import { loadWorkflowJson } from '../src/engine/loader.ts'
 import { executeGraph } from '../src/engine/workflow-runner.ts'
-import { executeLGSpec } from '../src/engine/lg-runner.ts'
 import { loadSuggestions } from '../src/engine/suggestion-store.ts'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -22,7 +21,6 @@ const BENCHMARKS = [
   { id: 'R2', file: 'benchmark-openclaw-proposal.json', trace: 'R2-openclaw-proposal.json' },
   { id: 'R3', file: 'benchmark-evoagentx-autobuild.json', trace: 'R3-evoagentx-autobuild.json' },
   { id: 'R4', file: 'benchmark-evoagentx-evolve-loop.json', trace: 'R4-evoagentx-evolve-loop.json' },
-  { id: 'R5', file: 'benchmark-evot-observe.lg.json', trace: 'R5-evot-observe.json', lg: true },
 ]
 
 /** headless inbox（R2 OpenClaw 用户说：提案进建议，禁止静默写盘） */
@@ -43,18 +41,6 @@ function ok(msg) { console.log('OK:', msg) }
 function fail(msg) { console.error('FAIL:', msg); failed++ }
 
 async function executeBenchmark(bench, wfPath) {
-  if (bench.lg) {
-    const graph = loadWorkflowJson(readFileSync(wfPath, 'utf8'))
-    const { steps, unhealthy_nodes, runTrace } = await executeLGSpec(graph, { agentId: 'benchmark-r5' })
-    if (unhealthy_nodes?.length) {
-      fail(`${bench.id} LG unhealthy: ${unhealthy_nodes.map(u => u.error).join('; ')}`)
-      return null
-    }
-    if ((steps?.length ?? 0) < 1) fail(`${bench.id} LG produced 0 steps`)
-    else ok(`${bench.id} executeLGSpec completed (${steps.length} steps)`)
-    return { mode: 'lg_execute', steps: steps.length, status: runTrace?.status }
-  }
-
   const graph = loadWorkflowJson(readFileSync(wfPath, 'utf8'))
   const { merged_output, unhealthy_nodes, runTrace, results } = await executeGraph(graph, { agentId: `benchmark-${bench.id}` })
   if (unhealthy_nodes.length) {
@@ -130,9 +116,7 @@ for (const bench of BENCHMARKS) {
     node_count: nodes.length,
     compile_check: 'passed',
     execute: execResult,
-    note: bench.lg
-      ? 'R5 LG observe stub — headless step loop'
-      : '09 用户原话：headless 试跑（StaticData 占位 Evolve* / Planner）',
+    note: '09 用户原话：headless 试跑（StaticData 占位 Evolve* / Planner）',
   }
 
   const tracePath = join(TRACE_DIR, bench.trace)

@@ -1,9 +1,0 @@
-{
-  "_name": "AutoOffice 报告管线",
-  "1": { "class_type": "StaticData", "inputs": {}, "params": { "value": "{data}", "type": "json" } },
-  "2": { "class_type": "TemplateList", "inputs": {} },
-  "3": { "class_type": "ContentRender", "inputs": { "data": ["1", 0], "template_id": ["2", 0] } },
-  "4": { "class_type": "DeAiFlavor", "inputs": { "text": ["3", 0] } },
-  "5": { "class_type": "QualityAnalyze", "inputs": { "text": ["4", 0] } },
-  "6": { "class_type": "Output", "inputs": { "content": ["5", 0] }, "params": { "format": "json" } }
-}

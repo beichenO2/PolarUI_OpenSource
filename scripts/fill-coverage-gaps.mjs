@@ -47,7 +47,7 @@ function classType(proj, name) {
 const newExecutors = []
 
 for (const { proj, uncovered } of GAPS) {
-  const fpath = path.join(ROOT, 'node-defs', FILE[proj])
+  const fpath = path.join(ROOT, 'PolarUI', 'node-defs', FILE[proj])
   const arr = JSON.parse(fs.readFileSync(fpath, 'utf8'))
   const existing = new Set(arr.map((n) => n.display_name))
   for (const name of uncovered) {

@@ -15,7 +15,7 @@ import { loadNodeDefs, validateWorkflowWiring } from './wire-integrity-check.mjs
 const ROOT = resolve(import.meta.dirname, '..')
 const ECOSYSTEM_ROOT = resolve(ROOT, '..')
 const WORKFLOWS_DIR = join(ROOT, 'workflows')
-const NODE_DEFS_DIR = join(ECOSYSTEM_ROOT, 'node-defs')
+const NODE_DEFS_DIR = join(ROOT, 'node-defs')
 
 let NODE_DEFS
 try {
@@ -217,7 +217,7 @@ function compileCheck(filePath, strict = false) {
     return from
   }
 
-  const agenticTypes = new Set(['AgenticUnit', 'AgentWorkflow', 'AgenticChain'])
+  const agenticTypes = new Set(['AgenticUnit', 'AgentWorkflow', 'AgenticChain', 'AgenticToolCall'])
   for (const id of nodeIds) {
     if (classOf(id) !== 'LLM') continue
     if (/b$/.test(id) && nodeIds.has(id.slice(0, -1))) continue

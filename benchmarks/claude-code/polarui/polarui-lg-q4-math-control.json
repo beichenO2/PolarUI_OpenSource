@@ -1,9 +1,0 @@
-{
-  "id": "q4-math-control",
-  "workflow_id": "claude-code-lg",
-  "elapsed_ms": 54501,
-  "content": "396",
-  "pass": true,
-  "unhealthy_nodes": [],
-  "status": "completed"
-}

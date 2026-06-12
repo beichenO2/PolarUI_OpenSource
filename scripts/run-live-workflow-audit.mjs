@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url'
 import { bootstrapHeadlessEngine } from './headless-bootstrap.ts'
 import { loadWorkflowJson } from '../src/engine/loader.ts'
 import { executeGraph } from '../src/engine/workflow-runner.ts'
-import { executeLGSpec } from '../src/engine/lg-runner.ts'
 import { isPrivPortalHealthy } from '../src/sdk/llm-proxy.ts'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -73,7 +72,7 @@ async function runOne(abs) {
     appendFileSync(TRACE, JSON.stringify({
       ts: new Date().toISOString(),
       workflow: wfKey,
-      library: rel.includes('.lg.json') ? 'LG' : 'WF',
+      library: 'WF',
       compile: 'PASS',
       live: 'SKIP',
       note: 'env dependency',
@@ -85,9 +84,7 @@ async function runOne(abs) {
 
   const graph = loadWorkflowJson(readFileSync(abs, 'utf8'))
   const ctrl = AbortSignal.timeout(TIMEOUT_MS)
-  const run = graph.library === 'LG'
-    ? executeLGSpec(graph, { agentId: 'live-audit' })
-    : executeGraph(graph, { agentId: 'live-audit' })
+  const run = executeGraph(graph, { agentId: 'live-audit' })
 
   let live = 'PASS'
   let note = ''
@@ -114,7 +111,7 @@ async function runOne(abs) {
   appendFileSync(TRACE, JSON.stringify({
     ts: new Date().toISOString(),
     workflow: wfKey,
-    library: rel.includes('.lg.json') ? 'LG' : 'WF',
+    library: 'WF',
     compile: 'PASS',
     live,
     note,

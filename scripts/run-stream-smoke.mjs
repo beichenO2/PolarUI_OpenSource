@@ -17,7 +17,7 @@ const fail = m => { console.error('FAIL:', m); failed++ }
 bootstrapHeadlessEngine()
 setLLMClient(null)
 
-const core = readFileSync(join(ROOT, '..', 'node-defs', 'core.json'), 'utf8')
+const core = readFileSync(join(ROOT, 'node-defs', 'core.json'), 'utf8')
 if (!/"stream"/.test(core)) fail('LLM node-def missing stream param')
 else ok('LLM node-def has stream param')
 

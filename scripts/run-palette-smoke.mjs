@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 左栏 palette smoke — 对齐 00 §6 + 06 用户定稿 + 10 用户说（WF/LG 分化槽）
+ * 左栏 palette smoke — 对齐 00 §6 + 06 用户定稿 + 10 用户说
  */
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -17,7 +17,6 @@ const fail = m => { console.error('FAIL:', m); failed++ }
 bootstrapHeadlessEngine()
 
 const wf = registry.getPaletteNodes('WF')
-const lg = registry.getPaletteNodes('LG')
 const has = (pal, ct) => pal.some(n => n.class_type === ct)
 const hasCat = (pal, cat) => pal.some(n => n.category === cat || n.category.startsWith(`${cat}/`))
 
@@ -37,20 +36,17 @@ for (const ct of ['LearningCapture', 'ExperienceCapture', 'PromptEvolve']) {
 if (!hasCat(wf, 'History')) fail('WF palette missing History category')
 else ok('WF palette: History')
 
-// 统一 palette（registry 不再按 WF|LG 过滤）：培养皿 + 干细胞均在左栏
-for (const pal of [wf, lg]) {
-  const tag = pal === wf ? 'WF' : 'LG'
-  if (!has(pal, 'PetriDish')) fail(`${tag} palette missing PetriDish`)
-  else ok(`${tag} PetriDish（子图进化）`)
-  if (!has(pal, 'StemCell')) fail(`${tag} palette missing StemCell`)
-  else ok(`${tag} StemCell（权柄入口 · 主图读写）`)
-}
+// 培养皿 + 干细胞均在左栏
+if (!has(wf, 'PetriDish')) fail('WF palette missing PetriDish')
+else ok('WF PetriDish（子图进化）')
+if (!has(wf, 'StemCell')) fail('WF palette missing StemCell')
+else ok('WF StemCell（权柄入口 · 主图读写）')
 
-// Internal/LG 运行时原语不在 palette
+// Internal 原语不在 palette
 for (const hidden of ['LG_Pluripotent', 'LG_Entry', 'LG_Differentiate']) {
-  if (has(wf, hidden) || has(lg, hidden)) fail(`${hidden} leaked to palette`)
+  if (has(wf, hidden)) fail(`${hidden} leaked to palette`)
 }
-ok('LG_* Internal 原语未进 palette')
+ok('Internal 原语未进 palette')
 
 // 左栏 palette：Tab 文案「组件」
 const app = readFileSync(join(ROOT, 'src/App.vue'), 'utf8')

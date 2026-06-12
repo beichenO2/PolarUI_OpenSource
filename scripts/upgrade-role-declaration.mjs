@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../node-defs/agentic.json')
+const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '../node-defs/agentic.json')
 const defs = JSON.parse(fs.readFileSync(file, 'utf8'))
 
 const structured = {

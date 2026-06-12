@@ -7,7 +7,7 @@ import {
   componentStatusFor,
 } from '../src/engine/properties-panel-helpers'
 import type { NodeDef } from '../src/engine/types'
-import coreDefs from '../../node-defs/core.json'
+import coreDefs from '../node-defs/core.json'
 
 beforeAll(() => {
   for (const def of coreDefs as NodeDef[]) {

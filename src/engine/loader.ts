@@ -1,12 +1,11 @@
 import { Graph } from './graph'
 import { registry } from './registry'
-import type { NodeInstance, Link, Workflow } from './types'
+import type { NodeInstance, Link, Workflow, ConditionalEdge, StateMachineConfig } from './types'
 import { normalizeGraphNodeDimensions } from './node-geometry'
 import { applyNoteCardLayoutAll } from './note-card-layout'
 import { applyAutoLayout, applyTopologicalLayout } from './auto-layout'
-import { isLgLayoutBackEdge } from './lg-canvas-utils'
 
-/** 检测反馈回边 link id（WF data-flow + LG _lg_edges 虚拟边） */
+/** 检测反馈回边 link id（WF data-flow） */
 export function computeBackLinks(graph: Graph): Set<string> {
   const cached = (graph as Graph & { _backLinks?: Set<string> })._backLinks
   if (cached?.size) return cached
@@ -38,14 +37,6 @@ export function computeBackLinks(graph: Graph): Set<string> {
   }
   for (const id of allIds) { if (color.get(id) === WHITE) dfs(id) }
 
-  if (graph.library === 'LG' && graph.lgEdges?.length) {
-    for (const edge of graph.lgEdges) {
-      if (isLgLayoutBackEdge(edge)) {
-        backLinkIds.add(`lg-spec:${edge.from}:${edge.to}:${edge.when ?? 'static'}`)
-      }
-    }
-  }
-
   ;(graph as Graph & { _backLinks?: Set<string> })._backLinks = backLinkIds
   return backLinkIds
 }
@@ -64,20 +55,25 @@ export function loadWorkflowJson(json: string): Graph {
   if (data.nodes && Array.isArray(data.nodes)) {
     graph = Graph.fromWorkflow(data as Workflow)
   } else {
-    graph = fromApiFormat(data, data._name || 'Imported Workflow', {
-      preserveNodeIds: data._library === 'LG',
-      lgEdges: data._library === 'LG' && Array.isArray(data._lg_edges)
-        ? data._lg_edges
-        : undefined,
-    })
+    graph = fromApiFormat(data, data._name || 'Imported Workflow')
   }
 
-  if (data._library === 'LG') {
-    graph.library = 'LG'
-    graph.lgEntry = String(data._entry ?? '1')
-    graph.lgEdges = Array.isArray(data._lg_edges) ? data._lg_edges : []
-  } else {
-    graph.library = 'WF'
+  graph.library = 'WF'
+
+  // Parse state machine config if present
+  if (data._execution === 'state_machine' && Array.isArray(data._edges)) {
+    const idMap = (graph as Graph & { _idMap?: Map<string, string> })._idMap
+    const edges: ConditionalEdge[] = (data._edges as Array<{ from: string; to: string; condition?: string }>).map(e => ({
+      from: idMap?.get(e.from) ?? e.from,
+      to: idMap?.get(e.to) ?? e.to,
+      condition: e.condition,
+    }))
+    const startRaw: string = data._start ?? Object.keys(data).find(k => !k.startsWith('_')) ?? ''
+    graph.stateMachine = {
+      start: idMap?.get(startRaw) ?? startRaw,
+      edges,
+      max_iterations: data._max_iterations ?? undefined,
+    }
   }
 
   normalizeGraphNodeDimensions(graph.nodes)
@@ -86,34 +82,8 @@ export function loadWorkflowJson(json: string): Graph {
   return graph
 }
 
-const COL_SPACING = 480
-const ROW_SPACING = 200
-
-interface LgEdgeLayoutSpec {
-  from: string
-  to: string
-  kind?: string
-  when?: string
-  label?: string
-}
-
-/** LG Spec：_lg_edges 参与拓扑排布（从左到右）；ReAct/回边不参与 forward level */
-function mergeLgEdgeForwardDeps(
-  forwardDeps: Map<string, string[]>,
-  backEdges: Set<string>,
-  lgEdges: LgEdgeLayoutSpec[] | undefined,
-): void {
-  if (!lgEdges?.length) return
-  for (const edge of lgEdges) {
-    if (isLgLayoutBackEdge(edge)) {
-      backEdges.add(`${edge.from}->${edge.to}`)
-      continue
-    }
-    if (!forwardDeps.has(edge.to)) forwardDeps.set(edge.to, [])
-    const deps = forwardDeps.get(edge.to)!
-    if (!deps.includes(edge.from)) deps.push(edge.from)
-  }
-}
+const COL_SPACING = 300
+const ROW_SPACING = 140
 
 /** 按 Dagre 自动布局恢复工作流图默认排布（不改动连线与节点） */
 export async function applyGraphAutoLayout(graph: Graph): Promise<void> {
@@ -168,9 +138,8 @@ function hasWireRefs(val: unknown): boolean {
 function fromApiFormat(
   apiData: Record<string, unknown>,
   name: string,
-  opts?: { preserveNodeIds?: boolean; lgEdges?: LgEdgeLayoutSpec[] },
 ): Graph {
-  const preserveNodeIds = opts?.preserveNodeIds === true
+  const preserveNodeIds = false
   const graph = new Graph(name)
 
   const nodeEntries: [string, { class_type: string; inputs: Record<string, unknown> }][] = []
@@ -193,14 +162,6 @@ function fromApiFormat(
     }
     forwardDeps.set(id, inputRefs)
   }
-
-  mergeLgEdgeForwardDeps(
-    forwardDeps,
-    backEdges,
-    opts?.lgEdges ?? (apiData._library === 'LG' && Array.isArray(apiData._lg_edges)
-      ? (apiData._lg_edges as LgEdgeLayoutSpec[])
-      : undefined),
-  )
 
   // Detect back edges via DFS to break cycles for topological ordering
   const WHITE = 0, GRAY = 1, BLACK = 2
@@ -253,15 +214,6 @@ function fromApiFormat(
     })
   }
 
-  const lgBackPairs = new Set<string>()
-  if (apiData._library === 'LG' && Array.isArray(apiData._lg_edges)) {
-    for (const edge of apiData._lg_edges as LgEdgeLayoutSpec[]) {
-      if (isLgLayoutBackEdge(edge)) {
-        lgBackPairs.add(`${edge.from}->${edge.to}`)
-      }
-    }
-  }
-
   const idMap = new Map<string, string>()
   const backLinkPairs = new Set<string>()
   const skippedTypes = new Set<string>()
@@ -307,10 +259,7 @@ function fromApiFormat(
         const fromNewId = idMap.get(val[0])
         const toNewId = idMap.get(origId)
         if (fromNewId && toNewId) {
-          const link = graph.addLink(fromNewId, val[1], toNewId, toSlot)
-          if (link && lgBackPairs.has(`${val[0]}->${origId}`)) {
-            backLinkPairs.add(link.id)
-          }
+          graph.addLink(fromNewId, val[1], toNewId, toSlot)
         }
         slotIdx++
       } else if (val && typeof val === 'object' && !Array.isArray(val)) {
@@ -323,10 +272,7 @@ function fromApiFormat(
           const fromNewId = idMap.get(first.refId)
           const toNewId = idMap.get(origId)
           if (fromNewId && toNewId) {
-            const link = graph.addLink(fromNewId, first.fromSlot, toNewId, toSlot)
-            if (link && lgBackPairs.has(`${first.refId}->${origId}`)) {
-              backLinkPairs.add(link.id)
-            }
+            graph.addLink(fromNewId, first.fromSlot, toNewId, toSlot)
           }
           slotIdx++
         }

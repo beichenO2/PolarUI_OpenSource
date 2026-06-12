@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url'
 import { loadNodeDefs, validateWorkflowWiring } from '../cli/wire-integrity-check.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const nodeDefsDir = path.join(root, 'node-defs')
+const nodeDefsDir = path.join(root, 'PolarUI', 'node-defs')
 const nodeDefs = loadNodeDefs(nodeDefsDir)
 const workflowsDir = path.join(root, 'PolarUI/workflows')
 const registryPath = path.join(workflowsDir, 'registry.json')
@@ -49,14 +49,9 @@ for (const def of withInternal) {
 
   if (!def.expandable) fail(`${def.class_type}: missing expandable: true`)
 
-  const isLgSpec = data._library === 'LG' || Array.isArray(data._lg_edges)
-  if (!isLgSpec) {
-    const wiringErrors = validateWorkflowWiring(data, nodeDefs)
-    for (const msg of wiringErrors) {
-      fail(`${def.internal_workflow}: ${msg}`)
-    }
-  } else {
-    ok(`${def.internal_workflow}: LG spec (skip WF wiring check)`)
+  const wiringErrors = validateWorkflowWiring(data, nodeDefs)
+  for (const msg of wiringErrors) {
+    fail(`${def.internal_workflow}: ${msg}`)
   }
 }
 

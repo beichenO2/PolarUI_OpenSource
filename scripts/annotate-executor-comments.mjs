@@ -11,7 +11,7 @@ const __dir = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dir, '../..')
 const EXECUTOR = join(__dir, '../src/engine/executor.ts')
 const PIPELINE = join(__dir, '../src/engine/pipeline-executor.ts')
-const NODE_DEFS = join(ROOT, 'node-defs')
+const NODE_DEFS = join(ROOT, 'PolarUI', 'node-defs')
 
 const BATCH2_DONE = new Set([
   'LLM', 'ToolCall', 'Condition', 'Switch', 'Validator', 'TextTransform', 'JsonParse',

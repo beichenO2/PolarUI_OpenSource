@@ -8,18 +8,18 @@ export interface SlotDef {
   optional?: boolean
 }
 
-export type WorkflowLibrary = 'WF' | 'LG'
+export type WorkflowLibrary = 'WF'
 
 export interface NodeDef {
   class_type: string
   category: string
   display_name: string
   description?: string
-  /** 不在左栏组件库展示（如 LG 运行时原语） */
+  /** 不在左栏组件库展示 */
   palette_hidden?: boolean
   /** REMOVE_NODE_DEF 建议批准后标记；executor 保留只读 */
   deprecated?: boolean
-  /** 仅在某执行模式下展示（如 WF 培养皿 / LG 全能细胞） */
+  /** 仅在某执行模式下展示 */
   execution_mode?: WorkflowLibrary
   inputs: SlotDef[]
   outputs: SlotDef[]
@@ -66,6 +66,33 @@ export interface Workflow {
   updated_at: number
 }
 
+export interface NodeExecutionState {
+  status: 'pending' | 'running' | 'completed' | 'error' | 'skipped'
+  class_type: string
+  started_at?: number
+  duration_ms?: number
+  output_keys?: string[]
+  error?: string
+  reason?: string
+}
+
+// ─── State Machine Execution ───────────────────────────────────────────
+
+export interface ConditionalEdge {
+  from: string
+  to: string
+  /** JS expression evaluated against node outputs; omit for unconditional */
+  condition?: string
+}
+
+export interface StateMachineConfig {
+  start: string
+  edges: ConditionalEdge[]
+  max_iterations?: number
+}
+
+// ─── Legacy Execution State ────────────────────────────────────────────
+
 export interface ExecutionState {
   status: 'idle' | 'running' | 'completed' | 'error'
   current_node?: string
@@ -78,16 +105,8 @@ export interface ExecutionState {
   last_run_at?: number
   /** History 落盘路径（run-trace-bridge 写入后） */
   last_log_path?: string
-  /** LG Run 物化图路径（runs/{id}/run.json） */
-  last_run_path?: string
-  /** LG 执行步序（Canvas onLGStep） */
-  lg_step?: number
   /** LLM stream:true 执行中的实时 token（nodeId → 累积文本） */
   streaming?: Record<string, string>
-  /** LG Run 回放数据 */
-  lg_run?: {
-    steps: Array<{ index: number; node_id: string; class_type: string; routing?: string }>
-    materialized_graph: { nodes: string[]; links: Array<{ from: string; to: string; when?: string; step?: number }> }
-    differentiation_traces?: Array<{ from_node: string; to_node: string }>
-  }
+  /** 每个节点的实时执行状态（用于可视化高亮） */
+  node_states?: Record<string, NodeExecutionState>
 }

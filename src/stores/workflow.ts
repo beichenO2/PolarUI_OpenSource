@@ -4,8 +4,7 @@ import { Graph } from '@/engine/graph'
 import { hubApi } from '@/api/hub'
 import type { ExecutionState } from '@/engine/types'
 import { executeGraph, topologicalSort } from '@/engine/workflow-runner'
-import { executeLGSpec, type LGRunResult } from '@/engine/lg-runner'
-import { persistRunTrace, persistLGRun } from '@/engine/run-persistence'
+import { persistRunTrace } from '@/engine/run-persistence'
 
 export const useWorkflowStore = defineStore('workflow', () => {
   const graph = ref<Graph>(new Graph('新工作流'))
@@ -56,31 +55,12 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
     execution.value = { status: 'running', progress: 0, streaming: {} }
     const apiFormat = graph.value.toApiFormat()
-    const isLG = graph.value.library === 'LG'
 
     try {
-      const total = isLG
-        ? graph.value.nodes.length
-        : topologicalSort(graph.value).length
+      const total = topologicalSort(graph.value).length
 
       execution.value.progress = 0
-      const runPromise = isLG
-        ? executeLGSpec(graph.value, {
-            onStep: ({ stepIndex, nodeId, materialized_graph }) => {
-              execution.value = {
-                ...execution.value,
-                status: 'running',
-                current_node: nodeId,
-                lg_step: stepIndex,
-                lg_run: {
-                  steps: [],
-                  materialized_graph,
-                  differentiation_traces: [],
-                },
-              }
-            },
-          })
-        : executeGraph(graph.value, {
+      const runPromise = executeGraph(graph.value, {
             onStreamChunk: (nodeId, chunk) => {
               const prev = execution.value.streaming?.[nodeId] ?? ''
               execution.value = {
@@ -88,6 +68,41 @@ export const useWorkflowStore = defineStore('workflow', () => {
                 status: 'running',
                 current_node: nodeId,
                 streaming: { ...(execution.value.streaming ?? {}), [nodeId]: prev + chunk },
+              }
+            },
+            onNodeStart: ({ nodeId, classType }) => {
+              execution.value = {
+                ...execution.value,
+                status: 'running',
+                current_node: nodeId,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: { status: 'running', class_type: classType, started_at: Date.now() },
+                },
+              }
+            },
+            onNodeDone: ({ nodeId, classType, result, duration_ms }) => {
+              execution.value = {
+                ...execution.value,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: {
+                    status: result.error ? 'error' : 'completed',
+                    class_type: classType,
+                    duration_ms,
+                    output_keys: Object.keys(result.outputs ?? {}),
+                    error: result.error,
+                  },
+                },
+              }
+            },
+            onNodeSkipped: ({ nodeId, classType, reason }) => {
+              execution.value = {
+                ...execution.value,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: { status: 'skipped', class_type: classType, reason },
+                },
               }
             },
           })
@@ -120,31 +135,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
       }
 
       if (runTrace) {
-        if (isLG) {
-          const lgResult = runResult as LGRunResult
-          const paths = await persistLGRun(graph.value.name, lgResult)
-          if (paths?.log_path) execution.value.last_log_path = paths.log_path
-          if (paths?.run_path) execution.value.last_run_path = paths.run_path
-          execution.value.lg_run = {
-            steps: lgResult.steps.map(s => ({
-              index: s.index,
-              node_id: s.node_id,
-              class_type: s.class_type,
-              routing: s.routing?.chosen,
-            })),
-            materialized_graph: {
-              ...lgResult.materialized_graph,
-              links: lgResult.materialized_graph.links.map((l, i) => ({ ...l, step: i })),
-            },
-            differentiation_traces: lgResult.runTrace?.differentiation_traces?.map(d => ({
-              from_node: String((d as { from_node?: string }).from_node ?? ''),
-              to_node: String((d as { to_node?: string }).to_node ?? ''),
-            })),
-          }
-        } else {
-          const logPath = await persistRunTrace(runTrace)
-          if (logPath) execution.value.last_log_path = logPath
-        }
+        const logPath = await persistRunTrace(runTrace)
+        if (logPath) execution.value.last_log_path = logPath
       }
 
       if (await hubApi.checkHealth()) {
@@ -166,9 +158,6 @@ export const useWorkflowStore = defineStore('workflow', () => {
           unhealthy_nodes: execution.value.unhealthy_nodes,
           last_run_at: execution.value.last_run_at,
           last_log_path: execution.value.last_log_path,
-          last_run_path: execution.value.last_run_path,
-          lg_run: execution.value.lg_run,
-          lg_step: execution.value.lg_step,
         }
       }
     }, 3000)
@@ -181,7 +170,6 @@ export const useWorkflowStore = defineStore('workflow', () => {
     if (!graph.value.nodes.length) return { content: null, error: 'empty graph' }
 
     execution.value = { status: 'running', progress: 0, streaming: {} }
-    const isLG = graph.value.library === 'LG'
     const runContext = {
       conversation_id: opts.conversation_id,
       user_id: opts.user_id ?? 'chat-user',
@@ -196,20 +184,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
 
     try {
-      const runResult = isLG
-        ? await executeLGSpec(graph.value, {
-            runContext,
-            externalInputs,
-            onStep: ({ stepIndex, nodeId }) => {
-              execution.value = {
-                ...execution.value,
-                status: 'running',
-                current_node: nodeId,
-                lg_step: stepIndex,
-              }
-            },
-          })
-        : await executeGraph(graph.value, {
+      const runResult = await executeGraph(graph.value, {
             runContext,
             externalInputs,
             onStreamChunk: (nodeId, chunk) => {
@@ -219,6 +194,41 @@ export const useWorkflowStore = defineStore('workflow', () => {
                 status: 'running',
                 current_node: nodeId,
                 streaming: { ...(execution.value.streaming ?? {}), [nodeId]: prev + chunk },
+              }
+            },
+            onNodeStart: ({ nodeId, classType }) => {
+              execution.value = {
+                ...execution.value,
+                status: 'running',
+                current_node: nodeId,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: { status: 'running', class_type: classType, started_at: Date.now() },
+                },
+              }
+            },
+            onNodeDone: ({ nodeId, classType, result, duration_ms }) => {
+              execution.value = {
+                ...execution.value,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: {
+                    status: result.error ? 'error' : 'completed',
+                    class_type: classType,
+                    duration_ms,
+                    output_keys: Object.keys(result.outputs ?? {}),
+                    error: result.error,
+                  },
+                },
+              }
+            },
+            onNodeSkipped: ({ nodeId, classType, reason }) => {
+              execution.value = {
+                ...execution.value,
+                node_states: {
+                  ...(execution.value.node_states ?? {}),
+                  [nodeId]: { status: 'skipped', class_type: classType, reason },
+                },
               }
             },
           })

@@ -1,637 +1,195 @@
 {
+  "_name": "Hermes 1:1",
+  "_description": "Hermes Agent 1:1 复刻 — Memory preload + ReAct loop + SkillCapture",
+  "_category": "agent-reference",
+  "_execution": "state_machine",
+  "_start": "1",
+  "_max_iterations": 200,
+
+  "_edges": [
+    { "from": "1", "to": "2" },
+    { "from": "2", "to": "3" },
+    { "from": "3", "to": "4" },
+    { "from": "4", "to": "5" },
+    { "from": "5", "to": "6" },
+    { "from": "6", "to": "7" },
+    { "from": "7", "to": "8" },
+    { "from": "8", "to": "9" },
+    { "from": "9", "to": "6", "condition": "outputs.has_tool === true" },
+    { "from": "9", "to": "13", "condition": "outputs.has_tool === false || outputs.has_tool === undefined" },
+    { "from": "13", "to": "10", "condition": "outputs.passed === true" },
+    { "from": "13", "to": "6", "condition": "outputs.passed === false && outputs._attempt < 7" },
+    { "from": "13", "to": "12", "condition": "outputs.passed === false && outputs._attempt >= 7" },
+    { "from": "10", "to": "11" },
+    { "from": "11", "to": "14" },
+    { "from": "14", "to": "12" }
+  ],
+
   "1": {
     "class_type": "PromptInput",
     "inputs": {
       "expected_output": {
         "body": ".*"
       },
-      "purpose": "Hermes Agent 1:1 复刻 — 自我进化 + 多平台"
+      "purpose": "Hermes Agent 1:1 — Self-improving multi-platform agent"
     },
     "params": {
-      "content": "Summarize PolarUI ecosystem health in 3 bullet points. Use tools if needed.",
+      "content": "{input}",
+      "preload_memory": true,
       "channel": "cli"
     }
   },
   "2": {
     "class_type": "PromptInject",
     "inputs": {
-      "prior_context": "",
-      "role": "You are Hermes, a self-improving AI agent by Nous Research.",
-      "constraints": "Use tools. Generate skills from trajectories. Maintain memory. Support 15+ platforms.",
+      "prior_context": ["1", 0],
+      "role": "You are Hermes, a self-improving AI agent by Nous Research. You excel at autonomous multi-step reasoning, tool orchestration, persistent memory, and skill generation from task trajectories.",
+      "constraints": "Always use tools proactively. Generate skills from successful trajectories. Maintain persistent memory across sessions. Support multi-platform operation (CLI, Telegram, Discord, VS Code). Think step-by-step, verify results, iterate until correct.",
       "prior_knowledge": ""
     }
   },
   "3": {
-    "class_type": "Switch",
-    "inputs": {
-      "value": [
-        "1",
-        0
-      ]
-    },
-    "params": {
-      "cases": "[\"cli\",\"gateway_telegram\",\"gateway_discord\",\"acp_vscode\"]"
-    }
-  },
-  "4": {
     "class_type": "MemoryStore",
     "inputs": {
-      "key": [
-        "34",
-        0
-      ],
-      "content": [
-        "1",
-        0
-      ]
+      "key": "MEMORY.md",
+      "content": ["1", 0],
+      "trigger": ["2", 0]
     },
     "params": {
       "operation": "read",
       "max_tokens": 800
     }
   },
-  "5": {
+  "4": {
     "class_type": "MemoryStore",
     "inputs": {
-      "key": [
-        "36",
-        0
-      ],
-      "content": [
-        "1",
-        0
-      ]
+      "key": "USER.md",
+      "content": ["1", 0],
+      "trigger": ["3", 0]
     },
     "params": {
       "operation": "read",
       "max_tokens": 500
     }
   },
-  "6": {
+  "5": {
     "class_type": "SessionSearch",
     "inputs": {
-      "query": [
-        "1",
-        0
-      ]
+      "query": ["1", 0],
+      "trigger": ["4", 0]
     },
     "params": {
       "scope": "all_sessions",
       "limit": 5
     }
   },
+  "6": {
+    "class_type": "ContextWindow",
+    "inputs": {
+      "messages": ["1", 2],
+      "new_message": ["1", 0],
+      "tool_feedback": ["9", 1],
+      "trigger": ["5", 0]
+    },
+    "params": {
+      "max_tokens": 128000,
+      "strategy": "summary"
+    }
+  },
   "7": {
-    "class_type": "Merge",
-    "inputs": {
-      "input_a": [
-        "4",
-        1
-      ],
-      "input_b": [
-        "5",
-        1
-      ]
-    },
-    "params": {
-      "strategy": "array"
-    }
-  },
-  "8": {
-    "class_type": "ContextWindow",
-    "inputs": {
-      "messages": [
-        "7",
-        0
-      ],
-      "new_message": [
-        "1",
-        0
-      ]
-    },
-    "params": {
-      "max_tokens": 128000,
-      "compress_threshold": 0.5,
-      "strategy": "summary"
-    }
-  },
-  "9": {
-    "class_type": "LLM",
-    "inputs": {
-      "prompt": [
-        "8",
-        0
-      ],
-      "context": [
-        "2",
-        0
-      ]
-    }
-  },
-  "10": {
-    "class_type": "ToolCall",
-    "inputs": {
-      "prompt": [
-        "43",
-        0
-      ],
-      "tool_definitions": [
-        "30",
-        0
-      ]
-    }
-  },
-  "11": {
-    "class_type": "Condition",
-    "inputs": {
-      "data": [
-        "10",
-        0
-      ]
-    },
-    "params": {
-      "expression": "data === null || data.length === 0"
-    }
-  },
-  "12": {
-    "class_type": "Switch",
-    "inputs": {
-      "value": [
-        "10",
-        0
-      ]
-    },
-    "params": {
-      "cases": "[\"terminal\",\"file\",\"browser\",\"web\",\"delegate\",\"memory\",\"media\"]"
-    }
-  },
-  "13": {
-    "class_type": "ShellExec",
-    "inputs": {
-      "command": [
-        "12",
-        3
-      ],
-      "cwd": ""
-    }
-  },
-  "14": {
-    "class_type": "FileRead",
-    "inputs": {
-      "path": [
-        "12",
-        1
-      ]
-    },
-    "params": {
-      "optional": true
-    }
-  },
-  "15": {
-    "class_type": "BrowserAction",
-    "inputs": {
-      "url": [
-        "12",
-        2
-      ],
-      "action": [
-        "12",
-        0
-      ]
-    },
-    "params": {
-      "action_type": "navigate"
-    }
-  },
-  "16": {
-    "class_type": "WebSearch",
-    "inputs": {
-      "query": [
-        "12",
-        4
-      ]
-    }
-  },
-  "17": {
-    "class_type": "SubAgent",
-    "inputs": {
-      "task": [
-        "12",
-        0
-      ],
-      "context": [
-        "8",
-        0
-      ]
-    }
-  },
-  "18": {
-    "class_type": "MemoryStore",
-    "inputs": {
-      "key": [
-        "38",
-        0
-      ],
-      "content": [
-        "43",
-        0
-      ]
-    },
-    "params": {
-      "operation": "append"
-    }
-  },
-  "19": {
-    "class_type": "ImageGenerate",
-    "inputs": {
-      "prompt": [
-        "12",
-        3
-      ]
-    }
-  },
-  "20": {
-    "class_type": "CodeExec",
-    "inputs": {
-      "code": [
-        "12",
-        0
-      ]
-    },
-    "params": {
-      "language": "python"
-    }
-  },
-  "21": {
-    "class_type": "VLM",
-    "inputs": {
-      "image": [
-        "15",
-        1
-      ],
-      "prompt": [
-        "43",
-        0
-      ]
-    }
-  },
-  "22": {
-    "class_type": "MCPCall",
-    "inputs": {
-      "mcp_request": [
-        "12",
-        3
-      ]
-    }
-  },
-  "23": {
-    "class_type": "Merge",
-    "inputs": {
-      "input_a": [
-        "13",
-        0
-      ],
-      "input_b": [
-        "14",
-        0
-      ]
-    }
-  },
-  "24": {
-    "class_type": "Merge",
-    "inputs": {
-      "input_a": [
-        "23",
-        0
-      ],
-      "input_b": [
-        "15",
-        0
-      ]
-    }
-  },
-  "25": {
-    "class_type": "ContextWindow",
-    "inputs": {
-      "messages": [
-        "8",
-        0
-      ],
-      "new_message": [
-        "24",
-        0
-      ]
-    },
-    "params": {
-      "max_tokens": 128000,
-      "compress_threshold": 0.5,
-      "strategy": "summary"
-    }
-  },
-  "26": {
-    "class_type": "WhileLoop",
-    "inputs": {
-      "initial": [
-        "25",
-        0
-      ],
-      "condition": [
-        "11",
-        1
-      ]
-    },
-    "params": {
-      "max_iterations": 200,
-      "condition_expr": "!end_turn && tool_calls.length > 0"
-    }
-  },
-  "27": {
-    "class_type": "LLM",
-    "inputs": {
-      "prompt": [
-        "25",
-        0
-      ],
-      "context": [
-        "2",
-        0
-      ]
-    }
-  },
-  "28": {
-    "class_type": "SkillCapture",
-    "inputs": {
-      "trajectory": [
-        "10",
-        0
-      ],
-      "task_description": [
-        "1",
-        0
-      ]
-    }
-  },
-  "29": {
-    "class_type": "MemoryStore",
-    "inputs": {
-      "key": [
-        "39",
-        0
-      ],
-      "content": [
-        "45",
-        0
-      ]
-    },
-    "params": {
-      "operation": "append"
-    }
-  },
-  "30": {
     "class_type": "StaticData",
-    "inputs": {},
+    "inputs": {
+      "trigger": ["6", 0]
+    },
     "params": {
-      "value": "[{\"name\":\"terminal\",\"desc\":\"Execute shell commands\"},{\"name\":\"file\",\"desc\":\"Read/write/edit files\"},{\"name\":\"browser\",\"desc\":\"Browser automation (navigate/click/type/screenshot)\"},{\"name\":\"web\",\"desc\":\"Web search & fetch\"},{\"name\":\"delegate\",\"desc\":\"Delegate to sub-agent\"},{\"name\":\"memory\",\"desc\":\"Read/write persistent memory\"},{\"name\":\"media\",\"desc\":\"Image/video gen/analyze\"},{\"name\":\"execute_code\",\"desc\":\"Run code in sandbox\"},{\"name\":\"mcp\",\"desc\":\"Call MCP tools\"},{\"name\":\"clarify\",\"desc\":\"Ask user\"},{\"name\":\"todo\",\"desc\":\"Task management\"},{\"name\":\"skill_manage\",\"desc\":\"View/manage skills\"},{\"name\":\"cronjob\",\"desc\":\"Schedule tasks\"},{\"name\":\"vision_analyze\",\"desc\":\"Analyze images (VLM)\"},{\"name\":\"session_search\",\"desc\":\"Search past sessions\"},{\"name\":\"computer_use\",\"desc\":\"Desktop automation\"},{\"name\":\"text_to_speech\",\"desc\":\"TTS\"},{\"name\":\"mixture_of_agents\",\"desc\":\"Multi-model consensus\"}]",
+      "value": "[{\"name\":\"FileRead\",\"description\":\"Read file contents\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"FileWrite\",\"description\":\"Write content to file\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"]}},{\"name\":\"ShellExec\",\"description\":\"Execute shell command\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"cwd\":{\"type\":\"string\"}},\"required\":[\"command\"]}},{\"name\":\"GlobSearch\",\"description\":\"Find files by glob pattern\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\"}},\"required\":[\"pattern\"]}},{\"name\":\"GrepSearch\",\"description\":\"Search file contents by regex\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\"},\"path\":{\"type\":\"string\"}},\"required\":[\"pattern\"]}},{\"name\":\"WebSearch\",\"description\":\"Search the web for information\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"]}},{\"name\":\"WebFetch\",\"description\":\"Fetch URL content as markdown\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\"}},\"required\":[\"url\"]}},{\"name\":\"CodeExec\",\"description\":\"Execute code in sandbox\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"},\"language\":{\"type\":\"string\",\"enum\":[\"javascript\",\"python\"]}},\"required\":[\"code\"]}},{\"name\":\"MCPCall\",\"description\":\"Call MCP server tool\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"server\":{\"type\":\"string\"},\"tool\":{\"type\":\"string\"},\"arguments\":{\"type\":\"object\"}},\"required\":[\"server\",\"tool\"]}},{\"name\":\"Notification\",\"description\":\"Send notification to user\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"level\":{\"type\":\"string\",\"enum\":[\"info\",\"warn\",\"error\"]}},\"required\":[\"message\"]}},{\"name\":\"GitCommit\",\"description\":\"Commit and optionally push changes\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"push\":{\"type\":\"boolean\"}},\"required\":[\"message\"]}},{\"name\":\"BrowserAction\",\"description\":\"Crawl a platform via Digist browser automation (twitter, xiaohongshu, zhihu, bloomberg, wechat, github, reddit, arxiv, bilibili, hackernews, youtube)\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"platform\":{\"type\":\"string\",\"enum\":[\"twitter\",\"xiaohongshu\",\"zhihu\",\"bloomberg\",\"wechat\",\"github\",\"reddit\",\"arxiv\",\"bilibili\",\"hackernews\",\"youtube\"]},\"query\":{\"type\":\"string\"}},\"required\":[\"platform\",\"query\"]}},{\"name\":\"Vision\",\"description\":\"Analyze an image using VLM (Vision Language Model). Returns text description or structured analysis.\",\"concurrency_safe\":true,\"parameters\":{\"type\":\"object\",\"properties\":{\"image_url\":{\"type\":\"string\",\"description\":\"URL or data URI of the image\"},\"prompt\":{\"type\":\"string\",\"description\":\"What to analyze about the image\"}},\"required\":[\"image_url\"]}},{\"name\":\"SubAgent\",\"description\":\"Delegate a complex sub-task to an independent agent workflow. Returns the agent result.\",\"concurrency_safe\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"task\":{\"type\":\"string\",\"description\":\"Task description for the sub-agent\"},\"workflow\":{\"type\":\"string\",\"description\":\"Workflow to use (default: claude-code)\"},\"context\":{\"type\":\"object\",\"description\":\"Optional context to pass\"}},\"required\":[\"task\"]}}]",
       "type": "json"
     }
   },
-  "31": {
+  "8": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": ["6", 0],
+      "context": ["2", 0],
+      "tools": ["7", 0]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "You are Hermes, a self-improving AI agent. Use tools proactively. Think step-by-step before acting. Verify results after changes. When unsure, search first. Generate reusable patterns from your work.",
+      "temperature": 0.4
+    }
+  },
+  "9": {
+    "class_type": "AgenticToolCall",
+    "inputs": {
+      "llm_response": ["8", 0],
+      "tools_list": ["7", 0],
+      "messages": ["6", 0],
+      "system_prompt": ["2", 0]
+    },
+    "params": {
+      "max_iterations": 200,
+      "concurrency": true,
+      "model": "GLM-5.1",
+      "error_strategy": "cancel_siblings"
+    }
+  },
+  "10": {
+    "class_type": "SkillCapture",
+    "inputs": {
+      "trajectory": ["9", 1],
+      "task_description": ["1", 0],
+      "trigger": ["13", 0]
+    },
+    "params": {
+      "auto_save": false,
+      "push_suggestion": true,
+      "save_path": "~/.hermes/skills/"
+    }
+  },
+  "11": {
+    "class_type": "MemoryStore",
+    "inputs": {
+      "key": "MEMORY.md",
+      "content": ["9", 1],
+      "trigger": ["10", 1]
+    },
+    "params": {
+      "operation": "append"
+    }
+  },
+  "12": {
+    "class_type": "Output",
+    "inputs": {
+      "content": ["9", 0]
+    },
+    "params": {
+      "format": "markdown"
+    }
+  },
+  "13": {
     "class_type": "Validator",
     "inputs": {
-      "actual_output": [
-        "27",
-        0
-      ],
-      "validation_spec": [
-        "1",
-        1
-      ]
-    }
-  },
-  "32": {
-    "class_type": "RetryLoop",
-    "inputs": {
-      "passed": [
-        "31",
-        0
-      ],
-      "retry_hint": "",
-      "original_input": [
-        "25",
-        0
-      ]
-    }
-  },
-  "33": {
-    "class_type": "Output",
-    "inputs": {
-      "content": [
-        "45",
-        0
-      ]
-    }
-  },
-  "34": {
-    "class_type": "StaticData",
-    "inputs": {},
-    "params": {
-      "value": "MEMORY.md",
-      "type": "string"
-    }
-  },
-  "36": {
-    "class_type": "StaticData",
-    "inputs": {},
-    "params": {
-      "value": "USER.md",
-      "type": "string"
-    }
-  },
-  "38": {
-    "class_type": "StaticData",
-    "inputs": {},
-    "params": {
-      "value": "MEMORY.md",
-      "type": "string"
-    }
-  },
-  "39": {
-    "class_type": "StaticData",
-    "inputs": {},
-    "params": {
-      "value": "MEMORY.md",
-      "type": "string"
-    }
-  },
-  "40": {
-    "class_type": "Output",
-    "inputs": {
-      "content": [
-        "3",
-        1
-      ]
+      "actual_output": ["9", 0],
+      "purpose": ["1", 0],
+      "global_expected_pattern": ["1", 1]
     },
     "params": {
-      "format": "text"
-    }
-  },
-  "41": {
-    "class_type": "Output",
-    "inputs": {
-      "content": [
-        "11",
-        1
-      ]
-    },
-    "params": {
-      "format": "text"
-    }
-  },
-  "42": {
-    "class_type": "Validator",
-    "inputs": {
-      "actual_output": [
-        "9",
-        0
-      ],
-      "validation_spec": {
-        "expected_pattern": ".*"
-      }
-    },
-    "params": {
-      "verify_mode": "step"
-    }
-  },
-  "43": {
-    "class_type": "RetryLoop",
-    "inputs": {
-      "passed": [
-        "42",
-        0
-      ],
-      "original_input": [
-        "43",
-        0
-      ]
-    },
-    "params": {
+      "verify_mode": "composite",
+      "strict": false,
       "max_retries": 7
     }
   },
-  "44": {
-    "class_type": "Validator",
+  "14": {
+    "class_type": "Notification",
     "inputs": {
-      "actual_output": [
-        "27",
-        0
-      ],
-      "validation_spec": {
-        "expected_pattern": ".*"
-      }
+      "message": ["9", 0],
+      "channel": ["1", 3],
+      "trigger": ["11", 0]
     },
     "params": {
-      "verify_mode": "step"
-    }
-  },
-  "45": {
-    "class_type": "RetryLoop",
-    "inputs": {
-      "passed": [
-        "44",
-        0
-      ],
-      "original_input": [
-        "45",
-        0
-      ]
-    },
-    "params": {
-      "max_retries": 7
-    }
-  },
-  "46": {
-    "class_type": "Output",
-    "inputs": {
-      "content": [
-        "3",
-        0
-      ]
-    },
-    "params": {
-      "format": "text"
-    }
-  },
-  "47": {
-    "class_type": "Output",
-    "inputs": {
-      "content": [
-        "11",
-        0
-      ]
-    },
-    "params": {
-      "format": "text"
-    }
-  },
-  "48": {
-    "class_type": "Validator",
-    "inputs": {
-      "actual_output": [
-        "9",
-        0
-      ],
-      "validation_spec": {
-        "expected_pattern": ".*"
-      }
-    },
-    "params": {
-      "verify_mode": "step"
-    }
-  },
-  "49": {
-    "class_type": "RetryLoop",
-    "inputs": {
-      "passed": [
-        "48",
-        0
-      ],
-      "original_input": [
-        "49",
-        0
-      ]
-    },
-    "params": {
-      "max_retries": 7
-    }
-  },
-  "50": {
-    "class_type": "Validator",
-    "inputs": {
-      "actual_output": [
-        "27",
-        0
-      ],
-      "validation_spec": {
-        "expected_pattern": ".*"
-      }
-    },
-    "params": {
-      "verify_mode": "step"
-    }
-  },
-  "51": {
-    "class_type": "RetryLoop",
-    "inputs": {
-      "passed": [
-        "50",
-        0
-      ],
-      "original_input": [
-        "51",
-        0
-      ]
-    },
-    "params": {
-      "max_retries": 7
+      "channel": "auto",
+      "level": "info"
     }
   }
 }

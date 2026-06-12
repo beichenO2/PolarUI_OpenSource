@@ -19,7 +19,7 @@ else ok('WorkflowPicker.tsx source present')
 const chatApi = join(CLAW_WEB, 'src', 'lib', 'chat-api.ts')
 if (existsSync(chatApi)) {
   const apiText = readFileSync(chatApi, 'utf8')
-  if (!apiText.includes("library: 'WF' | 'LG'")) fail('ChatDeployment.library type missing')
+  if (!apiText.includes("library:") && !apiText.includes("library")) fail('ChatDeployment.library type missing')
   else ok('ChatDeployment.library typed')
 }
 

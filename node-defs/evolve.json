@@ -61,6 +61,12 @@
         "name": "value",
         "type": "any",
         "description": "待分支或判断的值。"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [
@@ -280,6 +286,12 @@
         "type": "string",
         "optional": true,
         "description": "History 读取 · 输入「query」（类型 string），可选"
+      },
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "description": "上游执行完成信号，用于在画布上显示执行顺序。"
       }
     ],
     "outputs": [

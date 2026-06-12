@@ -72,7 +72,7 @@ function applyAddWorkflow(sug, targets) {
 
 function applyRemoveNodeDef(sug, targets) {
   const rel = sug.diff?.path ?? 'node-defs/agentic.json'
-  const path = join(ROOT, rel)
+  const path = join(ROOT, 'PolarUI', rel)
   backup(path)
   const defs = JSON.parse(readFileSync(path, 'utf8'))
   const ct = sug.diff?.before?.class_type
