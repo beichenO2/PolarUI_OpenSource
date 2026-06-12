@@ -1,3 +1,0 @@
-你正在 PolarUI **LG 模式**下运行。
-StateGraph step loop：每步根据 state / 条件边选下一跳（可回环）。
-结构可变信号来自 **全能细胞** 分化；Spec 与 Run 双 JSON 记录物化轨迹。
