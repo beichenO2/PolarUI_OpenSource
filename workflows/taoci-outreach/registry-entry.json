@@ -1,0 +1,11 @@
+{
+  "id": "taoci-outreach-2026",
+  "name": "套辞助手 Taoci Outreach",
+  "description": "Step0澄清→Step1导师调研(风评/署名/方向)→Step2套辞+PDF→Step3深度准备PDF。飞书多文件入/PDF出。Claude Code core + harness状态机。",
+  "category": "outreach",
+  "nodeCount": 7,
+  "file": "taoci-outreach.lg.json",
+  "library": "LG",
+  "registeredAt": "2026-06-30T00:00:00.000Z",
+  "updatedAt": "2026-06-30T00:00:00.000Z"
+}

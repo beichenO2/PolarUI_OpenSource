@@ -1,0 +1,32 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "胡友财（英文待确认）",
+    "institution": "中国药科大学（待老师主页确认院系）",
+    "url": ""
+  },
+  "student": {
+    "profile": "中国药科大学 · 制药工程 · 大三 · 主持或参与光催化大创（细节待补） · 意向与时间待补",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "想套辞胡友财老师，药大制药工程大三，做过光催化大创",
+      "at": "2026-06-30T15:23:16.004Z"
+    },
+    {
+      "role": "assistant",
+      "content": "还需要确认胡老师的英文名拼写和招生主页/邮箱；另外大创请补充具体方向、担任角色和产出（有没有论文/结题报告），方便下一步写套辞正文。",
+      "at": "2026-06-30T15:23:24.182Z"
+    }
+  ],
+  "updated_at": "2026-06-30T15:23:24.183Z"
+}

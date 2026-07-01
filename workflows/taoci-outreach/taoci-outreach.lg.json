@@ -1,0 +1,72 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": { "body": "\"ok\"\\s*:" },
+      "purpose": "套辞助手 — 飞书多轮 + PDF 出"
+    },
+    "params": {
+      "content": "套辞 workflow 用户消息",
+      "channel": "feishu",
+      "conversation_id": "{{conversation_id}}"
+    }
+  },
+  "2": {
+    "class_type": "WorkingMemory",
+    "inputs": {},
+    "params": {
+      "api_base": "http://127.0.0.1:3910",
+      "conversation_id": "{{conversation_id}}",
+      "auto_compress": true
+    }
+  },
+  "3": {
+    "class_type": "ShellExec",
+    "inputs": {
+      "command": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "template": "node workflows/taoci-outreach/harness/index.mjs --conversation-id '{{conversation_id}}' --message '{{message}}' --files '{{files}}'",
+      "cwd": "~/Polarisor/PolarUI",
+      "timeout_ms": 300000
+    }
+  },
+  "4": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": ["3", 0],
+      "validation_spec": { "expected_pattern": "\"ok\"\\s*:" }
+    },
+    "params": { "verify_mode": "auto" }
+  },
+  "5": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": ["4", 0],
+      "original_input": ["1", 0]
+    },
+    "params": { "max_retries": 3 }
+  },
+  "6": {
+    "class_type": "Notification",
+    "inputs": {
+      "message": ["3", 0]
+    },
+    "params": {
+      "channel": "feishu",
+      "attach_pdf": true
+    }
+  },
+  "7": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 0] },
+    "params": { "format": "json" }
+  },
+  "_name": "套辞助手 Taoci Outreach",
+  "_description": "Step0-3 状态机：澄清→导师调研(3 SubAgent)→选方向套辞+PDF→深度准备PDF。飞书入出。Harness: Claude Code core。",
+  "_category": "outreach",
+  "_library": "LG"
+}
