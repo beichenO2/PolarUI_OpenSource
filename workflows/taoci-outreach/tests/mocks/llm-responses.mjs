@@ -20,8 +20,18 @@ export function mockStep0FirstTurn() {
     ready: false,
     reply: '请补充：导师单位/主页，以及你的科研经历细节。',
     missing: ['teacher.institution', 'student.profile'],
-    teacher: { name: '胡友财', institution: '', url: '' },
-    student: { profile: '药大制药工程大三，意向胡友财' },
+    teacher: { name: '', institution: '', url: '' },
+    student: { profile: '' },
+  };
+}
+
+export function mockStep0TeacherOnly() {
+  return {
+    ready: false,
+    reply: '已记录导师信息，请补充：你的学校、专业、年级与科研经历。',
+    missing: ['student.profile'],
+    teacher: TEACHER,
+    student: { profile: '' },
   };
 }
 
@@ -88,15 +98,25 @@ export function mockSubAgent() {
 
 /** 子进程 mock：按 session 状态返回，避免每轮 harness 重置队列 */
 export function mockForSession(session) {
-  const userTurns = (session.history ?? []).filter((h) => h.role === 'user').length;
+  const history = session.history ?? [];
+  const lastUser = [...history].reverse().find((h) => h.role === 'user')?.content ?? '';
 
   switch (session.step) {
-    case 'S0_Clarify':
-      if (session.teacher?.name && session.student?.profile?.trim()) {
+    case 'S0_Clarify': {
+      const profile = session.student?.profile?.trim() ?? '';
+      const teacher = session.teacher ?? {};
+      const hasTeacher = !!(teacher.name?.trim() && teacher.institution?.trim());
+      const hasProfile = profile.length >= 20;
+      const profileInMessage = /郭韵怡|推免20\d{2}|光催化|SPOP|HPLC|大创/.test(lastUser)
+        || lastUser.replace(/@套辞/g, '').trim().length >= 35;
+
+      if (profileInMessage && (/胡友财/.test(lastUser) || teacher.name?.trim())) {
         return mockStep0Ready();
       }
-      if (userTurns >= 2) return mockStep0Ready();
+      if (hasTeacher && hasProfile) return mockStep0Ready();
+      if (/胡友财|协和|药物所/.test(lastUser)) return mockStep0TeacherOnly();
       return mockStep0FirstTurn();
+    }
     case 'S1_Research': {
       const n = session._mock_s1_calls ?? 0;
       session._mock_s1_calls = n + 1;
