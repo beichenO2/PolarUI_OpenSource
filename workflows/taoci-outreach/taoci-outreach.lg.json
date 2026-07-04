@@ -1,10 +1,7 @@
 {
   "1": {
     "class_type": "PromptInput",
-    "inputs": {
-      "expected_output": { "body": "\"ok\"\\s*:" },
-      "purpose": "套辞助手 — 飞书多轮 + PDF 出"
-    },
+    "inputs": {},
     "params": {
       "content": "套辞 workflow 用户消息",
       "channel": "feishu",
@@ -13,7 +10,16 @@
   },
   "2": {
     "class_type": "WorkingMemory",
-    "inputs": {},
+    "inputs": {
+      "new_message": [
+        "1",
+        0
+      ],
+      "conversation_id": [
+        "1",
+        0
+      ]
+    },
     "params": {
       "api_base": "http://127.0.0.1:3910",
       "conversation_id": "{{conversation_id}}",
@@ -21,52 +27,437 @@
     }
   },
   "3": {
-    "class_type": "ShellExec",
+    "class_type": "TaociSessionLoad",
     "inputs": {
-      "command": [
+      "message": [
         "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {}
+  },
+  "4": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "3",
+        1
+      ]
+    },
+    "params": {
+      "cases": "[{\"when\":\"S0_Clarify\",\"label\":\"S0 澄清需求\"},{\"when\":\"S1_Research\",\"label\":\"S1 导师调研\"},{\"when\":\"S2_Select\",\"label\":\"S2 选方向+话术\"},{\"when\":\"S3_DeepPrep\",\"label\":\"S3 深度准备\"}]"
+    }
+  },
+  "10": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
         0
       ]
     },
     "params": {
-      "template": "node workflows/taoci-outreach/harness/index.mjs --conversation-id '{{conversation_id}}' --message '{{message}}' --files '{{files}}'",
-      "cwd": "~/Polarisor/PolarUI",
-      "timeout_ms": 300000
+      "model": "GLM-5.1",
+      "system_prompt": "你是套辞 workflow 的需求澄清助手（Step 0）。从用户消息抽取 teacher.name、student.profile（必填）。缺项则 ready=false 并追问。齐全则 ready=true。输出 JSON: {\"ready\", \"reply\", \"missing\", \"teacher\", \"student\"}"
     }
   },
-  "4": {
-    "class_type": "Validator",
+  "11": {
+    "class_type": "SchemaExtract",
     "inputs": {
-      "actual_output": ["3", 0],
-      "validation_spec": { "expected_pattern": "\"ok\"\\s*:" }
+      "text": [
+        "10",
+        0
+      ]
     },
-    "params": { "verify_mode": "auto" }
+    "params": {}
   },
-  "5": {
-    "class_type": "RetryLoop",
+  "12": {
+    "class_type": "TaociSessionSave",
     "inputs": {
-      "passed": ["4", 0],
-      "original_input": ["1", 0]
-    },
-    "params": { "max_retries": 3 }
-  },
-  "6": {
-    "class_type": "Notification",
-    "inputs": {
-      "message": ["3", 0]
+      "llm_result": [
+        "11",
+        0
+      ]
     },
     "params": {
-      "channel": "feishu",
-      "attach_pdf": true
+      "step": "S0_Clarify"
     }
   },
-  "7": {
+  "20": {
+    "class_type": "TaociSubAgent",
+    "inputs": {},
+    "params": {
+      "agent": "reputation"
+    }
+  },
+  "21": {
+    "class_type": "TaociSubAgent",
+    "inputs": {},
+    "params": {
+      "agent": "authorship"
+    }
+  },
+  "22": {
+    "class_type": "TaociSubAgent",
+    "inputs": {},
+    "params": {
+      "agent": "directions"
+    }
+  },
+  "25": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "你是套辞 Step 1 调研汇总助手。汇总 reputation/authorship/directions 三路 SubAgent 结果。输出 JSON: {\"reply\", \"direction_options\", \"continue_research\"}。"
+    }
+  },
+  "26": {
+    "class_type": "TaociSessionSave",
+    "inputs": {
+      "llm_result": [
+        "25",
+        0
+      ],
+      "reputation": [
+        "20",
+        0
+      ],
+      "authorship": [
+        "21",
+        0
+      ],
+      "directions": [
+        "22",
+        0
+      ]
+    },
+    "params": {
+      "step": "S1_Research"
+    }
+  },
+  "30": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "你是套辞 Step 2 话术撰写助手。根据调研与用户选择生成套辞话术；确认后 direction_locked=true 并输出 overview_latex（ctexart）。输出 JSON: {\"reply\", \"direction_locked\", \"selected_direction\", \"outreach_draft\", \"overview_latex\"}"
+    }
+  },
+  "32": {
+    "class_type": "TaociSessionSave",
+    "inputs": {
+      "llm_result": [
+        "30",
+        0
+      ]
+    },
+    "params": {
+      "step": "S2_Select"
+    }
+  },
+  "40": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "你是套辞 Step 3 深度准备助手。生成 prep_latex（STAR、≥10 条 mock_qa，必含「为何选该细分领域」「为何能胜任」）。输出 JSON: {\"reply\", \"outreach_final\", \"prep_latex\", \"mock_qa\", \"prep_pdf_sent\"}"
+    }
+  },
+  "42": {
+    "class_type": "TaociSessionSave",
+    "inputs": {
+      "llm_result": [
+        "40",
+        0
+      ]
+    },
+    "params": {
+      "step": "S3_DeepPrep"
+    }
+  },
+  "50": {
+    "class_type": "FeishuIM",
+    "inputs": {
+      "text": [
+        "12",
+        1
+      ],
+      "pdf_path": [
+        "12",
+        2
+      ]
+    },
+    "params": {
+      "bot_name": "PolarClaw_Rr",
+      "action": "auto"
+    }
+  },
+  "51": {
+    "class_type": "FeishuIM",
+    "inputs": {
+      "text": [
+        "26",
+        1
+      ],
+      "pdf_path": [
+        "26",
+        2
+      ]
+    },
+    "params": {
+      "bot_name": "PolarClaw_Rr",
+      "action": "auto"
+    }
+  },
+  "52": {
     "class_type": "Output",
-    "inputs": { "content": ["3", 0] },
-    "params": { "format": "json" }
+    "inputs": {
+      "content": [
+        "12",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "53": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "26",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "54": {
+    "class_type": "FeishuIM",
+    "inputs": {
+      "text": [
+        "32",
+        1
+      ],
+      "pdf_path": [
+        "32",
+        2
+      ]
+    },
+    "params": {
+      "bot_name": "PolarClaw_Rr",
+      "action": "auto"
+    }
+  },
+  "55": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "32",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "56": {
+    "class_type": "FeishuIM",
+    "inputs": {
+      "text": [
+        "42",
+        1
+      ],
+      "pdf_path": [
+        "42",
+        2
+      ]
+    },
+    "params": {
+      "bot_name": "PolarClaw_Rr",
+      "action": "auto"
+    }
+  },
+  "57": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "42",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
   },
   "_name": "套辞助手 Taoci Outreach",
-  "_description": "Step0-3 状态机：澄清→导师调研(3 SubAgent)→选方向套辞+PDF→深度准备PDF。飞书入出。Harness: Claude Code core。",
+  "_description": "WYSIWYG 状态机：WorkingMemory → Switch(step) → LLM/SubAgent → FeishuIM → Output。无 CodeExec。",
   "_category": "outreach",
-  "_library": "LG"
+  "_library": "LG",
+  "_entry": "1",
+  "_state_schema": {
+    "step": "string",
+    "teacher": "object",
+    "student": "object",
+    "research": "object",
+    "reply": "string"
+  },
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "10",
+      "kind": "conditional",
+      "when": "S0_Clarify"
+    },
+    {
+      "from": "4",
+      "to": "20",
+      "kind": "conditional",
+      "when": "S1_Research"
+    },
+    {
+      "from": "4",
+      "to": "30",
+      "kind": "conditional",
+      "when": "S2_Select"
+    },
+    {
+      "from": "4",
+      "to": "40",
+      "kind": "conditional",
+      "when": "S3_DeepPrep"
+    },
+    {
+      "from": "10",
+      "to": "11",
+      "kind": "static"
+    },
+    {
+      "from": "11",
+      "to": "12",
+      "kind": "static"
+    },
+    {
+      "from": "12",
+      "to": "50",
+      "kind": "static"
+    },
+    {
+      "from": "50",
+      "to": "52",
+      "kind": "static"
+    },
+    {
+      "from": "20",
+      "to": "21",
+      "kind": "static"
+    },
+    {
+      "from": "21",
+      "to": "22",
+      "kind": "static"
+    },
+    {
+      "from": "22",
+      "to": "25",
+      "kind": "static"
+    },
+    {
+      "from": "25",
+      "to": "26",
+      "kind": "static"
+    },
+    {
+      "from": "26",
+      "to": "51",
+      "kind": "static"
+    },
+    {
+      "from": "51",
+      "to": "53",
+      "kind": "static"
+    },
+    {
+      "from": "30",
+      "to": "32",
+      "kind": "static"
+    },
+    {
+      "from": "32",
+      "to": "54",
+      "kind": "static"
+    },
+    {
+      "from": "54",
+      "to": "55",
+      "kind": "static"
+    },
+    {
+      "from": "40",
+      "to": "42",
+      "kind": "static"
+    },
+    {
+      "from": "42",
+      "to": "56",
+      "kind": "static"
+    },
+    {
+      "from": "56",
+      "to": "57",
+      "kind": "static"
+    }
+  ]
 }

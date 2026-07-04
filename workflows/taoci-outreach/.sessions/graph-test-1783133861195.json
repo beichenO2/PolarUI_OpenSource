@@ -1,0 +1,32 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "",
+    "institution": "",
+    "url": ""
+  },
+  "student": {
+    "profile": "",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "套辞 workflow 用户消息",
+      "at": "2026-07-04T02:57:43.806Z"
+    },
+    {
+      "role": "assistant",
+      "content": "请补充：导师姓名/单位/主页链接，以及你的学校、专业、科研经历和意向方向。",
+      "at": "2026-07-04T02:57:43.811Z"
+    }
+  ],
+  "updated_at": "2026-07-04T02:57:43.811Z"
+}

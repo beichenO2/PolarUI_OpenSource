@@ -1,36 +1,34 @@
-# 套辞助手 · 本地 Workflow 部署
+# 套辞助手 · taoci-outreach
 
-## 组件
+> **Harness = `taoci-outreach.lg.json` 图**（见 `WORKFLOW.spec.md`、`../../docs/ARCHITECTURE.md`）
 
-| 组件 | 路径 | 作用 |
-|------|------|------|
-| 状态机 Harness | `harness/index.mjs` | Step0–3 循环、session 持久化 |
-| Claude Core | `harness/lib/claude-core.mjs` | claude CLI → PolarPrivate |
-| SubAgents | `harness/subagents/` | 风评 / 署名 / 方向 |
-| PDF | `harness/lib/pdf.mjs` | xelatex 编译 |
-| PolarUI 图 | `taoci-outreach.lg.json` | 飞书 → ShellExec → harness |
-| 飞书桥 | `feishu/bridge.mjs` | PolarClaw 调用入口 |
+## 架构
 
-## 依赖
+| 组件 | 实现 |
+|------|------|
+| Harness | `.lg.json` WYSIWYG 状态机 |
+| PolarClaw | `run-graph-cli.mjs` → executeGraph |
+| 图 | WorkingMemory → Switch(step) → LLM/SubAgent → FeishuIM → Output |
+
+## 实现
+
+| 路径 | 说明 |
+|------|------|
+| `taoci-outreach.lg.json` | WYSIWYG 状态机图 |
+| `lib/taoci-graph/` | SessionLoad/Save/SubAgent executor |
+| `tests/` | 图引擎 + 多轮情景测试 |
+
+## 文档
+
+- 规格：`WORKFLOW.spec.md`
+- Skill：`../../skills/taoci-outreach/SKILL.md`
+- 任务书：`~/Polarisor/任务书/260703/套辞workflow.md`
+
+## 测试
 
 ```bash
-curl -s http://127.0.0.1:12790/v1/models | head
-xelatex --version
-claude --version  # 可选
+cd PolarUI/workflows/taoci-outreach
+node tests/run.mjs
 ```
 
-## 本地测试
-
-```bash
-cd ~/Polarisor/PolarUI
-
-node workflows/taoci-outreach/harness/index.mjs \
-  --conversation-id demo-1 \
-  --message "想套辞北京协和医学院胡友财老师，中国药科大学制药工程2023级"
-```
-
-Session: `workflows/taoci-outreach/.sessions/`
-
-## 飞书
-
-见 `WORKFLOW.spec.md` 部署清单。
+Session: `.sessions/`

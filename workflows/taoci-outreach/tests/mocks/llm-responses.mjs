@@ -96,7 +96,7 @@ export function mockSubAgent() {
   return { status: 'done', summary: 'mock subagent output', cross_points: [] };
 }
 
-/** 子进程 mock：按 session 状态返回，避免每轮 harness 重置队列 */
+/** 图引擎 mock：按 session 状态返回，跨轮持久化 _mock_* 计数 */
 export function mockForSession(session) {
   const history = session.history ?? [];
   const lastUser = [...history].reverse().find((h) => h.role === 'user')?.content ?? '';
@@ -105,12 +105,13 @@ export function mockForSession(session) {
     case 'S0_Clarify': {
       const profile = session.student?.profile?.trim() ?? '';
       const teacher = session.teacher ?? {};
+      const userTexts = history.filter((h) => h.role === 'user').map((h) => h.content).join('\n');
       const hasTeacher = !!(teacher.name?.trim() && teacher.institution?.trim());
       const hasProfile = profile.length >= 20;
       const profileInMessage = /郭韵怡|推免20\d{2}|光催化|SPOP|HPLC|大创/.test(lastUser)
         || lastUser.replace(/@套辞/g, '').trim().length >= 35;
 
-      if (profileInMessage && (/胡友财/.test(lastUser) || teacher.name?.trim())) {
+      if (profileInMessage && (/胡友财/.test(userTexts) || teacher.name?.trim())) {
         return mockStep0Ready();
       }
       if (hasTeacher && hasProfile) return mockStep0Ready();
@@ -124,6 +125,7 @@ export function mockForSession(session) {
       return mockStep1Synthesize();
     }
     case 'S2_Select': {
+      if (/确认方向|锁定|就选|方向\s*[A-Da-d]/i.test(lastUser)) return mockStep2Locked();
       const n = session._mock_s2_calls ?? 0;
       session._mock_s2_calls = n + 1;
       return n === 0 ? mockStep2Draft() : mockStep2Locked();

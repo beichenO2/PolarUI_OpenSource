@@ -1,23 +1,30 @@
 # 套辞助手 Workflow · 状态机规格
 
-> PolarUI 勾勒 + Claude Code 智能 core + Harness 执行  
+> **Harness = `taoci-outreach.lg.json` 图**（PolarUI 所见即所得）  
+> 架构原则：`PolarUI/docs/ARCHITECTURE.md`  
 > 接口：飞书（多文件入 / PDF 出）
 
-## 架构
+## 架构（目标 — 阶段 C）
 
 ```
 飞书用户
-  ↓ 消息 + 附件（简历/个人陈述/doc/pdf）
-PolarClaw Feishu Adapter
-  ↓ POST /api/taoci/message
-taoci-outreach Harness（状态机 + session 持久化）
-  ↓ 每步调用
-Claude Code Core（PolarPrivate / claude CLI）
-  ↓ 子任务
-SubAgents（风评 / 署名 / 方向交叉）
-  ↓ 产物
-LaTeX → xelatex → PDF → 飞书回传
+  ↓
+PolarClaw @套辞 → PolarUI graph engine（executeGraph）
+  ↓
+taoci-outreach.lg.json
+  FeishuIM/PromptInput → WorkingMemory → Switch(step)
+  → LLM / SubAgent → FeishuIM → Output
 ```
+
+**禁止**：外挂 harness CLI 作为生产路径（已删除，Harness = 图）。
+
+### 与现状差距
+
+| 项 | 现状 | 目标 |
+|----|------|------|
+| 图 | ✅ Switch + LLM/SubAgent 明面节点；LG 单路径执行 | — |
+| PolarClaw | ✅ executeGraph via run-graph-cli | — |
+| 测试 | graph-engine + huyoucai-qa 情景（图引擎） | — |
 
 ## 状态机（每步可循环，非一问一答）
 
@@ -79,17 +86,18 @@ stateDiagram-v2
 
 **退出条件**：`prep_pdf_sent=true`。
 
-## PolarUI 节点图（`taoci-outreach.lg.json`）
+## PolarUI 节点图（`taoci-outreach.lg.json`）— 目标
 
 | 节点 | 类型 | 作用 |
 |------|------|------|
-| 1 | PromptInput | 飞书 channel 入站 |
+| 1 | FeishuIM / PromptInput | 飞书入站 |
 | 2 | WorkingMemory | conversation_id 多轮 |
-| 3 | ShellExec | 调用 `harness/index.mjs` |
-| 4 | Validator | 检查 harness JSON 输出 |
-| 5 | RetryLoop | 失败重试 |
-| 6 | **FeishuIM** | `bot_name=PolarClaw_Rr`，PolarPrivate 凭证，PDF 回传 |
-| 7 | Output | 结构化结果 |
+| 3 | Switch | session.step 路由 S0–S3 |
+| 4–n | LLM / SubAgent | 各 step 智能 |
+| n+1 | FeishuIM | PDF 回传 |
+| n+2 | Output | 结构化结果 |
+
+> ✅ **图已按上表重写**（WorkingMemory → Switch → LLM/SubAgent → FeishuIM）。无 ShellExec（ADR-004）。
 
 ### FeishuIM 可复用块（`PolarUI/lib/feishu-im/`）
 
@@ -123,12 +131,19 @@ node tests/run.mjs          # mock LLM 链路 + 胡友财情景 QA
 5. PolarClaw 路由：飞书 PolarClaw_Rr Bot 发 `@套辞`
 6. PolarPrivate 填写 `feishu.rr.*` Secret + `FEISHU_RR_*` env
 
-## CLI  smoke test
+## Graph engine smoke test
+
+```bash
+cd ~/Polarisor/PolarUI
+node lib/run-graph-cli.mjs \
+  --workflow taoci-outreach \
+  --conversation-id test-001 \
+  --message "想套辞胡友财老师，药大制药工程大三"
+```
+
+或跑完整测试套件：
 
 ```bash
 cd ~/Polarisor/PolarUI/workflows/taoci-outreach
-node harness/index.mjs \
-  --conversation-id test-001 \
-  --message "想套辞胡友财老师，药大制药工程大三" \
-  --files "/path/to/resume.pdf"
+node tests/run.mjs
 ```

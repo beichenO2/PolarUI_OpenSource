@@ -1,130 +1,88 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { setCompleteOverride, clearCompleteOverride } from '../../harness/lib/claude-core.mjs';
-import { dispatch } from '../../harness/lib/state-machine.mjs';
-import {
-  mockStep0FirstTurn,
-  mockStep0Ready,
-  mockStep1Synthesize,
-  mockStep2Draft,
-  mockStep2Locked,
-  mockStep3Prep,
-  mockSubAgent,
-  TEACHER,
-  STUDENT_PROFILE,
-} from '../mocks/llm-responses.mjs';
+import { STUDENT_PROFILE, TEACHER } from '../mocks/llm-responses.mjs';
 
-describe('taoci state machine (mock LLM)', () => {
+describe('taoci state machine (graph engine)', () => {
   let tmpDir;
 
   before(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), 'taoci-test-'));
-    process.env.TAOCI_SESSION_DIR = tmpDir;
+    tmpDir = await mkdtemp(join(tmpdir(), 'taoci-sm-'));
+    process.env.TAOCI_USE_CLAUDE_CLI = '0';
+    process.env.TAOCI_MOCK_LLM = '1';
     process.env.TAOCI_MOCK_PDF = '1';
+    process.env.TAOCI_MOCK_FEISHU = '1';
+    process.env.TAOCI_SESSION_DIR = tmpDir;
+    delete process.env.POLARUI_MOCK_LLM;
+    delete process.env.POLARUI_MOCK_TOOLCALL;
+    const { resetHeadlessEngine } = await import('../../../../lib/headless-engine.mjs');
+    const { resetMockRegistration } = await import('../../../../lib/test-mocks/register.mjs');
+    const { resetTaociRegistration } = await import('../../../../lib/taoci-graph/register.mjs');
+    resetHeadlessEngine();
+    resetMockRegistration();
+    resetTaociRegistration();
   });
 
   after(async () => {
-    clearCompleteOverride();
-    delete process.env.TAOCI_SESSION_DIR;
+    delete process.env.TAOCI_USE_CLAUDE_CLI;
+    delete process.env.TAOCI_MOCK_LLM;
     delete process.env.TAOCI_MOCK_PDF;
+    delete process.env.TAOCI_SESSION_DIR;
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  beforeEach(() => {
-    clearCompleteOverride();
+  async function runTurn(conv, message) {
+    const { runWorkflowGraph } = await import('../../../../lib/run-graph.mjs');
+    const result = await runWorkflowGraph({
+      workflowId: 'taoci-outreach',
+      inputs: { conversationId: conv, message },
+    });
+    const sess = JSON.parse(await readFile(join(tmpDir, `${conv}.json`), 'utf8'));
+    return { result, session: sess };
+  }
+
+  it('S0 首轮：缺信息，留在 S0_Clarify', async () => {
+    const conv = `sm-s0-${Date.now()}`;
+    const { result, session } = await runTurn(conv, '想套辞一位老师');
+    assert.ok(result.ok);
+    assert.equal(session.step, 'S0_Clarify');
+    assert.ok(result.node_traces.includes('TaociSessionLoad'));
+    assert.ok(result.node_traces.includes('Switch'));
+    assert.ok(result.node_traces.includes('LLM'));
+    assert.ok(result.node_traces.includes('TaociSessionSave'));
+    assert.ok(!result.node_traces.includes('TaociSubAgent'));
   });
 
-  it('S0 → S1 when teacher + student ready', async () => {
-    const responses = [mockStep0FirstTurn(), mockStep0Ready()];
-    setCompleteOverride(async () => responses.shift() ?? mockStep0Ready());
-
-    const session = {
-      step: 'S0_Clarify',
-      teacher: { name: '', institution: '', url: '' },
-      student: { profile: '', files: [] },
-      research: null,
-      selected_direction: null,
-      outreach_draft: null,
-      artifacts: {},
-    };
-
-    const r1 = await dispatch(session, '想套辞胡友财老师', '');
-    assert.equal(session.step, 'S0_Clarify');
-    assert.equal(r1.ready, false);
-
-    const r2 = await dispatch(session, STUDENT_PROFILE, '');
+  it('S0 → S1：补齐 teacher + profile', async () => {
+    const conv = `sm-s0s1-${Date.now()}`;
+    await runTurn(conv, '想套辞胡友财老师，协和药物所');
+    const { session } = await runTurn(conv, STUDENT_PROFILE);
     assert.equal(session.step, 'S1_Research');
     assert.equal(session.teacher.name, TEACHER.name);
-    assert.match(r2.reply, /调研/);
+    assert.ok(session.student.profile.includes('郭韵怡'));
   });
 
-  it('S1 → S2 after research synthesize', async () => {
-    const responses = [
-      mockSubAgent(),
-      mockSubAgent(),
-      mockSubAgent(),
-      mockStep1Synthesize(),
-    ];
-    setCompleteOverride(async () => responses.shift() ?? mockStep1Synthesize());
-
-    const session = {
-      step: 'S1_Research',
-      teacher: TEACHER,
-      student: { profile: STUDENT_PROFILE, files: [] },
-      research: null,
-      selected_direction: null,
-      outreach_draft: null,
-      artifacts: {},
-    };
-
-    const r = await dispatch(session, '继续', '');
+  it('S1 → S2：调研完成', async () => {
+    const conv = `sm-s1s2-${Date.now()}`;
+    await runTurn(conv, '想套辞胡友财老师，药大制药工程大三');
+    await runTurn(conv, STUDENT_PROFILE);
+    const { result, session } = await runTurn(conv, '继续调研');
+    assert.ok(result.ok);
     assert.equal(session.step, 'S2_Select');
-    assert.ok(Array.isArray(r.direction_options));
+    assert.ok(result.node_traces.includes('TaociSubAgent'));
   });
 
-  it('S2 → S3 when direction locked', async () => {
-    const responses = [mockStep2Draft(), mockStep2Locked()];
-    setCompleteOverride(async () => responses.shift() ?? mockStep2Locked());
-
-    const session = {
-      step: 'S2_Select',
-      teacher: TEACHER,
-      student: { profile: STUDENT_PROFILE, files: [] },
-      research: { reputation: {}, authorship: {}, directions: {} },
-      selected_direction: null,
-      outreach_draft: null,
-      artifacts: {},
-    };
-
-    await dispatch(session, '看看话术', '');
-    const r = await dispatch(session, '确认方向 A', '');
-    assert.equal(session.step, 'S3_DeepPrep');
-    assert.ok(session.outreach_draft);
-    assert.ok(r.pdf_path);
-  });
-
-  it('S3 produces mock_qa ≥10 with required questions', async () => {
-    setCompleteOverride(async () => mockStep3Prep());
-
-    const session = {
-      step: 'S3_DeepPrep',
-      teacher: TEACHER,
-      student: { profile: STUDENT_PROFILE, files: [] },
-      research: {},
-      selected_direction: { title: '托酚酮杂萜' },
-      outreach_draft: '胡老师您好…',
-      artifacts: {},
-    };
-
-    const r = await dispatch(session, '生成深度准备', '');
-    assert.ok(Array.isArray(r.mock_qa));
-    assert.ok(r.mock_qa.length >= 10);
-    const qs = r.mock_qa.map((x) => x.q).join('\n');
-    assert.match(qs, /为什么.*细分领域/);
-    assert.match(qs, /胜任/);
-    assert.ok(r.pdf_path);
+  it('S2 → S3 → done：确认方向并生成深度材料', async () => {
+    const conv = `sm-s2done-${Date.now()}`;
+    await runTurn(conv, '想套辞胡友财老师，药大制药工程大三');
+    await runTurn(conv, STUDENT_PROFILE);
+    await runTurn(conv, '继续调研');
+    await runTurn(conv, '看看套辞话术');
+    await runTurn(conv, '确认方向 A');
+    const { session } = await runTurn(conv, '生成深度准备材料');
+    assert.equal(session.step, 'done');
+    assert.ok(session.artifacts.prep_pdf || session.artifacts.overview_pdf);
   });
 });

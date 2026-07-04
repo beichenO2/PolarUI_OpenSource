@@ -2,6 +2,13 @@
 
 > 节点图可视化编辑器 + Workflow 引擎：正则化元件、Hub 对接、桌面应用
 
+## Workflow 撰写
+
+新建或修改 workflow 时必读：
+
+- `PolarUI/docs/ARCHITECTURE.md` — 架构原则
+- `PolarUI/skills/polarui-workflow-authoring/SKILL.md` — 七步流程
+
 ## 核心信息
 
 | 维度 | 值 |

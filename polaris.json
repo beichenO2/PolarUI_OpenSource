@@ -1,0 +1,113 @@
+{
+  "name": "PolarUI",
+  "_meta": {
+    "schema_version": "1.0",
+    "last_synced_at": "2026-07-04T11:30:00+08:00"
+  },
+  "description": "PolarUI — ComfyUI 风格 workflow 编辑器与图执行引擎；Harness = .lg.json 图本身。",
+  "tier": "platform",
+  "status": "active",
+  "version": "0.1.0",
+  "requirements": [
+    {
+      "id": "R1",
+      "need": "所见即所得：图上明面组件即全部逻辑",
+      "approach": "ADR + docs/ARCHITECTURE.md；Switch 连明面节点；Harness = 图",
+      "features": [
+        {
+          "name": "架构文档 SSoT",
+          "description": "docs/ARCHITECTURE.md + decisions/001–004 + skills 对齐",
+          "status": "done",
+          "behavior": [
+            "WYSIWYG、Harness=图、无 ShellExec、ToolCall 复合组件",
+            "废弃 ToolCall 内部分发方案文档化"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-07-04: docs/ARCHITECTURE.md, decisions/, skills 更新"
+          ]
+        },
+        {
+          "name": "Graph engine headless runner",
+          "description": "lib/run-graph.mjs + run-graph-cli.mjs；LG 图经 S4t 单路径执行",
+          "status": "done",
+          "behavior": [
+            "lib/headless-engine.mjs 轮询 node-defs + overlay 注册",
+            "executeGraph via dist bundle + jsdom shim",
+            "patch-lg-runner: library=LG → S4t (_lg_edges 条件路由)"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-04: taoci S0 + react-replay + toolcall-graph 测试通过"
+          ]
+        },
+        {
+          "name": "ToolCall 复合组件（ADR-003）",
+          "description": "lib/toolcall-graph/register.mjs runtime overlay；GUI 待做",
+          "status": "done",
+          "behavior": [
+            "intent-only LLM + tool_definitions + skill_search/activate",
+            "bundle patch-toolcall-executor.mjs 产出 branch/tool/tool_list",
+            "Switch→明面工具节点 via _lg_edges"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/toolcall-graph/register.test.mjs",
+            "workflows/tests/react-replay-graph.test.mjs",
+            "npm run patch:toolcall (postbuild)"
+          ]
+        },
+        {
+          "name": "无 ShellExec（ADR-004）",
+          "description": "node-def deprecated；全部 workflow 已迁移",
+          "status": "done",
+          "behavior": [
+            "tools-system.json ShellExec deprecated",
+            "migrate-workflows-no-shellexec.mjs：ShellExec→CodeExec(shell)",
+            "validate-workflows-no-shellexec.mjs 门禁 78 文件"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-04: 20 workflow 迁移，0 ShellExec 残留"
+          ]
+        },
+        {
+          "name": "Harness 即图（ADR-002）",
+          "description": "PolarClaw 调 graph engine，非 spawn harness CLI",
+          "status": "done",
+          "behavior": [
+            "taoci-route.ts → run-graph-cli.mjs",
+            "bridge.mjs → runTaociGraph"
+          ],
+          "test_status": "passed",
+          "evidence": []
+        },
+        {
+          "name": "Workflow 编写 Skill",
+          "description": "polarui-workflow-authoring 七步 + WYSIWYG 检查清单",
+          "status": "done",
+          "behavior": [
+            "skills/polarui-workflow-authoring/SKILL.md",
+            "references/wysiwyg-and-react.md"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "套辞 outreach workflow",
+          "description": "飞书多轮套辞；WorkingMemory + Switch(step) + FeishuIM",
+          "status": "done",
+          "behavior": [
+            "taoci-outreach.lg.json WYSIWYG 无 ShellExec",
+            "lib/taoci-graph/ 明面 executor；harness/ 已删除",
+            "huyoucai-qa 多轮情景跑图引擎"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "workflows/taoci-outreach/tests/run.mjs 全绿（2026-07-04）"
+          ]
+        }
+      ]
+    }
+  ]
+}

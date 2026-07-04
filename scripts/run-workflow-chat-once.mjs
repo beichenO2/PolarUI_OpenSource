@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * PolarUI headless chat — PolarClaw /api/workflow/chat 调用
- * taoci-outreach workflow 走 harness 直连
+ * PolarUI headless — graph engine 执行 workflow
+ * PolarClaw /api/workflow/chat 调用
  */
-import { runTaociHarness } from '../workflows/taoci-outreach/feishu/bridge.mjs';
+import { runWorkflowGraph } from '../lib/run-graph.mjs';
 
 function parseArgs(argv) {
-  const out = { workflow: '', conversationId: '', message: '', userId: '' };
+  const out = { workflow: '', conversationId: '', message: '', userId: '', files: '' };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--workflow') out.workflow = argv[++i];
     else if (argv[i] === '--conversation-id') out.conversationId = argv[++i];
     else if (argv[i] === '--message') out.message = argv[++i];
     else if (argv[i] === '--user-id') out.userId = argv[++i];
+    else if (argv[i] === '--files') out.files = argv[++i];
   }
   return out;
 }
@@ -23,15 +24,27 @@ if (!args.workflow || !args.conversationId || !args.message) {
   process.exit(1);
 }
 
-const result = runTaociHarness({
-  conversationId: args.conversationId,
-  message: args.message,
-  files: [],
-});
+try {
+  const result = await runWorkflowGraph({
+    workflowId: args.workflow,
+    inputs: {
+      conversationId: args.conversationId,
+      message: args.message,
+      userId: args.userId,
+      files: args.files ? args.files.split(',').filter(Boolean) : [],
+    },
+  });
 
-console.log(JSON.stringify({
-  content: result.reply,
-  step: result.step,
-  pdf_path: result.pdf_path,
-  ...result,
-}));
+  console.log(
+    JSON.stringify({
+      content: typeof result.merged_output === 'string' ? result.merged_output : JSON.stringify(result.merged_output ?? ''),
+      node_traces: result.node_traces,
+      engine: 'graph',
+      ok: result.ok,
+      ...result,
+    }),
+  );
+} catch (err) {
+  console.error(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+  process.exit(1);
+}
