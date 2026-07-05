@@ -33,28 +33,32 @@
           "status": "done",
           "behavior": [
             "lib/headless-engine.mjs 轮询 node-defs + overlay 注册",
+            "dist/assets/headless.mjs + __POLAR_HEADLESS__ 跳过 Vue mount",
+            "patch-headless-entry.mjs 写入 build 链",
             "executeGraph via dist bundle + jsdom shim",
             "patch-lg-runner: library=LG → S4t (_lg_edges 条件路由)"
           ],
           "test_status": "passed",
           "evidence": [
-            "2026-07-04: taoci S0 + react-replay + toolcall-graph 测试通过"
+            "lib/headless-engine.test.mjs",
+            "2026-07-05: taoci + react-replay + toolcall-graph 测试通过"
           ]
         },
         {
           "name": "ToolCall 复合组件（ADR-003）",
-          "description": "lib/toolcall-graph/register.mjs runtime overlay；GUI 待做",
+          "description": "lib/toolcall-graph/register.mjs runtime overlay + dist/toolcall-editor GUI",
           "status": "done",
           "behavior": [
             "intent-only LLM + tool_definitions + skill_search/activate",
             "bundle patch-toolcall-executor.mjs 产出 branch/tool/tool_list",
+            "dist/toolcall-editor/ 画布侧栏工具列表编辑器 + skill 搜索加载",
             "Switch→明面工具节点 via _lg_edges"
           ],
           "test_status": "passed",
           "evidence": [
             "lib/toolcall-graph/register.test.mjs",
-            "workflows/tests/react-replay-graph.test.mjs",
-            "npm run patch:toolcall (postbuild)"
+            "lib/toolcall-gui/tool-list.test.mjs",
+            "workflows/tests/react-replay-graph.test.mjs"
           ]
         },
         {

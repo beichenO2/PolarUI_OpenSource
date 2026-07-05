@@ -84,18 +84,18 @@ Skill 执行：通常仍在同一 ReAct 环；若需子 Agent 级嵌套，用 **
 - [x] `docs/ARCHITECTURE.md`、`decisions/`、`polaris.json`、skills 对齐上述原则
 - [ ] `WORKFLOW.spec.md` / 任务书交叉引用更新
 
-### 阶段 B — 基础设施（约 90%）
+### 阶段 B — 基础设施（完成）
 
 - [x] 移除 ToolCall 内部分发（W5t patch、`tool-dispatch.mjs`）
 - [x] `lib/headless-engine.mjs` — 轮询 node-defs 就绪 + overlay executor 注册
 - [x] `lib/run-graph.mjs` — headless executeGraph（经 headless-engine，非固定 sleep）
 - [x] `lib/toolcall-graph/register.mjs` — ADR-003 runtime overlay（intent-only LLM + `_lg_edges` 路由）
 - [x] `scripts/patch-toolcall-executor.mjs` — bundle ToolCall 产出 branch/tool/tool_list，不内部分发
-- [x] `npm run build` 后自动 `patch:lg-runner` + `patch:toolcall`
+- [x] `npm run build` 后自动 `patch:lg-runner` + `patch:toolcall` + `patch:headless`
 - [x] `test-lg-react-replay.lg.json` — Switch→明面工具节点条件路由 + 图引擎测试
 - [x] claude-code / hermes / hermes-react-replay / polarclaw-feishu `_lg_edges` 工具路由
-- [ ] ToolCall GUI 复合组件（工具列表编辑器）
-- [ ] 独立 headless bundle entry（避免 Vue mount 副作用）
+- [x] ToolCall GUI 复合组件（`dist/toolcall-editor/` 工具列表编辑器 + skill 加载）
+- [x] 独立 headless bundle entry（`__POLAR_HEADLESS__` + `dist/assets/headless.mjs`，跳过 Vue mount）
 
 ### 阶段 C — 具体 workflow（完成）
 
