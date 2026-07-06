@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build && npm run patch:lg-runner && npm run patch:toolcall && npm run patch:toolcall-gui && npm run patch:headless && npm run generate:toolcall-catalog",
+    "build": "vue-tsc --noEmit && vite build && npm run patch:lg-runner && npm run patch:toolcall && npm run patch:toolcall-gui && npm run patch:headless && npm run patch:gui-overlay && npm run patch:llm-proxy-qcsa && npm run generate:toolcall-catalog && npm run sync:workflows",
+    "patch:gui-overlay": "node scripts/patch-gui-overlay-boot.mjs",
+    "sync:workflows": "node scripts/sync-workflows.mjs",
     "generate:toolcall-catalog": "node scripts/generate-toolcall-catalog.mjs",
     "patch:toolcall-gui": "node scripts/patch-toolcall-gui.mjs",
     "test:toolcall-gui": "node lib/toolcall-gui/tool-list.test.mjs",
@@ -23,7 +25,10 @@
     "patch:lg-runner": "node scripts/patch-lg-runner.mjs",
     "patch:toolcall": "node scripts/patch-toolcall-executor.mjs",
     "patch:headless": "node scripts/patch-headless-entry.mjs",
+    "patch:llm-proxy-qcsa": "node scripts/patch-llm-proxy-qcsa.mjs",
     "test:headless": "node --test lib/headless-engine.test.mjs",
+    "test:gui-overlay": "node --test lib/gui-overlay.test.mjs lib/gui-overlay-browser.test.mjs",
+    "test:preflight": "node lib/deploy-preflight-cli.mjs --workflow taoci-outreach",
     "test:toolcall-graph": "node lib/toolcall-graph/register.test.mjs",
     "test:react-replay": "node --test workflows/tests/react-replay-graph.test.mjs",
     "test:coverage": "ECOLOGY_COVERAGE_MIN=100 node scripts/audit-ecology-coverage.mjs",
@@ -32,6 +37,7 @@
     "electron:build": "npm run build && electron-builder --mac dmg"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.68.0",
     "@types/dagre": "^0.7.54",
     "dagre": "^0.8.5",
     "elkjs": "^0.9.3",

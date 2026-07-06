@@ -2,114 +2,218 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-04T11:30:00+08:00"
+    "last_synced_at": "2026-07-06T21:30:00+08:00"
   },
-  "description": "PolarUI — ComfyUI 风格 workflow 编辑器与图执行引擎；Harness = .lg.json 图本身。",
+  "description": "PolarUI — ComfyUI 风格 workflow 编辑器与图执行引擎。Workflow 只管数据 IO；部署层（PolarClaw）管渠道与会话。",
   "tier": "platform",
   "status": "active",
   "version": "0.1.0",
   "requirements": [
     {
       "id": "R1",
-      "need": "所见即所得：图上明面组件即全部逻辑",
-      "approach": "ADR + docs/ARCHITECTURE.md；Switch 连明面节点；Harness = 图",
+      "need": "测试开发阶段 — workflow 纯数据 IO",
+      "approach": "graph engine + mock + benchmark；WYSIWYG 图内原则 ADR-001–004",
       "features": [
         {
           "name": "架构文档 SSoT",
-          "description": "docs/ARCHITECTURE.md + decisions/001–004 + skills 对齐",
+          "description": "docs/SSoT.md + ARCHITECTURE.md + ROADMAP.md + decisions/",
           "status": "done",
           "behavior": [
-            "WYSIWYG、Harness=图、无 ShellExec、ToolCall 复合组件",
-            "废弃 ToolCall 内部分发方案文档化"
+            "两阶段隔离 ADR-005",
+            "最简部署 MVP ADR-006",
+            "记忆拼接搁置 R3"
           ],
           "test_status": "not_tested",
           "evidence": [
-            "2026-07-04: docs/ARCHITECTURE.md, decisions/, skills 更新"
+            "2026-07-06: docs/SSoT.md, ARCHITECTURE.md, ROADMAP.md, ADR-005/006"
           ]
         },
         {
           "name": "Graph engine headless runner",
-          "description": "lib/run-graph.mjs + run-graph-cli.mjs；LG 图经 S4t 单路径执行",
+          "description": "lib/run-graph.mjs + run-graph-cli.mjs",
           "status": "done",
           "behavior": [
             "lib/headless-engine.mjs 轮询 node-defs + overlay 注册",
-            "dist/assets/headless.mjs + __POLAR_HEADLESS__ 跳过 Vue mount",
-            "patch-headless-entry.mjs 写入 build 链",
-            "executeGraph via dist bundle + jsdom shim",
-            "patch-lg-runner: library=LG → S4t (_lg_edges 条件路由)"
+            "dist/assets/headless.mjs + __POLAR_HEADLESS__",
+            "patch-lg-runner: LG 图 S4t 单路径执行"
           ],
           "test_status": "passed",
           "evidence": [
             "lib/headless-engine.test.mjs",
-            "2026-07-05: taoci + react-replay + toolcall-graph 测试通过"
+            "2026-07-05: taoci + react-replay 测试通过"
           ]
         },
         {
           "name": "ToolCall 复合组件（ADR-003）",
-          "description": "lib/toolcall-graph/register.mjs runtime overlay + dist/toolcall-editor GUI",
+          "description": "lib/toolcall-graph/register.mjs + dist/toolcall-editor",
           "status": "done",
           "behavior": [
-            "intent-only LLM + tool_definitions + skill_search/activate",
-            "bundle patch-toolcall-executor.mjs 产出 branch/tool/tool_list",
-            "dist/toolcall-editor/ 画布侧栏工具列表编辑器 + skill 搜索加载",
-            "Switch→明面工具节点 via _lg_edges"
+            "intent-only LLM + _lg_edges 路由",
+            "Switch→明面工具节点"
           ],
           "test_status": "passed",
           "evidence": [
             "lib/toolcall-graph/register.test.mjs",
-            "lib/toolcall-gui/tool-list.test.mjs",
             "workflows/tests/react-replay-graph.test.mjs"
           ]
         },
         {
           "name": "无 ShellExec（ADR-004）",
-          "description": "node-def deprecated；全部 workflow 已迁移",
+          "description": "全部 workflow 已迁移",
           "status": "done",
           "behavior": [
-            "tools-system.json ShellExec deprecated",
-            "migrate-workflows-no-shellexec.mjs：ShellExec→CodeExec(shell)",
-            "validate-workflows-no-shellexec.mjs 门禁 78 文件"
+            "validate-workflows-no-shellexec.mjs 门禁"
           ],
           "test_status": "passed",
           "evidence": [
-            "2026-07-04: 20 workflow 迁移，0 ShellExec 残留"
+            "2026-07-04: 0 ShellExec 残留"
           ]
         },
         {
-          "name": "Harness 即图（ADR-002）",
-          "description": "PolarClaw 调 graph engine，非 spawn harness CLI",
+          "name": "套辞 outreach workflow",
+          "description": "taoci-outreach.lg.json WYSIWYG 无 ShellExec",
           "status": "done",
           "behavior": [
-            "taoci-route.ts → run-graph-cli.mjs",
-            "bridge.mjs → runTaociGraph"
+            "lib/taoci-graph/ 明面 executor",
+            "huyoucai-qa 多轮情景跑图引擎",
+            ".sessions/{conversation_id}.json"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "workflows/taoci-outreach/tests/run.mjs 全绿（2026-07-06）"
+          ]
+        },
+        {
+          "name": "套辞 Claude Code CLI core",
+          "description": "claude-core.mjs 经 @anthropic-ai/claude-code CLI",
+          "status": "in_progress",
+          "behavior": [
+            "TAOCI_USE_CLAUDE_CLI=1 默认",
+            "TAOCI_MOCK_LLM=1 测试走 mock"
+          ],
+          "test_status": "partial",
+          "evidence": [
+            "lib/taoci-graph/claude-core.test.mjs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "need": "部署阶段 MVP — 复用 PolarClaw，画布一键上线",
+      "approach": "ADR-006：CLI + Chat 壳；preflight gate；gui-overlay",
+      "features": [
+        {
+          "name": "GUI executor overlay",
+          "description": "浏览器 TaociSessionLoad/Save/SubAgent",
+          "status": "done",
+          "behavior": [
+            "lib/gui-overlay.mjs 分流 Node/Browser",
+            "patch-gui-overlay-boot.mjs 纳入 build",
+            "test:gui-overlay 通过"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/gui-overlay.test.mjs",
+            "lib/gui-overlay-browser.test.mjs"
+          ]
+        },
+        {
+          "name": "dist/workflows 同步",
+          "description": "build 后 sync-workflows.mjs",
+          "status": "done",
+          "behavior": [
+            "仅复制 .lg.json + registry-entry.json",
+            "跳过 .sessions / tests / prompts"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "scripts/sync-workflows.mjs"
+          ]
+        },
+        {
+          "name": "Deploy preflight",
+          "description": "上线前检查 PolarPrivate/Vault/Feishu/xelatex/executor",
+          "status": "done",
+          "behavior": [
+            "lib/deploy-preflight.mjs",
+            "PolarClaw PUT /api/deployments 412 gate"
+          ],
+          "test_status": "partial",
+          "evidence": [
+            "npm run test:preflight"
+          ]
+        },
+        {
+          "name": "CLI 部署通路",
+          "description": "PolarClaw → run-graph-cli.mjs",
+          "status": "done",
+          "behavior": [
+            "taoci-route.ts 调 graph engine",
+            "飞书 IM 在 PolarClaw 侧"
           ],
           "test_status": "passed",
           "evidence": []
         },
         {
-          "name": "Workflow 编写 Skill",
-          "description": "polarui-workflow-authoring 七步 + WYSIWYG 检查清单",
-          "status": "done",
+          "name": "Web 部署（Chat 壳）",
+          "description": "PolarClaw /api/workflow/chat + /chat?workflow=xxx",
+          "status": "planned",
           "behavior": [
-            "skills/polarui-workflow-authoring/SKILL.md",
-            "references/wysiwyg-and-react.md"
+            "浏览器 Chat UI 调 workflow",
+            "conversation_id 单层 key"
           ],
           "test_status": "not_tested",
           "evidence": []
         },
         {
-          "name": "套辞 outreach workflow",
-          "description": "飞书多轮套辞；WorkingMemory + Switch(step) + FeishuIM",
-          "status": "done",
+          "name": "画布一键上线",
+          "description": "PolarUI GUI → PUT /api/deployments → preflight → chat_url",
+          "status": "planned",
           "behavior": [
-            "taoci-outreach.lg.json WYSIWYG 无 ShellExec",
-            "lib/taoci-graph/ 明面 executor；harness/ 已删除",
-            "huyoucai-qa 多轮情景跑图引擎"
+            "GUI 部署按钮",
+            "preflight 失败展示错误"
           ],
-          "test_status": "passed",
-          "evidence": [
-            "workflows/taoci-outreach/tests/run.mjs 全绿（2026-07-04）"
-          ]
+          "test_status": "not_tested",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "need": "部署层 ↔ workflow 记忆拼接（搁置）",
+      "approach": "MVP 用单层 conversation_id；情景/线程方案待讨论",
+      "features": [
+        {
+          "name": "记忆拼接方案",
+          "description": "用户/情景/线程 与 WorkingMemory/SessionLoad/Save 对齐",
+          "status": "planned",
+          "behavior": [
+            "对话线程：同情景换问题",
+            "情景切换：如套辞另一个老师",
+            "方案选型见 docs/ROADMAP.md R3"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "need": "独立网站方案（搁置，R3 后）",
+      "approach": "~/Desktop/Web_related/ 模版站 + 用户名直登",
+      "features": [
+        {
+          "name": "预制模版网站",
+          "description": "每 workflow 独立文件夹，用户隔离 + 双层会话 UI",
+          "status": "planned",
+          "behavior": [
+            "工作目录 ~/Desktop/Web_related/",
+            "模版站 _template/",
+            "开源 Chat UI 调研已完成"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
         }
       ]
     }

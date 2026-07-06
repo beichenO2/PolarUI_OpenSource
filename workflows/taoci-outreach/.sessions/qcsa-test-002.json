@@ -1,0 +1,32 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "",
+    "institution": "",
+    "url": ""
+  },
+  "student": {
+    "profile": "",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "想套辞胡友财老师，中国药科大学制药工程大三",
+      "at": "2026-07-06T08:36:57.158Z"
+    },
+    {
+      "role": "assistant",
+      "content": "请补充：导师姓名/单位/主页链接，以及你的学校、专业、科研经历和意向方向。",
+      "at": "2026-07-06T08:37:08.661Z"
+    }
+  ],
+  "updated_at": "2026-07-06T08:37:08.661Z"
+}

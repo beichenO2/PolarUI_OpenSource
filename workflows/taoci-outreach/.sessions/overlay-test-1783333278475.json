@@ -1,0 +1,32 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "胡友财",
+    "institution": "北京协和医学院/药物所",
+    "url": "https://example.edu/hu"
+  },
+  "student": {
+    "profile": "",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "想套辞胡友财老师，药大大三",
+      "at": "2026-07-06T10:21:18.502Z"
+    },
+    {
+      "role": "assistant",
+      "content": "已记录导师信息，请补充：你的学校、专业、年级与科研经历。",
+      "at": "2026-07-06T10:21:18.505Z"
+    }
+  ],
+  "updated_at": "2026-07-06T10:21:18.505Z"
+}

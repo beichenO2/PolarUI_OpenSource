@@ -112,6 +112,26 @@ stateDiagram-v2
 
 飞书 **PolarClaw_Rr** Bot 上发送 **`@套辞`** 进入本 workflow（见 `PolarClaw/src/main.ts` + `taoci-route.ts`）。
 
+## Claude Code Core（Phase 2）
+
+生产路径（用户拍板 2026-07-06）：
+
+```
+claude-core.mjs
+  → npx @anthropic-ai/claude-code@2.1.160 --print --output-format json
+  → ANTHROPIC_BASE_URL=http://127.0.0.1:12791（anthropic-proxy-shim）
+  → PolarPrivate /v1/chat/completions
+```
+
+| 环境变量 | 默认 | 说明 |
+|----------|------|------|
+| `TAOCI_USE_CLAUDE_CLI` | `1` | `0` 时直连 PolarPrivate（测试用） |
+| `TAOCI_MOCK_LLM` | — | `1` 时走 mock，跳过 CLI |
+| `TAOCI_CLI_FALLBACK` | `1` | CLI 失败时 fallback PolarPrivate |
+| `ANTHROPIC_BASE_URL` | `http://127.0.0.1:12791` | shim 地址 |
+
+启动 shim：`node Reference/ClaudeCode/scripts/anthropic-proxy-shim.mjs`
+
 ## 测试（TDD）
 
 ```bash

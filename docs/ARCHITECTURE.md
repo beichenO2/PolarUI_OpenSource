@@ -1,119 +1,145 @@
-# PolarUI 架构原则
+# PolarUI 架构
 
-> **SSoT**：本文 + `decisions/` + `polaris.json`  
-> **实施顺序**：文档（本阶段）→ 基础设施 → 具体 workflow（如 taoci-outreach）
-
----
-
-## 1. 所见即所得（WYSIWYG）
-
-**图上能看见的明面组件 = 全部业务逻辑。**
-
-- 状态机、路由、LLM、工具、记忆、出站 — 必须在 `.lg.json` 节点与连线上可读
-- 禁止把逻辑藏在 executor 内部、外部 CLI、或未连线的占位节点
-- GUI 单步 trace 应能解释「这一步发生了什么、为什么走这条边」
-
-详见 [ADR-001](./../decisions/001-wysiwyg-principle.md)。
+> **SSoT 入口**：[`docs/SSoT.md`](./SSoT.md)  
+> **路线图**：[`docs/ROADMAP.md`](./ROADMAP.md)  
+> **进度**：[`polaris.json`](../polaris.json)
 
 ---
 
-## 2. Harness = PolarUI 图
+## 总览
 
-**Harness 不是文件夹，是 workflow 图本身。**
+PolarUI = ComfyUI 风格 workflow 编辑器 + 图执行引擎。
 
-| 正确 | 错误 |
+**核心分工**：
+
+| 层 | 职责 | 不负责 |
+|----|------|--------|
+| **Workflow（图）** | 数据变换：输入 JSON → 状态机/LLM/工具 → 输出 JSON | 用户从哪来、消息走哪个渠道 |
+| **部署层（PolarClaw 等）** | 用户身份、会话路由、渠道 I/O、上线 preflight | 业务状态机逻辑 |
+
+---
+
+## 两阶段（严格隔离）
+
+测试开发和部署是**两个独立阶段**，代码路径可以复用，但**设计约束不能混**。
+
+### 阶段一：测试开发
+
+**目标**：验证 workflow 逻辑正确。
+
+**契约**：
+
+```
+{ conversation_id, message, user_id?, files? }
+        ↓
+   graph engine (headless)
+        ↓
+{ ok, reply, step, session_snapshot?, node_traces }
+```
+
+**允许**：
+- 图上明面节点：WorkingMemory、TaociSessionLoad/Save、Switch、LLM、SubAgent
+- Mock executor（`TAOCI_MOCK_LLM=1`）
+- Benchmark 直连 `lib/run-graph-cli.mjs`
+- 测试用 `.sessions/{id}.json` 作为 workflow 内部记忆载体
+
+**禁止**：
+- FeishuIM 作为测试入口（飞书是部署渠道，不是测试夹具）
+- 在 executor 里藏渠道逻辑
+- 为测试方便在图外写 harness CLI
+
+### 阶段二：部署
+
+**目标**：让真实用户用上 workflow。
+
+**两种部署方案**（见 ADR-006）：
+
+| 方案 | 谁调 workflow | 渠道在哪 |
+|------|--------------|---------|
+| **CLI** | PolarClaw `run-graph-cli.mjs` | PolarClaw 侧（飞书 IM 等） |
+| **网站** | PolarClaw `/api/workflow/chat` | PolarClaw Chat 壳 |
+
+PolarUI 部署时只提供**干净的 IO 服务**——接收 `conversation_id + message`，返回 `reply + step`。
+
+**部署层额外职责**（workflow 不管）：
+- 用户隔离（username / user_id）
+- 会话路由（conversation_id 分配与查找）
+- 渠道适配（飞书收发、网页 Chat UI）
+- 上线 preflight（PolarPrivate、Vault、xelatex、executor 注册）
+
+### 记忆管理：已知难题 → 搁置
+
+Workflow 图内有记忆（WorkingMemory + SessionLoad/Save 节点）。  
+部署层也有记忆需求（用户 / 情景 / 对话线程）。
+
+**如何把部署层会话映射到 workflow 记忆，目前没有好方案。**  
+→ 记入 [`ROADMAP.md`](./ROADMAP.md) R3，MVP 阶段不解决。
+
+**MVP 妥协**：部署层只传 `conversation_id`，workflow 自己读写 `.sessions/{conversation_id}.json`。一层 key，不做情景/线程拆分。
+
+---
+
+## 图内原则（测试开发阶段也适用）
+
+### 1. 所见即所得（WYSIWYG）
+
+图上能看见的明面组件 = 全部业务逻辑。详见 [ADR-001](../decisions/001-wysiwyg-principle.md)。
+
+### 2. Harness = 图
+
+`taoci-outreach.lg.json` 就是 harness，不是 `harness/` 文件夹。详见 [ADR-002](../decisions/002-harness-is-the-graph.md)。
+
+### 3. 没有 ShellExec
+
+PolarUI workflow 不存在 ShellExec 组件。详见 [ADR-004](../decisions/004-no-shellexec.md)。
+
+### 4. ToolCall = 复合组件
+
+对齐 PolarClaw 工具模型；Switch 连明面工具节点。详见 [ADR-003](../decisions/003-toolcall-composite-component.md)。
+
+---
+
+## 运行时结构
+
+```
+workflows/*.lg.json          ← 图源（SSoT）
+        │
+        ├─ npm run build
+        │     ├─ dist/               ← GUI bundle
+        │     ├─ dist/workflows/     ← sync-workflows 同步
+        │     └─ dist/overlay/       ← gui-overlay（浏览器 executor）
+        │
+        ├─ lib/headless-engine.mjs   ← Node headless 入口
+        ├─ lib/run-graph-cli.mjs     ← CLI IO 契约
+        └─ lib/gui-overlay.mjs       ← 浏览器/Node executor 分流
+```
+
+**Executor 分流**：
+
+| 环境 | TaociSessionLoad/Save | FeishuIM | PDF compile |
+|------|----------------------|----------|-------------|
+| Node (headless) | `register.mjs` + 本地 fs | 完整实现 | xelatex |
+| Browser (GUI) | `register-gui.mjs` + Hub API | stub | 跳过 |
+
+---
+
+## 已废弃（勿引用）
+
+| 方案 | 说明 |
 |------|------|
-| `taoci-outreach.lg.json` 含 WorkingMemory → Switch → LLM → FeishuIM | `workflows/.../harness/index.mjs` 外包状态机 |
-| PolarClaw `@套辞` → 调 **graph engine** 执行 `.lg.json` | PolarClaw `spawnSync('node', harness/index.mjs)` 绕过图 |
-| 测试断言 `node_traces` 含预期 class_type | 只测 harness CLI stdout |
-
-详见 [ADR-002](./../decisions/002-harness-is-the-graph.md)。
+| ToolCall executor 内部分发 | 违反 WYSIWYG |
+| `workflows/*/harness/` CLI | Harness = 图 |
+| 测试阶段接 FeishuIM | 渠道属于部署层 |
 
 ---
 
-## 3. 没有 ShellExec
-
-PolarUI workflow **不存在 ShellExec 组件**（不是隐藏，是不存在）。
-
-- 不得用终端命令节点代替缺失能力
-- 不得 `node harness/*.mjs` 或任意 shell 外包
-- legacy 图 / node-defs 中的 ShellExec 待从 workflow 范式中移除（基础设施阶段）
-
-详见 [ADR-004](./../decisions/004-no-shellexec.md)。
-
----
-
-## 4. ToolCall = 复合组件（对齐 PolarClaw）
-
-ToolCall 是**图上的复合节点**，不是「在 executor 里偷偷 dispatch 工具」的黑盒。
-
-对齐 PolarClaw Agent 的工具模型：
-
-| PolarClaw | PolarUI ToolCall（目标） |
-|-----------|-------------------------|
-| 常驻 `tools.list()` | 节点 params / GUI 可见的 **工具列表** |
-| `skill_search` | 元工具：**搜索可用技能/工具** |
-| `skill_activate` | 元工具：**加载需要的工具** → 扩充工具列表 |
-| `tools.execute(name, args)` | Switch 连到 **明面工具节点**（FileRead、WebSearch、SubAgent…）执行 |
-| `runLoop` ReAct | LLM → Switch → ToolCall / 工具节点 → 回 LLM |
-
-**ReAct 工具执行**：Switch 的边连到图上的 FileRead、WebSearch、SubAgent 等节点 — **逻辑在边上，不在 ToolCall executor 内部**。
-
-Skill 执行：通常仍在同一 ReAct 环；若需子 Agent 级嵌套，用 **SubAgent** 或子图在图上显式表达。
-
-详见 [ADR-003](./../decisions/003-toolcall-composite-component.md)、`skills/polarui-workflow-authoring/references/toolcall-composite.md`。
-
----
-
-## 5. 已废弃方案（勿再引用）
-
-| 方案 | 状态 | 说明 |
-|------|------|------|
-| ToolCall executor 内部分发（`lib/tool-dispatch.mjs`、`W5t()` patch） | **deprecated** | 违反 WYSIWYG；基础设施阶段移除 |
-| ShellExec `palette_hidden` + ToolCall 内调 | **deprecated** | ShellExec 不应存在 |
-| 「禁止 Switch 并列工具节点」 | **deprecated** | 与 WYSIWYG 相反；Switch→明面工具节点才是正途 |
-
-旧 ADR：`decisions/001-toolcall-internal-dispatch.md`（已 superseded）。
-
----
-
-## 6. 实施路线图
-
-### 阶段 A — 文档
-
-- [x] `docs/ARCHITECTURE.md`、`decisions/`、`polaris.json`、skills 对齐上述原则
-- [ ] `WORKFLOW.spec.md` / 任务书交叉引用更新
-
-### 阶段 B — 基础设施（完成）
-
-- [x] 移除 ToolCall 内部分发（W5t patch、`tool-dispatch.mjs`）
-- [x] `lib/headless-engine.mjs` — 轮询 node-defs 就绪 + overlay executor 注册
-- [x] `lib/run-graph.mjs` — headless executeGraph（经 headless-engine，非固定 sleep）
-- [x] `lib/toolcall-graph/register.mjs` — ADR-003 runtime overlay（intent-only LLM + `_lg_edges` 路由）
-- [x] `scripts/patch-toolcall-executor.mjs` — bundle ToolCall 产出 branch/tool/tool_list，不内部分发
-- [x] `npm run build` 后自动 `patch:lg-runner` + `patch:toolcall` + `patch:headless`
-- [x] `test-lg-react-replay.lg.json` — Switch→明面工具节点条件路由 + 图引擎测试
-- [x] claude-code / hermes / hermes-react-replay / polarclaw-feishu `_lg_edges` 工具路由
-- [x] ToolCall GUI 复合组件（`dist/toolcall-editor/` 工具列表编辑器 + skill 加载）
-- [x] 独立 headless bundle entry（`__POLAR_HEADLESS__` + `dist/assets/headless.mjs`，跳过 Vue mount）
-
-### 阶段 C — 具体 workflow（完成）
-
-- [x] 重写 `taoci-outreach.lg.json`（Switch + LLM/SubAgent + FeishuIM，无 ShellExec）
-- [x] `lib/taoci-graph/` 明面节点 executor（TaociSessionLoad/Save/SubAgent）
-- [x] LG 条件边单路径执行（`scripts/patch-lg-runner.mjs` → LX 委托 S4t）
-- [x] 删除 `workflows/taoci-outreach/harness/`；逻辑在 `lib/taoci-graph/`
-- [x] 测试全改跑图引擎（state-machine + huyoucai-qa 多轮情景）
-
----
-
-## 7. 文档索引
+## 文档索引
 
 | 路径 | 内容 |
 |------|------|
+| `docs/SSoT.md` | 文档入口 |
+| `docs/ROADMAP.md` | 路线图 |
+| `docs/ARCHITECTURE.md` | 本文 |
 | `polaris.json` | 功能进度 |
-| `decisions/README.md` | ADR 索引 |
-| `skills/polarui-workflow-authoring/SKILL.md` | 七步撰写流程 |
-| `skills/polarui-workflow-authoring/references/wysiwyg-and-react.md` | WYSIWYG + ReAct 图结构 |
-| `skills/polarui-workflow-authoring/references/toolcall-composite.md` | ToolCall 与 PolarClaw 对照 |
-| `skills/taoci-outreach/SKILL.md` | 套辞专项 |
+| `decisions/` | ADR |
+| `skills/` | 操作指南 |
