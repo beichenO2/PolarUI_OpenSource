@@ -4,7 +4,7 @@
     "inputs": {},
     "params": {
       "content": "套辞 workflow 用户消息",
-      "channel": "feishu",
+      "channel": "web",
       "conversation_id": "{{conversation_id}}"
     }
   },
@@ -26,8 +26,18 @@
       "auto_compress": true
     }
   },
+  "2a": {
+    "class_type": "UserMemoryLoad",
+    "inputs": {
+      "memory": [
+        "2",
+        0
+      ]
+    },
+    "params": {}
+  },
   "3": {
-    "class_type": "TaociSessionLoad",
+    "class_type": "ScenarioMemoryLoad",
     "inputs": {
       "message": [
         "1",
@@ -80,7 +90,7 @@
     "params": {}
   },
   "12": {
-    "class_type": "TaociSessionSave",
+    "class_type": "ScenarioMemorySave",
     "inputs": {
       "llm_result": [
         "11",
@@ -130,7 +140,7 @@
     }
   },
   "26": {
-    "class_type": "TaociSessionSave",
+    "class_type": "ScenarioMemorySave",
     "inputs": {
       "llm_result": [
         "25",
@@ -171,7 +181,7 @@
     }
   },
   "32": {
-    "class_type": "TaociSessionSave",
+    "class_type": "ScenarioMemorySave",
     "inputs": {
       "llm_result": [
         "30",
@@ -200,7 +210,7 @@
     }
   },
   "42": {
-    "class_type": "TaociSessionSave",
+    "class_type": "ScenarioMemorySave",
     "inputs": {
       "llm_result": [
         "40",
@@ -209,40 +219,6 @@
     },
     "params": {
       "step": "S3_DeepPrep"
-    }
-  },
-  "50": {
-    "class_type": "FeishuIM",
-    "inputs": {
-      "text": [
-        "12",
-        1
-      ],
-      "pdf_path": [
-        "12",
-        2
-      ]
-    },
-    "params": {
-      "bot_name": "PolarClaw_Rr",
-      "action": "auto"
-    }
-  },
-  "51": {
-    "class_type": "FeishuIM",
-    "inputs": {
-      "text": [
-        "26",
-        1
-      ],
-      "pdf_path": [
-        "26",
-        2
-      ]
-    },
-    "params": {
-      "bot_name": "PolarClaw_Rr",
-      "action": "auto"
     }
   },
   "52": {
@@ -269,23 +245,6 @@
       "format": "json"
     }
   },
-  "54": {
-    "class_type": "FeishuIM",
-    "inputs": {
-      "text": [
-        "32",
-        1
-      ],
-      "pdf_path": [
-        "32",
-        2
-      ]
-    },
-    "params": {
-      "bot_name": "PolarClaw_Rr",
-      "action": "auto"
-    }
-  },
   "55": {
     "class_type": "Output",
     "inputs": {
@@ -296,23 +255,6 @@
     },
     "params": {
       "format": "json"
-    }
-  },
-  "56": {
-    "class_type": "FeishuIM",
-    "inputs": {
-      "text": [
-        "42",
-        1
-      ],
-      "pdf_path": [
-        "42",
-        2
-      ]
-    },
-    "params": {
-      "bot_name": "PolarClaw_Rr",
-      "action": "auto"
     }
   },
   "57": {
@@ -328,7 +270,7 @@
     }
   },
   "_name": "套辞助手 Taoci Outreach",
-  "_description": "WYSIWYG 状态机：WorkingMemory → Switch(step) → LLM/SubAgent → FeishuIM → Output。无 CodeExec。",
+  "_description": "WYSIWYG 状态机：PromptInput → WorkingMemory → Switch(step) → LLM/SubAgent → Output。无渠道节点。",
   "_category": "outreach",
   "_library": "LG",
   "_entry": "1",
@@ -347,6 +289,11 @@
     },
     {
       "from": "2",
+      "to": "2a",
+      "kind": "static"
+    },
+    {
+      "from": "2a",
       "to": "3",
       "kind": "static"
     },
@@ -391,11 +338,6 @@
     },
     {
       "from": "12",
-      "to": "50",
-      "kind": "static"
-    },
-    {
-      "from": "50",
       "to": "52",
       "kind": "static"
     },
@@ -421,11 +363,6 @@
     },
     {
       "from": "26",
-      "to": "51",
-      "kind": "static"
-    },
-    {
-      "from": "51",
       "to": "53",
       "kind": "static"
     },
@@ -436,11 +373,6 @@
     },
     {
       "from": "32",
-      "to": "54",
-      "kind": "static"
-    },
-    {
-      "from": "54",
       "to": "55",
       "kind": "static"
     },
@@ -451,11 +383,6 @@
     },
     {
       "from": "42",
-      "to": "56",
-      "kind": "static"
-    },
-    {
-      "from": "56",
       "to": "57",
       "kind": "static"
     }

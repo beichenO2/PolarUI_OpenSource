@@ -2,9 +2,9 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-06T21:30:00+08:00"
+    "last_synced_at": "2026-07-07T14:50:00+08:00"
   },
-  "description": "PolarUI — ComfyUI 风格 workflow 编辑器与图执行引擎。Workflow 只管数据 IO；部署层（PolarClaw）管渠道与会话。",
+  "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
   "status": "active",
   "version": "0.1.0",
@@ -74,7 +74,7 @@
           "description": "taoci-outreach.lg.json WYSIWYG 无 ShellExec",
           "status": "done",
           "behavior": [
-            "lib/taoci-graph/ 明面 executor",
+            "taoci-outreach.lg.json 无 FeishuIM 渠道节点",
             "huyoucai-qa 多轮情景跑图引擎",
             ".sessions/{conversation_id}.json"
           ],
@@ -100,12 +100,26 @@
     },
     {
       "id": "R2",
-      "need": "部署阶段 MVP — 复用 PolarClaw，画布一键上线",
-      "approach": "ADR-006：CLI + Chat 壳；preflight gate；gui-overlay",
+      "need": "网站部署 MVP — Chat 壳 + 画布一键上线",
+      "approach": "ADR-006：/api/workflow/chat；preflight；无飞书",
       "features": [
         {
+          "name": "workflow 去渠道节点",
+          "description": "taoci-outreach 移除 FeishuIM，Output 直连",
+          "status": "done",
+          "behavior": [
+            "ScenarioMemorySave → Output",
+            "gui-overlay 不注册 FeishuIM",
+            "preflight 移除飞书检查"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-07: taoci-outreach.lg.json 更新"
+          ]
+        },
+        {
           "name": "GUI executor overlay",
-          "description": "浏览器 TaociSessionLoad/Save/SubAgent",
+          "description": "浏览器 TaociSubAgent + memory-graph overlay",
           "status": "done",
           "behavior": [
             "lib/gui-overlay.mjs 分流 Node/Browser",
@@ -133,7 +147,7 @@
         },
         {
           "name": "Deploy preflight",
-          "description": "上线前检查 PolarPrivate/Vault/Feishu/xelatex/executor",
+          "description": "上线前检查 PolarPrivate/Vault/xelatex/executor",
           "status": "done",
           "behavior": [
             "lib/deploy-preflight.mjs",
@@ -143,17 +157,6 @@
           "evidence": [
             "npm run test:preflight"
           ]
-        },
-        {
-          "name": "CLI 部署通路",
-          "description": "PolarClaw → run-graph-cli.mjs",
-          "status": "done",
-          "behavior": [
-            "taoci-route.ts 调 graph engine",
-            "飞书 IM 在 PolarClaw 侧"
-          ],
-          "test_status": "passed",
-          "evidence": []
         },
         {
           "name": "Web 部署（Chat 壳）",
@@ -181,36 +184,202 @@
     },
     {
       "id": "R3",
-      "need": "部署层 ↔ workflow 记忆拼接（搁置）",
-      "approach": "MVP 用单层 conversation_id；情景/线程方案待讨论",
+      "need": "Workflow 记忆节点 — 用户/情景/会话三层",
+      "approach": "ADR-007：网站 SSoT；workflow Load/Save 增量；见 docs/MEMORY.md",
       "features": [
         {
-          "name": "记忆拼接方案",
-          "description": "用户/情景/线程 与 WorkingMemory/SessionLoad/Save 对齐",
-          "status": "planned",
+          "name": "记忆模块设计文档",
+          "description": "docs/MEMORY.md + ADR-007",
+          "status": "done",
           "behavior": [
-            "对话线程：同情景换问题",
-            "情景切换：如套辞另一个老师",
-            "方案选型见 docs/ROADMAP.md R3"
+            "网站 SSoT + workflow delta 契约",
+            "分层查看 UI：user/scenario/session 三页",
+            "确认队列 status=pending"
           ],
           "test_status": "not_tested",
-          "evidence": []
+          "evidence": [
+            "2026-07-07: docs/MEMORY.md, ADR-007"
+          ]
+        },
+        {
+          "name": "ScenarioMemoryLoad/Save 节点",
+          "description": "替换 TaociSessionLoad/Save 情景层",
+          "status": "done",
+          "behavior": [
+            "读 memory.scenario 快照",
+            "写 memory_delta.scenario"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/memory-graph/register.mjs",
+            "taoci-outreach.lg.json 已替换 TaociSessionLoad/Save",
+            "lib/memory-graph/register.test.mjs"
+          ]
+        },
+        {
+          "name": "SessionMemoryLoad/Save 节点",
+          "description": "会话 turns 读写",
+          "status": "done",
+          "behavior": [
+            "append_turns 自动合并"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/memory-graph/register.mjs"
+          ]
+        },
+        {
+          "name": "UserMemoryLoad 节点",
+          "description": "只读注入用户画像",
+          "status": "done",
+          "behavior": [
+            "无 UserMemorySave"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/memory-graph/register.mjs"
+          ]
         }
       ]
     },
     {
       "id": "R4",
-      "need": "独立网站方案（搁置，R3 后）",
-      "approach": "~/Desktop/Web_related/ 模版站 + 用户名直登",
+      "need": "Web 发行版 — LibreChat 套壳 + 分层记忆",
+      "approach": "ADR-008；~/Desktop/Web_related/；export-release 命名递增",
       "features": [
         {
-          "name": "预制模版网站",
-          "description": "每 workflow 独立文件夹，用户隔离 + 双层会话 UI",
+          "name": "网站规格与验收文档",
+          "description": "WEB_TEMPLATE + MEMORY + WEB_ACCEPTANCE + ADR-008",
+          "status": "done",
+          "behavior": [
+            "LibreChat 套壳 + README 引用声明",
+            "发行版模型：原名_1 递增",
+            "Admin L0用户 + L1情景 + L2会话",
+            "分层记忆查看 UI 规格",
+            "TDD 验收标准 AC-R/N/M/W/F"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-07-07: WEB_TEMPLATE, MEMORY, WEB_ACCEPTANCE, ADR-008"
+          ]
+        },
+        {
+          "name": "LibreChat fork _template/",
+          "description": "W0：~/Desktop/Web_related/_template/",
+          "status": "done",
+          "behavior": [
+            "MIT Attribution README",
+            "polar/ 改造层目录"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "AC-L01",
+            "~/Desktop/Web_related/_template/"
+          ]
+        },
+        {
+          "name": "三层侧栏（L0/L1/L2）",
+          "description": "情景-会话双层；admin 加 L0 用户栏",
+          "status": "done",
+          "behavior": [
+            "悬停联动展开",
+            "自动情景/会话命名"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "AC-N01~N04",
+            "polar/public/styles.css"
+          ]
+        },
+        {
+          "name": "分层记忆查看页",
+          "description": "/memory/user | /memory/scenario | /memory/session",
+          "status": "done",
+          "behavior": [
+            "三层独立入口，禁止合并 Tab",
+            "确认队列侧滑面板"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "AC-M01~M05",
+            "polar/routes/memory.mjs"
+          ]
+        },
+        {
+          "name": "多模态 ingest/出站",
+          "description": "全格式入站 + zip 解码 + PDF 出站",
+          "status": "done",
+          "behavior": [
+            "file-ingest 管道",
+            "xelatex PDF 卡片"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "AC-F01~F03",
+            "polar/lib/file-ingest.mjs"
+          ]
+        },
+        {
+          "name": "export-release.mjs",
+          "description": "双入口发行版编译导出 + 命名递增 + manifest 快照锁定",
+          "status": "done",
+          "behavior": [
+            "PolarUI Web POST /api/export-release + CLI 共用同一脚本",
+            "Step 0–10 编译流水线（见 WEB_EXPORT.md）",
+            "taoci-outreach → taoci-outreach_1 → _1_1",
+            "AC-R01~R05"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "scripts/export-release.mjs",
+            "scripts/export-release.test.mjs",
+            "~/Desktop/Web_related/taoci-outreach/"
+          ]
+        },
+        {
+          "name": "PolarUI Web 导出按钮",
+          "description": "画布顶栏「导出网站」spawn export-release.mjs",
+          "status": "done",
+          "behavior": [
+            "POST /api/export-release { workflow_id }",
+            "manifest.export_entry=gui",
+            "preflight 失败 412"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "vite.config.mjs exportReleaseMiddleware",
+            "AC-R05 export_entry=gui"
+          ]
+        },
+        {
+          "name": "自动化验收全绿",
+          "description": "npm run test:web-release",
+          "status": "done",
+          "behavior": [
+            "unit + api + e2e Playwright headless",
+            "人不手动验收"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-07: npm run test:web-release 全绿"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "need": "飞书渠道（搁置）",
+      "approach": "lib/feishu-im/ 已有；网站跑通后再接",
+      "features": [
+        {
+          "name": "飞书 IM 渠道",
+          "description": "FeishuIM 节点 + PolarClaw @套辞 + 凭证 preflight",
           "status": "planned",
           "behavior": [
-            "工作目录 ~/Desktop/Web_related/",
-            "模版站 _template/",
-            "开源 Chat UI 调研已完成"
+            "workflow 可选 FeishuIM 渠道节点",
+            "PolarClaw 飞书收发",
+            "feishu.rr.* 凭证检查",
+            "见 docs/ROADMAP.md R5"
           ],
           "test_status": "not_tested",
           "evidence": []

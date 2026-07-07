@@ -13,16 +13,17 @@ describe('taoci state machine (graph engine)', () => {
     process.env.TAOCI_USE_CLAUDE_CLI = '0';
     process.env.TAOCI_MOCK_LLM = '1';
     process.env.TAOCI_MOCK_PDF = '1';
-    process.env.TAOCI_MOCK_FEISHU = '1';
     process.env.TAOCI_SESSION_DIR = tmpDir;
     delete process.env.POLARUI_MOCK_LLM;
     delete process.env.POLARUI_MOCK_TOOLCALL;
     const { resetHeadlessEngine } = await import('../../../../lib/headless-engine.mjs');
     const { resetMockRegistration } = await import('../../../../lib/test-mocks/register.mjs');
     const { resetTaociRegistration } = await import('../../../../lib/taoci-graph/register.mjs');
+    const { resetMemoryRegistration } = await import('../../../../lib/memory-graph/register.mjs');
     resetHeadlessEngine();
     resetMockRegistration();
     resetTaociRegistration();
+    resetMemoryRegistration();
   });
 
   after(async () => {
@@ -48,10 +49,10 @@ describe('taoci state machine (graph engine)', () => {
     const { result, session } = await runTurn(conv, '想套辞一位老师');
     assert.ok(result.ok);
     assert.equal(session.step, 'S0_Clarify');
-    assert.ok(result.node_traces.includes('TaociSessionLoad'));
+    assert.ok(result.node_traces.includes('ScenarioMemoryLoad'));
     assert.ok(result.node_traces.includes('Switch'));
     assert.ok(result.node_traces.includes('LLM'));
-    assert.ok(result.node_traces.includes('TaociSessionSave'));
+    assert.ok(result.node_traces.includes('ScenarioMemorySave'));
     assert.ok(!result.node_traces.includes('TaociSubAgent'));
   });
 

@@ -1,24 +1,8 @@
 # PolarUI — 使用指南
 
-> 节点图可视化编辑器 + Workflow 引擎：正则化元件、Hub 对接、桌面应用
+> 前端详情：[`docs/FRONTEND.md`](../docs/FRONTEND.md)
 
-## Workflow 撰写
-
-新建或修改 workflow 时必读：
-
-- `PolarUI/docs/ARCHITECTURE.md` — 架构原则
-- `PolarUI/skills/polarui-workflow-authoring/SKILL.md` — 七步流程
-
-## 核心信息
-
-| 维度 | 值 |
-|---|---|
-| 健康端点 | 端口 5170（/ (Vite dev server)） |
-| 启动命令 | `npm run dev -- --port 5170` |
-| 安装命令 | `npm ci` |
-| 技术栈 | React, Vite, ReactFlow, Electron (桌面), TypeScript |
-
-## 快速启动
+## 启动
 
 ```bash
 cd ~/Polarisor/PolarUI
@@ -26,13 +10,24 @@ npm ci
 npm run dev -- --port 5170
 ```
 
+打开 http://127.0.0.1:5170/ — **无需切换 LG/WF 模式**（Tab 已删），从 Workflow 面板或打开 JSON 加载图即可。
+
+## Workflow 撰写
+
+- [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
+- [`skills/polarui-workflow-authoring/SKILL.md`](../skills/polarui-workflow-authoring/SKILL.md)
+
+## 依赖服务（可选）
+
+| 服务 | 端口 | 用途 |
+|------|------|------|
+| PolarProcess | 11055 | 生态服务列表（dev 经 vite proxy） |
+| PolarCopilot Hub | 8040 | SSoT 在线编辑（dev 可回退本地 polaris.json） |
+| PolarPrivate | 12790 | LLM |
+
 ## 健康检查
 
 ```bash
-curl -s http://127.0.0.1:5170/ (Vite dev server)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5170/
+curl -s http://127.0.0.1:5170/api/polaris/PolarUI | head -c 80
 ```
-
-## 依赖服务
-
-- PolarCopilot Hub (API 数据源)
-- ReactFlow

@@ -13,7 +13,6 @@ describe('scenario QA: 胡友财套辞（郭韵怡）', () => {
     process.env.TAOCI_USE_CLAUDE_CLI = '0';
     process.env.TAOCI_MOCK_LLM = '1';
     process.env.TAOCI_MOCK_PDF = '1';
-    process.env.TAOCI_MOCK_FEISHU = '1';
     process.env.TAOCI_SESSION_DIR = tmpDir;
     delete process.env.POLARUI_MOCK_LLM;
     delete process.env.POLARUI_MOCK_TOOLCALL;

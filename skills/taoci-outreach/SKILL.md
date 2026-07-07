@@ -9,7 +9,7 @@ description: >
 # 套辞助手 Taoci Outreach
 
 > **Harness = `taoci-outreach.lg.json` 图**（不是 `harness/` 文件夹）  
-> **实施阶段**：C 已完成（harness 已删除，测试跑图引擎）
+> **实施阶段**：C 已完成；R3 记忆节点 + R4 Web 发行版已交付
 
 ## 必读
 
@@ -18,34 +18,39 @@ description: >
 | 架构 | `PolarUI/docs/ARCHITECTURE.md` |
 | 撰写七步 | `PolarUI/skills/polarui-workflow-authoring/SKILL.md` |
 | 规格 | `PolarUI/workflows/taoci-outreach/WORKFLOW.spec.md` |
-| 纠偏任务书 | `任务书/260703/套辞workflow.md` |
+| Web 发行 | `PolarUI/docs/WEB_EXPORT.md` |
 
-## 目标图（阶段 C）
+## 目标图（当前）
 
 ```
-FeishuIM / PromptInput（入站）
+PromptInput（入站）
   → WorkingMemory（conversation_id）
+  → UserMemoryLoad
+  → ScenarioMemoryLoad
   → Switch(session.step)
   → S0: LLM(clarify) | S1: SubAgent×3 | S2: LLM+PDF | S3: LLM+PDF
-  → FeishuIM（出站 + PDF）
+  → ScenarioMemorySave（各分支）
   → Output
 ```
 
-无 ReAct、无 ShellExec、无 ToolCall（套辞是状态机，不是终端 Agent）。
+无 ReAct、无 ShellExec、无 ToolCall、**无 FeishuIM**（R5 搁置）。
 
 ## 通道
 
-- Bot：`PolarClaw_Rr`；触发：`@套辞`
-- PolarClaw → **graph engine** 执行 `.lg.json`（`taoci-route.ts` → `run-graph-cli.mjs`）
+- **Web 发行版**：`~/Desktop/Web_related/{release_id}/`（`export-release.mjs`）
+- **PolarClaw**（R2 过渡）：`run-graph-cli.mjs` + `--memory-json`
 
 ## 实现位置
 
 | 路径 | 说明 |
 |------|------|
 | `workflows/taoci-outreach/taoci-outreach.lg.json` | WYSIWYG 图 |
-| `lib/taoci-graph/` | TaociSessionLoad/Save/SubAgent executor |
-| `lib/run-graph-cli.mjs` | PolarClaw 桥接 |
+| `lib/memory-graph/` | User/Scenario/Session 记忆 executor |
+| `lib/taoci-graph/` | TaociSubAgent executor |
+| `lib/run-graph-cli.mjs` | PolarClaw / 发行版桥接 |
+| `scripts/export-release.mjs` | Web 发行版编译导出 |
 
 ## 测试
 
-`~/Desktop/测试/taoci-outreach/` — L2/L3 必须跑图引擎。
+- `npm run test:web-release` — 发行版 + 记忆节点全绿
+- `node --test workflows/taoci-outreach/tests/run.mjs` — 图引擎
