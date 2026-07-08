@@ -245,17 +245,35 @@ Then 含 "LibreChat" 与 "MIT" 与 upstream URL
 ## 8. CI 命令
 
 ```bash
-# PolarUI 侧
 cd PolarUI && npm run test:web-release
-
-# 模版站侧（实现后）
-cd ~/Desktop/Web_related/_template && npm run test
+cd ~/Desktop/Web_related/_template && npm test
+cd ~/Desktop/Web_related/_template && npm run test:integration
 cd ~/Desktop/Web_related/_template && npm run test:e2e
 ```
 
 ---
 
-## 9. 注意事项（实现时必读）
+## 9. 测试-开发循环
+
+```
+状态 A（TEST）→ 写/跑失败用例 → 状态 B（DEV）→ 实现 → 重跑验证 → passed → 更新 WEB_EXPORT 状态表
+```
+
+| 命令 | 用途 |
+|------|------|
+| `npm test` | 单元 + API（49 项，含 lc-memories-write） |
+| `node --test polar/tests/unit/navigation.test.mjs` | AC-N01~N03 源码 |
+| `node --test polar/tests/api/navigation-api.test.mjs` | AC-N01~N03 API |
+| `npm run test:integration` | workflow + OpenAI SSE + **全链路 QA**（12 项，含 `full-chain-qa.test.mjs`） |
+| `POLAR_LIVE_QA=1 npm run test:integration` | 同上，登录走真实 LibreChat（:3080） |
+
+**最近一轮（2026-07-08 #6）**：MEMORY §3 LC 路由页 + 会话摘要侧栏 + 删除 PolarContextBar → **56/56 + 12/12 pass**，`build:librechat` ✅。
+
+⛔ 禁止在测试未红/未绿之间跳过实现或宣称 passed。
+
+---
+
+## 10. 注意事项（实现时必读）
 
 | # | 注意 |
 |---|------|

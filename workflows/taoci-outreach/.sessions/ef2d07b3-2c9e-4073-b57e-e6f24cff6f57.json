@@ -1,0 +1,32 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "",
+    "institution": "",
+    "url": ""
+  },
+  "student": {
+    "profile": "",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "with scenario",
+      "at": "2026-07-08T10:46:13.505Z"
+    },
+    {
+      "role": "assistant",
+      "content": "请补充：导师单位/主页，以及你的科研经历细节。",
+      "at": "2026-07-08T10:46:13.508Z"
+    }
+  ],
+  "updated_at": "2026-07-08T10:46:13.508Z"
+}
