@@ -1,21 +1,37 @@
-#!/usr/bin/env node
 /**
  * Web release export — dual entry (CLI + PolarUI Web).
+ * (No shebang: this module is imported by vite.config.mjs; esbuild inlines
+ * it when bundling the config and a mid-bundle `#!` is a syntax error.
+ * All CLI entries invoke it as `node scripts/export-release.mjs`.)
+ *
+ * Pipeline properties (refactor 2026-07-09):
+ * - Atomic: compiles into a hidden staging dir, renames to the final
+ *   release dir only after verify passes. Failures never leave a
+ *   half-built release behind.
+ * - Fast scaffold: template copy uses APFS copy-on-write clones
+ *   (COPYFILE_FICLONE) so the 1.4 GB template costs ~0 disk and time.
+ * - Structured logging: every step is timed and recorded to EXPORT.log
+ *   (human) + EXPORT.log.json (machine).
+ * - Unified result contract: always resolves to
+ *   { ok, stage?, error?, … } — callers map stage → exit code / HTTP status.
+ *
  * @see docs/WEB_EXPORT.md
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { constants, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runDeployPreflight } from '../lib/deploy-preflight.mjs';
 import { compileMemorySchema } from './compile-memory-schema.mjs';
 import { compileSiteConfig } from './compile-site-config.mjs';
 import { verifyRelease } from './verify-release.mjs';
 import { deployWebRelease } from './deploy-web-release.mjs';
+import { graphNodeTypes } from './graph-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POLARUI_ROOT = join(__dirname, '..');
 const WEB_ROOT = process.env.POLAR_WEB_ROOT ?? join(process.env.HOME ?? '~', 'Desktop/Web_related');
 const TEMPLATE_DIR = join(WEB_ROOT, '_template');
+const STAGING_PREFIX = '.staging-';
 
 const COMPILE_STEPS = ['graph', 'registry', 'memory-schema', 'prompts', 'executors', 'config', 'patch', 'verify', 'ports', 'deploy'];
 
@@ -40,160 +56,297 @@ function parseArgs(argv) {
   return out;
 }
 
-/** @param {string} workflowId @param {string} webRoot @param {string} [fromRelease] */
+/**
+ * Next available release id, numeric increment:
+ * base → base_1 → base_2 → … (never base_1_1).
+ *
+ * `fromRelease` (e.g. "taoci-outreach_1") is reduced to its base name so
+ * branching from an old release still lands on the next free number.
+ * Staging leftovers are invisible to naming (dot-prefixed).
+ *
+ * @param {string} workflowId @param {string} webRoot @param {string} [fromRelease]
+ */
 export function resolveReleaseId(workflowId, webRoot, fromRelease) {
-  let candidate = fromRelease || workflowId;
-  while (existsSync(join(webRoot, candidate))) {
-    candidate = `${candidate}_1`;
+  // Only fromRelease gets its increment suffixes stripped — a workflow id
+  // that legitimately ends in _N must stay untouched.
+  const base = fromRelease ? (fromRelease.replace(/(_\d+)+$/, '') || fromRelease) : workflowId;
+  if (!existsSync(join(webRoot, base))) return base;
+  let n = 1;
+  if (existsSync(webRoot)) {
+    const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d+)$`);
+    for (const name of readdirSync(webRoot)) {
+      const m = name.match(re);
+      if (m) n = Math.max(n, Number(m[1]) + 1);
+    }
   }
-  return candidate;
+  return `${base}_${n}`;
+}
+
+/** Step logger: collects timed entries, flushes text + JSON after every step. */
+function createStepLog(getRoot) {
+  const entries = [];
+  const startedAt = new Date().toISOString();
+  const flush = () => {
+    const root = getRoot();
+    if (!root || !existsSync(root)) return;
+    const text = entries
+      .map((e) => `[${e.status}] Step ${e.index} ${e.title}${e.ms != null ? ` (${e.ms}ms)` : ''}${e.detail ? ` · ${e.detail}` : ''}`)
+      .join('\n');
+    writeFileSync(join(root, 'EXPORT.log'), text + '\n');
+    writeFileSync(join(root, 'EXPORT.log.json'), JSON.stringify({ started_at: startedAt, steps: entries }, null, 2));
+  };
+  return {
+    entries,
+    record(entry) {
+      entries.push(entry);
+      flush();
+    },
+    flush,
+  };
 }
 
 /**
+ * Run one named pipeline step with timing + logging.
+ * Throws a stage-tagged error on failure so the caller can report `stage`.
+ */
+async function runStep(log, index, id, title, fn) {
+  const t0 = Date.now();
+  try {
+    const detail = await fn();
+    log.record({ index, id, title, status: 'ok', ms: Date.now() - t0, detail: detail ?? '' });
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    log.record({ index, id, title, status: 'fail', ms: Date.now() - t0, detail: err.message });
+    err.stage = err.stage ?? id;
+    throw err;
+  }
+}
+
+/**
+ * Export a workflow as a frozen web release.
+ *
+ * Resolves with `{ ok: true, release_id, release_path, manifest, deploy }`
+ * or `{ ok: false, stage, error, … }`. Only programmer errors throw.
+ *
  * @param {object} opts
  */
 export async function exportRelease(opts) {
   const workflowId = opts.workflow;
   const webRoot = opts.webRoot ?? WEB_ROOT;
+  const templateDir = opts.templateDir ?? TEMPLATE_DIR;
   const exportEntry = opts.exportEntry ?? 'cli';
-  const logs = [];
 
-  const releaseId = resolveReleaseId(workflowId, webRoot, opts.fromRelease);
-  const releaseRoot = join(webRoot, releaseId);
-  logs.push(`Step 0 resolveReleaseId → ${releaseId}`);
+  const emit = (result) => {
+    if (opts.json) console.log(JSON.stringify(result));
+    else if (!opts.silent) console.log(JSON.stringify(result, null, 2));
+    return result;
+  };
 
-  if (!opts.skipPreflight && !opts.compileOnly) {
-    const pf = await runDeployPreflight({ workflowId });
-    if (!pf.ok && !opts.forcePreflightPass) {
-      const err = { ok: false, status: 412, errors: pf.errors, items: pf.items };
-      if (opts.json) console.log(JSON.stringify(err));
-      else console.error(JSON.stringify(err, null, 2));
-      return err;
-    }
-    logs.push('Step 1 preflight OK');
-  } else {
-    logs.push('Step 1 preflight skipped');
+  // ---- Input validation (before touching the filesystem) ----
+  if (!workflowId) {
+    return emit({ ok: false, stage: 'input', error: 'workflow id is required' });
   }
-
   const workflowDir = join(POLARUI_ROOT, 'workflows', workflowId);
   const lgPath = join(workflowDir, `${workflowId}.lg.json`);
   if (!existsSync(lgPath)) {
-    throw new Error(`workflow not found: ${lgPath}`);
+    return emit({ ok: false, stage: 'input', error: `workflow not found: ${lgPath}` });
   }
-
-  if (!existsSync(TEMPLATE_DIR)) {
-    throw new Error(`template missing: ${TEMPLATE_DIR}`);
+  if (!existsSync(templateDir)) {
+    return emit({ ok: false, stage: 'input', error: `template missing: ${templateDir}` });
   }
-
-  mkdirSync(webRoot, { recursive: true });
-  cpSync(TEMPLATE_DIR, releaseRoot, { recursive: true });
-  logs.push('Step 2 scaffoldTemplate');
-
-  mkdirSync(join(releaseRoot, 'workflow'), { recursive: true });
+  let lgGraph;
   const lgRaw = readFileSync(lgPath, 'utf8');
-  writeFileSync(join(releaseRoot, 'workflow/snapshot.lg.json'), lgRaw);
-  logs.push('Step 3 compileWorkflowGraph');
-
-  const lgGraph = JSON.parse(lgRaw);
-  let registry = {};
-  const regPath = join(workflowDir, 'registry-entry.json');
-  if (existsSync(regPath)) {
-    registry = JSON.parse(readFileSync(regPath, 'utf8'));
-    writeFileSync(join(releaseRoot, 'manifest.registry.json'), JSON.stringify(registry, null, 2));
+  try {
+    lgGraph = JSON.parse(lgRaw);
+  } catch (e) {
+    return emit({ ok: false, stage: 'input', error: `workflow graph is not valid JSON: ${e.message}` });
   }
-  logs.push('Step 4 compileRegistry');
 
-  mkdirSync(join(releaseRoot, 'config'), { recursive: true });
-  const memorySchema = compileMemorySchema({ workflowDir, lgGraph });
-  writeFileSync(join(releaseRoot, 'config/memory-schema.json'), JSON.stringify(memorySchema, null, 2));
-  logs.push('Step 5 compileMemorySchema');
-
-  const promptsDir = join(workflowDir, 'prompts');
-  if (existsSync(promptsDir)) {
-    mkdirSync(join(releaseRoot, 'prompts'), { recursive: true });
-    for (const f of readdirSync(promptsDir)) {
-      cpSync(join(promptsDir, f), join(releaseRoot, 'prompts', f));
+  // ---- Step 1: preflight (unchanged contract: 412 + errors list) ----
+  if (!opts.skipPreflight && !opts.compileOnly) {
+    const pf = await runDeployPreflight({ workflowId });
+    if (!pf.ok && !opts.forcePreflightPass) {
+      return emit({ ok: false, stage: 'preflight', status: 412, errors: pf.errors, items: pf.items });
     }
   }
-  logs.push('Step 6 compilePrompts');
 
-  const executors = [...new Set((lgGraph.nodes ?? []).map((n) => n.class_type))].sort();
-  writeFileSync(join(releaseRoot, 'config/required-executors.json'), JSON.stringify({ executors }, null, 2));
-  logs.push('Step 7 compileExecutors');
+  const releaseId = resolveReleaseId(workflowId, webRoot, opts.fromRelease);
+  const releaseRoot = join(webRoot, releaseId);
+  const stagingRoot = join(webRoot, `${STAGING_PREFIX}${releaseId}-${process.pid}`);
 
-  const { manifest, config } = compileSiteConfig({
-    releaseId,
-    workflowId,
-    releaseRoot,
-    exportEntry,
-    compileSteps: COMPILE_STEPS,
-    workflowSnapshotRel: 'workflow/snapshot.lg.json',
-    memorySchemaRel: 'config/memory-schema.json',
-    registry,
-    requiredExecutors: executors,
-    polaruiRoot: POLARUI_ROOT,
-  });
-  writeFileSync(join(releaseRoot, 'site.manifest.json'), JSON.stringify(manifest, null, 2));
-  writeFileSync(join(releaseRoot, 'site.config.json'), JSON.stringify(config, null, 2));
-  logs.push('Step 8 compilePolarConfig');
+  // Compile into staging; promote to releaseRoot only after verify.
+  let promoted = false;
+  const log = createStepLog(() => (promoted ? releaseRoot : stagingRoot));
 
-  mkdirSync(join(releaseRoot, 'polar/injected'), { recursive: true });
-  writeFileSync(
-    join(releaseRoot, 'polar/injected/release.json'),
-    JSON.stringify({ release_id: releaseId, workflow_id: workflowId }, null, 2),
-  );
-  logs.push('Step 9 patchLibreChat');
+  try {
+    mkdirSync(webRoot, { recursive: true });
 
-  writeFileSync(join(releaseRoot, 'EXPORT.log'), logs.join('\n') + '\n');
-  const verification = verifyRelease(releaseRoot);
-  if (!verification.ok) {
-    throw new Error(`verify failed: ${verification.errors.join(', ')}`);
-  }
-  logs.push('Step 10 verifyRelease OK');
-  writeFileSync(join(releaseRoot, 'EXPORT.log'), logs.join('\n') + '\n');
+    await runStep(log, 0, 'resolve-id', 'resolveReleaseId', () => `${releaseId} (staging ${STAGING_PREFIX}…)`);
 
-  let deploy = null;
-  if (!opts.compileOnly) {
-    logs.push('Step 11 claimPorts → PolarPort');
-    deploy = await deployWebRelease({
-      releaseRoot,
-      releaseId,
-      polaruiRoot: POLARUI_ROOT,
-      startLibreChat: opts.startLibreChat !== false,
+    await runStep(log, 1, 'preflight', 'deploy preflight', () =>
+      opts.skipPreflight || opts.compileOnly ? 'skipped' : 'ok',
+    );
+
+    await runStep(log, 2, 'scaffold', 'scaffoldTemplate (CoW clone, no node_modules)', () => {
+      // COPYFILE_FICLONE → APFS clonefile when available, silent fallback to
+      // a regular copy elsewhere — no data duplication for the big template.
+      // node_modules are build-time only (LibreChat runs from its Docker
+      // image; polar/server.mjs is stdlib-only) and are excluded: they are
+      // 87% of the template's 155k files. Rebuilding the client inside a
+      // release requires an `npm ci` in upstream/librechat first.
+      cpSync(templateDir, stagingRoot, {
+        recursive: true,
+        mode: constants.COPYFILE_FICLONE,
+        filter: (src) => !/\/node_modules(\/|$)/.test(src),
+      });
+      return `${templateDir} (node_modules excluded)`;
     });
-    logs.push(`Step 11 PolarPort api=${deploy.api_port} lc=${deploy.librechat_port ?? 'n/a'}`);
-    logs.push(`Step 12 PolarProcess start → ${deploy.service_id}`);
-    writeFileSync(join(releaseRoot, 'EXPORT.log'), logs.join('\n') + '\n');
-  } else {
-    logs.push('Step 11-12 deploy skipped (compile-only)');
-    writeFileSync(join(releaseRoot, 'EXPORT.log'), logs.join('\n') + '\n');
-  }
 
-  const readmePath = join(releaseRoot, 'README.md');
-  if (existsSync(readmePath)) {
-    let readme = readFileSync(readmePath, 'utf8');
-    if (!readme.includes(releaseId)) {
-      readme += `\n\n## Release\n\n- **release_id**: \`${releaseId}\`\n`;
-      writeFileSync(readmePath, readme);
+    await runStep(log, 3, 'graph', 'compileWorkflowGraph', () => {
+      mkdirSync(join(stagingRoot, 'workflow'), { recursive: true });
+      writeFileSync(join(stagingRoot, 'workflow/snapshot.lg.json'), lgRaw);
+      return 'workflow/snapshot.lg.json';
+    });
+
+    let registry = {};
+    await runStep(log, 4, 'registry', 'compileRegistry', () => {
+      const regPath = join(workflowDir, 'registry-entry.json');
+      if (!existsSync(regPath)) return 'no registry-entry.json';
+      registry = JSON.parse(readFileSync(regPath, 'utf8'));
+      writeFileSync(join(stagingRoot, 'manifest.registry.json'), JSON.stringify(registry, null, 2));
+      return 'manifest.registry.json';
+    });
+
+    await runStep(log, 5, 'memory-schema', 'compileMemorySchema', () => {
+      mkdirSync(join(stagingRoot, 'config'), { recursive: true });
+      const memorySchema = compileMemorySchema({ workflowDir, lgGraph });
+      writeFileSync(join(stagingRoot, 'config/memory-schema.json'), JSON.stringify(memorySchema, null, 2));
+      return 'config/memory-schema.json';
+    });
+
+    await runStep(log, 6, 'prompts', 'compilePrompts', () => {
+      const promptsDir = join(workflowDir, 'prompts');
+      if (!existsSync(promptsDir)) return 'no prompts/';
+      mkdirSync(join(stagingRoot, 'prompts'), { recursive: true });
+      let count = 0;
+      for (const f of readdirSync(promptsDir)) {
+        cpSync(join(promptsDir, f), join(stagingRoot, 'prompts', f));
+        count++;
+      }
+      return `${count} file(s)`;
+    });
+
+    let executors = [];
+    await runStep(log, 7, 'executors', 'compileExecutors', () => {
+      executors = graphNodeTypes(lgGraph);
+      if (executors.length === 0) {
+        throw new Error('no node class_type found in graph — unsupported .lg.json shape?');
+      }
+      writeFileSync(join(stagingRoot, 'config/required-executors.json'), JSON.stringify({ executors }, null, 2));
+      return executors.join(',');
+    });
+
+    let manifest;
+    await runStep(log, 8, 'config', 'compilePolarConfig', () => {
+      const compiled = compileSiteConfig({
+        releaseId,
+        workflowId,
+        releaseRoot: stagingRoot,
+        exportEntry,
+        compileSteps: COMPILE_STEPS,
+        workflowSnapshotRel: 'workflow/snapshot.lg.json',
+        memorySchemaRel: 'config/memory-schema.json',
+        registry,
+        requiredExecutors: executors,
+        polaruiRoot: POLARUI_ROOT,
+      });
+      manifest = compiled.manifest;
+      // web_root must point at the final location, not the staging dir.
+      manifest.web_root = releaseRoot;
+      writeFileSync(join(stagingRoot, 'site.manifest.json'), JSON.stringify(manifest, null, 2));
+      writeFileSync(join(stagingRoot, 'site.config.json'), JSON.stringify(compiled.config, null, 2));
+      return 'site.manifest.json + site.config.json';
+    });
+
+    await runStep(log, 9, 'patch', 'patchLibreChat (polar/injected)', () => {
+      mkdirSync(join(stagingRoot, 'polar/injected'), { recursive: true });
+      writeFileSync(
+        join(stagingRoot, 'polar/injected/release.json'),
+        JSON.stringify({ release_id: releaseId, workflow_id: workflowId }, null, 2),
+      );
+      const readmePath = join(stagingRoot, 'README.md');
+      if (existsSync(readmePath)) {
+        const readme = readFileSync(readmePath, 'utf8');
+        if (!readme.includes(releaseId)) {
+          writeFileSync(readmePath, readme + `\n\n## Release\n\n- **release_id**: \`${releaseId}\`\n`);
+        }
+      }
+      return 'polar/injected/release.json';
+    });
+
+    await runStep(log, 10, 'verify', 'verifyRelease', () => {
+      const verification = verifyRelease(stagingRoot);
+      if (!verification.ok) throw new Error(verification.errors.join(', '));
+      return `${verification.checked} check(s)`;
+    });
+
+    // ---- Promote: staging → final dir (atomic on same volume) ----
+    if (existsSync(releaseRoot)) {
+      // A concurrent export claimed the name after we resolved it.
+      throw Object.assign(new Error(`release dir appeared during compile: ${releaseRoot}`), { stage: 'promote' });
+    }
+    renameSync(stagingRoot, releaseRoot);
+    promoted = true;
+    log.record({ index: 10.5, id: 'promote', title: 'staging → release dir', status: 'ok', ms: 0, detail: releaseRoot });
+
+    // ---- Deploy (Steps 11–12) — after promote so paths are final ----
+    let deploy = null;
+    if (!opts.compileOnly) {
+      try {
+        await runStep(log, 11, 'deploy', 'PolarPort claim + PolarProcess start', async () => {
+          deploy = await deployWebRelease({
+            releaseRoot,
+            releaseId,
+            polaruiRoot: POLARUI_ROOT,
+            startLibreChat: opts.startLibreChat !== false,
+          });
+          return `api=${deploy.api_port} lc=${deploy.librechat_port ?? 'n/a'} service=${deploy.service_id}`;
+        });
+      } catch (e) {
+        // Release is compiled and valid — keep it, report deploy failure.
+        return emit({
+          ok: false,
+          stage: 'deploy',
+          error: e.message,
+          release_id: releaseId,
+          release_path: releaseRoot,
+          manifest,
+          compile_steps: COMPILE_STEPS,
+        });
+      }
+    } else {
+      log.record({ index: 11, id: 'deploy', title: 'deploy', status: 'skip', ms: 0, detail: 'compile-only' });
+    }
+
+    return emit({
+      ok: true,
+      release_id: releaseId,
+      release_path: releaseRoot,
+      manifest,
+      compile_steps: COMPILE_STEPS,
+      deploy,
+    });
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    return emit({ ok: false, stage: err.stage ?? 'compile', error: err.message, release_id: releaseId });
+  } finally {
+    // Staging never survives: promoted → already renamed; failed → removed.
+    if (!promoted && existsSync(stagingRoot)) {
+      rmSync(stagingRoot, { recursive: true, force: true, maxRetries: 3 });
     }
   }
-
-  const result = {
-    ok: true,
-    release_id: releaseId,
-    release_path: releaseRoot,
-    manifest,
-    compile_steps: COMPILE_STEPS,
-    deploy,
-  };
-
-  if (opts.json) console.log(JSON.stringify(result));
-  else if (!opts.silent) console.log(JSON.stringify(result, null, 2));
-
-  return result;
 }
 
-import { pathToFileURL } from 'node:url';
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   const args = parseArgs(process.argv);
@@ -201,13 +354,8 @@ if (isMain) {
     console.error('Usage: node scripts/export-release.mjs --workflow <id> [--from-release x] [--compile-only] [--skip-preflight] [--json]');
     process.exit(1);
   }
-  try {
-    const r = await exportRelease(args);
-    process.exit(r.ok ? 0 : 1);
-  } catch (e) {
-    console.error(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
-    process.exit(1);
-  }
+  const r = await exportRelease(args);
+  process.exit(r.ok ? 0 : 1);
 }
 
 export default exportRelease;

@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-07T14:50:00+08:00"
+    "last_synced_at": "2026-07-09T10:50:00+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -321,19 +321,26 @@
         },
         {
           "name": "export-release.mjs",
-          "description": "双入口发行版编译导出 + 命名递增 + manifest 快照锁定",
+          "description": "双入口发行版编译导出 + 命名递增 + manifest 快照锁定（2026-07-09 管线重构）",
           "status": "done",
           "behavior": [
             "PolarUI Web POST /api/export-release + CLI 共用同一脚本",
             "Step 0–10 编译流水线（见 WEB_EXPORT.md）",
-            "taoci-outreach → taoci-outreach_1 → _1_1",
+            "staging 原子化：verify 通过才 rename，失败不留半成品",
+            "CoW clone scaffold（排除 node_modules，1.4GB/155k 文件 → ~1s）",
+            "命名数字递增 taoci-outreach → _1 → _2（不再 _1_1）",
+            "graph-utils 编号键格式扫描：required-executors 不再为空",
+            "EXPORT.log 每步计时 + EXPORT.log.json 结构化",
+            "统一错误契约 {ok,stage,error}；deploy 失败回滚端口",
             "AC-R01~R05"
           ],
           "test_status": "passed",
           "evidence": [
             "scripts/export-release.mjs",
+            "scripts/graph-utils.mjs",
             "scripts/export-release.test.mjs",
-            "~/Desktop/Web_related/taoci-outreach/"
+            "2026-07-09: node --test 12/12 全绿；CLI 冒烟 1.06s 出 taoci-outreach_2",
+            "~/Desktop/Web_related/taoci-outreach_2/"
           ]
         },
         {

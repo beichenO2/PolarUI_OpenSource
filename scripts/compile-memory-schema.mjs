@@ -3,6 +3,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { graphNodeTypes } from './graph-utils.mjs';
 
 /**
  * @param {object} opts
@@ -18,11 +19,9 @@ export function compileMemorySchema(opts) {
   let specHint = '';
   if (existsSync(specPath)) {
     specHint = readFileSync(specPath, 'utf8');
-    if (specHint.includes('teacher.name')) requiredScenario.push('teacher.name');
   }
 
-  const nodeTypes = new Set((lgGraph?.nodes ?? []).map((n) => n.class_type));
-  const memoryNodes = [...nodeTypes].filter((t) => /Memory/.test(t));
+  const memoryNodes = graphNodeTypes(lgGraph).filter((t) => /Memory/.test(t));
 
   return {
     version: 1,

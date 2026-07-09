@@ -41,3 +41,4 @@
 - `docs/WEB_EXPORT.md`
 - `docs/WEB_TEMPLATE.md`
 - `docs/WEB_ACCEPTANCE.md`
+- `decisions/009-polar-jwt-auth-chain.md`

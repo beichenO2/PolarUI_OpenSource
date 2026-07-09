@@ -34,7 +34,8 @@ function exportReleaseMiddleware() {
               json: false,
             });
             res.setHeader('Content-Type', 'application/json');
-            res.statusCode = result.ok ? 200 : 412;
+            const STAGE_STATUS = { input: 400, preflight: 412 };
+            res.statusCode = result.ok ? 200 : (STAGE_STATUS[result.stage] ?? 500);
             res.end(JSON.stringify(result));
           } catch (e) {
             res.statusCode = 500;
@@ -70,6 +71,9 @@ function polarisDevMiddleware() {
 
 export default defineConfig({
   root: join(POLARUI_ROOT, 'dist'),
+  // `vite preview` serves build.outDir (resolved against root). dist/ IS the
+  // prebuilt app here, so point outDir at root itself or preview 404s (dist/dist).
+  build: { outDir: '.', emptyOutDir: false },
   plugins: [exportReleaseMiddleware(), polarisDevMiddleware()],
   server: {
     host: '127.0.0.1',
