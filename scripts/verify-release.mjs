@@ -13,7 +13,7 @@ import { join } from 'node:path';
 const REQUIRED = [
   'site.manifest.json',
   'site.config.json',
-  'workflow/snapshot.lg.json',
+  'workflow/snapshot.json',
   'config/memory-schema.json',
   'config/required-executors.json',
   'README.md',
@@ -23,7 +23,7 @@ const REQUIRED = [
 const JSON_FILES = [
   'site.manifest.json',
   'site.config.json',
-  'workflow/snapshot.lg.json',
+  'workflow/snapshot.json',
   'config/memory-schema.json',
   'config/required-executors.json',
 ];
@@ -62,7 +62,7 @@ export function verifyRelease(releaseRoot) {
     if (!Array.isArray(manifest.compile_steps) || manifest.compile_steps.length < 6) {
       errors.push('compile_steps length < 6');
     }
-    const snapRel = manifest.workflow_snapshot ?? 'workflow/snapshot.lg.json';
+    const snapRel = manifest.workflow_snapshot ?? 'workflow/snapshot.json';
     const snapPath = join(releaseRoot, snapRel);
     if (!existsSync(snapPath)) {
       errors.push('workflow snapshot missing');

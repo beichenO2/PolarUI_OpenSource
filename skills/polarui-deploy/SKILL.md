@@ -1,44 +1,33 @@
-# PolarUI — 部署指南
+# PolarUI — 部署索引
 
-> 节点图可视化编辑器 + Workflow 引擎：正则化元件、Hub 对接、桌面应用
+> 本 skill 为**入口索引**。PolarUI 有两类「部署」，勿混淆。
 
-## 环境要求
+## 🔷 本地编辑器（画布 dev）
 
-- 技术栈：React, Vite, ReactFlow, Electron (桌面), TypeScript
-- 安装：`npm ci`
+启动 PolarUI GUI，编辑 workflow 图：
 
-## 安装步骤
-
-```bash
-cd ~/Polarisor/PolarUI
-npm ci
-```
-
-## 启动方式
+→ [`polarui-usage/SKILL.md`](../polarui-usage/SKILL.md)
 
 ```bash
 cd ~/Polarisor/PolarUI
-npm run dev -- --port 5170
+npm ci && npm run dev -- --port 5170
 ```
 
-## 端口分配
+## 🔶 Web 发行版（LibreChat + polar-api）
 
-| 端口 | 用途 |
-|---|---|
-| 5170 | 主服务 |
+把 workflow 编译部署为独立网站：
 
-## 健康检查确认
+→ [`polarui-web-deploy/SKILL.md`](../polarui-web-deploy/SKILL.md)  
+→ [`docs/WEB_EXPORT.md`](../../docs/WEB_EXPORT.md)
 
 ```bash
-curl -s http://127.0.0.1:5170/ (Vite dev server)
+node scripts/export-release.mjs --workflow <id> --json
 ```
 
-## 回滚方式
+## 相关 Skills
 
-```bash
-cd ~/Polarisor/PolarUI
-git log --oneline -5
-git checkout <previous-commit>
-npm ci
-npm run dev -- --port 5170
-```
+| Skill | 用途 |
+|-------|------|
+| [`polarui-workflow-contract`](../polarui-workflow-contract/SKILL.md) | Web 运行时契约（builtin / graph-cli） |
+| [`polarui-workflow-authoring`](../polarui-workflow-authoring/SKILL.md) | 画布撰写七步流程 |
+| [`polarui-troubleshoot`](../polarui-troubleshoot/SKILL.md) | 本地 dev 故障排查 |

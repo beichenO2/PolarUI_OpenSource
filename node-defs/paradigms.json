@@ -1,0 +1,501 @@
+[
+  {
+    "class_type": "AgentWorkflow",
+    "category": "Agentic",
+    "display_name": "调用工作流",
+    "description": "Agentic 组合：引用已保存的工作流。可展开查看由原子化元件组成的内部结构。",
+    "color": "#4a3060",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "any",
+        "description": "上游传入的通用输入。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": "any",
+        "description": "调用工作流 · 输出「output」（类型 any）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "workflow_id": {
+        "type": "string",
+        "default": "",
+        "label": "工作流 ID"
+      },
+      "workflow_name": {
+        "type": "string",
+        "default": "",
+        "label": "工作流名称"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "AgenticUnit",
+    "category": "Agentic",
+    "display_name": "Agentic 单元",
+    "description": "Agentic 组合：工作层(LLM调用) + 核验层(正则匹配) + 重试循环。由原子化元件组成，可展开查看内部结构。",
+    "color": "#5a2070",
+    "inputs": [
+      {
+        "name": "task_input",
+        "type": "any",
+        "description": "Agentic 单元 · 输入「task_input」（类型 any）"
+      },
+      {
+        "name": "validation_spec",
+        "type": "object",
+        "label": "核验规格 { purpose, expected_pattern }",
+        "description": "校验规格：期望模式、用途说明等。"
+      },
+      {
+        "name": "prior_knowledge",
+        "type": "string",
+        "optional": true,
+        "description": "Agentic 单元 · 输入「prior_knowledge」（类型 string），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "verified_output",
+        "type": "any",
+        "description": "Agentic 单元 · 输出「verified_output」（类型 any）"
+      },
+      {
+        "name": "validation_report",
+        "type": "object",
+        "description": "Agentic 单元 · 输出「validation_report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "work_model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "工作层模型"
+      },
+      "verify_model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "核验层模型"
+      },
+      "max_retries": {
+        "type": "number",
+        "default": 7,
+        "label": "最大重试"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "AgenticChain",
+    "category": "Agentic",
+    "display_name": "Agentic 链",
+    "description": "Agentic 组合：多个 Agentic 单元串联。每步工作层输出经核验层确认后才进入下一步。可展开查看内部。",
+    "color": "#4a1860",
+    "inputs": [
+      {
+        "name": "initial_input",
+        "type": "any",
+        "description": "Agentic 链 · 输入「initial_input」（类型 any）"
+      },
+      {
+        "name": "chain_spec",
+        "type": "object",
+        "description": "Agentic 链 · 输入「chain_spec」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "final_output",
+        "type": "any",
+        "description": "Agentic 链 · 输出「final_output」（类型 any）"
+      },
+      {
+        "name": "chain_report",
+        "type": "object",
+        "description": "Agentic 链 · 输出「chain_report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "steps": {
+        "type": "number",
+        "default": 3,
+        "label": "链长度"
+      },
+      "fail_strategy": {
+        "type": "select",
+        "default": "retry_step",
+        "options": [
+          "retry_step",
+          "restart_chain",
+          "abort"
+        ],
+        "label": "失败策略"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "Planner",
+    "category": "Agentic",
+    "display_name": "规划器",
+    "description": "Agentic 组合：接收目标 → LLM 推理 → 输出工作流。可展开查看内部结构。",
+    "color": "#6b21a8",
+    "inputs": [
+      {
+        "name": "goal",
+        "type": "string",
+        "description": "规划器 · 输入「goal」（类型 string）"
+      },
+      {
+        "name": "constraints",
+        "type": "object",
+        "description": "规划器 · 输入「constraints」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "workflow",
+        "type": "object",
+        "description": "工作流图或注册引用。"
+      },
+      {
+        "name": "reasoning",
+        "type": "string",
+        "description": "规划器 · 输出「reasoning」（类型 string）"
+      },
+      {
+        "name": "components_used",
+        "type": "object",
+        "description": "规划器 · 输出「components_used」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "推理模型"
+      },
+      "strategy": {
+        "type": "select",
+        "default": "linear",
+        "options": [
+          "linear",
+          "parallel",
+          "iterative"
+        ],
+        "label": "规划策略"
+      },
+      "max_depth": {
+        "type": "number",
+        "default": 5,
+        "label": "逻辑链最大深度"
+      },
+      "reflect": {
+        "type": "boolean",
+        "default": true,
+        "label": "启用反身性扫描"
+      },
+      "via_polarclaw": {
+        "type": "boolean",
+        "default": false,
+        "label": "经 PolarClaw 规划（runPolarClaw）"
+      },
+      "expandable": {
+        "type": "boolean",
+        "default": true,
+        "label": "可展开"
+      }
+    }
+  },
+  {
+    "class_type": "WorkflowMeta",
+    "category": "Agentic",
+    "display_name": "画中画容器",
+    "description": "元工作流节点：工作流运行中自建议+沙箱修改+回退/接受",
+    "color": "#3a2a5a",
+    "inputs": [
+      {
+        "name": "current_workflow",
+        "type": "object",
+        "description": "画中画容器 · 输入「current_workflow」（类型 object）"
+      },
+      {
+        "name": "issue_report",
+        "type": "string",
+        "description": "画中画容器 · 输入「issue_report」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "modified_workflow",
+        "type": "object",
+        "description": "画中画容器 · 输出「modified_workflow」（类型 object）"
+      },
+      {
+        "name": "accepted",
+        "type": "boolean",
+        "description": "画中画容器 · 输出「accepted」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      },
+      "sandbox": {
+        "type": "boolean",
+        "default": true,
+        "label": "沙箱模式"
+      },
+      "require_approval": {
+        "type": "boolean",
+        "default": true,
+        "label": "需人工审批"
+      },
+      "max_changes": {
+        "type": "number",
+        "default": 3,
+        "label": "单次最大修改数"
+      }
+    }
+  },
+  {
+    "class_type": "SelfHealUnit",
+    "category": "Agentic",
+    "display_name": "自愈单元",
+    "description": "Agentic 复合组件：HealthCheck → ErrorClassifier → ProcessRestart → [Agentic 修复] → Report",
+    "color": "#4a2d4a",
+    "inputs": [
+      {
+        "name": "heal_request",
+        "type": "object",
+        "label": "{ service_name, error_log }",
+        "description": "自愈单元 · 输入「heal_request」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "object",
+        "description": "自愈单元 · 输出「report」（类型 object）"
+      }
+    ],
+    "params": {
+      "role_declaration": {
+        "type": "object",
+        "label": "角色声明",
+        "fields": {
+          "role": {
+            "type": "select",
+            "options": [
+              "master",
+              "slave",
+              "peer"
+            ],
+            "default": "slave",
+            "label": "角色"
+          },
+          "responsibility": {
+            "type": "text",
+            "default": "",
+            "label": "职责"
+          },
+          "constraints": {
+            "type": "text",
+            "default": "",
+            "label": "约束"
+          },
+          "consumers": {
+            "type": "text",
+            "default": "",
+            "label": "消费者"
+          }
+        }
+      }
+    },
+    "expandable": true,
+    "internal_workflow": "self-heal-unit"
+  }
+]

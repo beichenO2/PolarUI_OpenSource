@@ -1,0 +1,38 @@
+{
+  "_name": "RetryLoop characterization",
+  "_description": "Validator 永不通过 → RetryLoop 重试至 exhausted",
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "BASE", "type": "string" }
+  },
+  "2": {
+    "class_type": "TextTransform",
+    "inputs": { "text": ["4", 0] },
+    "params": { "operation": "trim" }
+  },
+  "3": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": ["2", 0],
+      "validation_spec": {
+        "purpose": ["1", 0],
+        "expected_pattern": "^NEVER_MATCH$"
+      }
+    },
+    "params": { "verify_mode": "regex" }
+  },
+  "4": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": ["3", 0],
+      "original_input": ["1", 0]
+    },
+    "params": { "max_retries": 3 }
+  },
+  "5": {
+    "class_type": "Output",
+    "inputs": { "content": ["4", 0] },
+    "params": { "format": "text", "label": "retry_result" }
+  }
+}

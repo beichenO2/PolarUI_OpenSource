@@ -1,0 +1,32 @@
+{
+  "_name": "LG state accumulation",
+  "_description": "PromptInput task 经 LLM 写入 lgAccumulatedState，Switch 读出",
+  "_library": "LG",
+  "_entry": "1",
+  "_state_schema": { "branch": "string", "tool": "string", "task": "string" },
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "static" },
+    { "from": "3", "to": "4", "kind": "static" }
+  ],
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {},
+    "params": { "content": "accumulate-state" }
+  },
+  "2": {
+    "class_type": "LLM",
+    "inputs": { "prompt": ["1", 0] },
+    "params": {}
+  },
+  "3": {
+    "class_type": "Switch",
+    "inputs": { "value": ["2", 0] },
+    "params": { "branches": "tool,finish" }
+  },
+  "4": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 0] },
+    "params": {}
+  }
+}

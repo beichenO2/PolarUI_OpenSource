@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-09T10:50:00+08:00"
+    "last_synced_at": "2026-07-10T22:50:00+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -93,7 +93,7 @@
           ],
           "test_status": "partial",
           "evidence": [
-            "lib/taoci-graph/claude-core.test.mjs"
+            "lib/claude-core/claude-core.test.mjs"
           ]
         }
       ]
@@ -359,6 +359,21 @@
           ]
         },
         {
+          "name": "Web 部署与契约 Skills",
+          "description": "polarui-workflow-contract + polarui-web-deploy；含 HTTP /run；polarui-deploy 改为索引",
+          "status": "done",
+          "behavior": [
+            "skills/polarui-workflow-contract：builtin + HTTP /run + memoryPayload/memory_delta + graph-cli",
+            "skills/polarui-web-deploy：export-release、HTTP 服务注册、Docker、验收 checklist",
+            "docs/WORKFLOW_RUN_CONTRACT.md + ADR-012",
+            "README 导航分工作流 vs Web 部署"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-07-10: skills 整理 + HTTP 契约升格 + README 导航"
+          ]
+        },
+        {
           "name": "自动化验收全绿",
           "description": "npm run test:web-release",
           "status": "done",
@@ -375,21 +390,376 @@
     },
     {
       "id": "R5",
-      "need": "飞书渠道（搁置）",
-      "approach": "lib/feishu-im/ 已有；网站跑通后再接",
+      "need": "飞书渠道（决策变更：移出 PolarUI）",
+      "approach": "ADR-010：渠道接入属部署层，不回到 workflow 引擎；R6 Phase 3 剥离",
       "features": [
         {
           "name": "飞书 IM 渠道",
           "description": "FeishuIM 节点 + PolarClaw @套辞 + 凭证 preflight",
-          "status": "planned",
+          "status": "cancelled",
           "behavior": [
-            "workflow 可选 FeishuIM 渠道节点",
-            "PolarClaw 飞书收发",
-            "feishu.rr.* 凭证检查",
-            "见 docs/ROADMAP.md R5"
+            "ADR-010 决策：PolarUI 回归 Workflow 本身，渠道代码剥离归档"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "decisions/010-single-engine-and-purity-refactor.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "need": "单引擎统一与纯粹化重构（QA 门禁先行，ADR-010）",
+      "approach": "TDD：先固化当前引擎行为为 golden 契约测试，每阶段以 npm run qa 全绿为门禁",
+      "features": [
+        {
+          "name": "QA 流水线（P0）",
+          "description": "清 package.json 死脚本引用 + 引擎特征化 golden 测试 + npm run qa 聚合门禁",
+          "status": "in_progress",
+          "behavior": [
+            "golden 覆盖：拓扑执行、_lg_edges 条件路由、Switch 分支、ToolCall ReAct 回环、RetryLoop、ForLoop、state 累积",
+            "移除 11 个指向不存在脚本的 test:gate/e2e/agentic/cross/coverage/tools-system 命令",
+            "npm run qa 单命令聚合现有绿测试 + 新 golden，退出码 0"
           ],
           "test_status": "not_tested",
           "evidence": []
+        },
+        {
+          "name": "src 源码恢复重建（P1）",
+          "description": "从 116523c 恢复 src/ 82 文件，回放 patch-*.mjs 语义进源码，重建 bundle",
+          "status": "planned",
+          "behavior": [
+            "npm run build 可用，重建后 npm run qa 仍全绿",
+            "删除 post-build patch 机制"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "LG/WF 单引擎合并（P2）",
+          "description": "步进/_lg_edges 降为图特性，删 library 分叉、.lg.json 双后缀、LG_* 影子节点",
+          "status": "done",
+          "behavior": [
+            "图含 _entry/_lg_edges 自动步进单路径",
+            "生产 workflow 统一 .json 后缀；.lg.json 仅兼容读取",
+            "taoci-outreach、market-truth-cs 语义不变"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits: 56ee8d3 (unified stepwise engine), d26c2c8/3082ce6 (LG_* shadow archive), 163188d (debug graph cleanup), 3bcfb82 (suffix unify), 09aa328 (docs/SSoT)",
+            "archive: ~/Desktop/ClawBin/260710-polarui-lgwf-cleanup/",
+            "npm run qa 9/9",
+            "smoke: run-graph-cli taoci-outreach OK",
+            "export: snapshot.json release OK"
+          ]
+        },
+        {
+          "name": "飞书/IDE 接口剥离（P3）",
+          "description": "删 lib/feishu-im、lib/hub-send-prompt、FeishuIM/FeishuRelay/IDEAgent/WebAgent 节点与 polarclaw-*/feishu-* workflow",
+          "status": "done",
+          "behavior": [
+            "移除 @larksuiteoapi/node-sdk 依赖",
+            "只保留 LibreChat 模版 Web 一键导出（ADR-008）"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits: 75abd9e, 1484b5c, 69e03d6 (refactor/adr010-qa-gate)",
+            "archive: ~/Desktop/ClawBin/260710-polarui-feishu-ide-strip/",
+            "npm run qa 9/9"
+          ]
+        },
+        {
+          "name": "自进化归档（P4）",
+          "description": "StemCell/PetriDish/evolution-loop 全资产归档 ClawBin；设计稿见 docs/specs/evolution/",
+          "status": "done",
+          "behavior": [
+            "P10a 归档，不迭代半成品"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits: 1edf3fe, ee21495, 1f176d3 (refactor/adr010-qa-gate)",
+            "archive: ~/Desktop/ClawBin/260710-polarui-evolution-archive/",
+            "design: PolarUI/docs/specs/evolution/",
+            "npm run qa 9/9"
+          ]
+        },
+        {
+          "name": "画布排线与 Subgraph 重做（P5）",
+          "description": "排线接成熟避障（评估 libavoid/ELK）+ Group/Subgraph 就地折叠 + 画布基线测试",
+          "status": "done",
+          "behavior": [
+            "排线：A* 绕障 + 回路边分层 + fan-out 树合并 + 拖拽期 rAF 重路由（done）",
+            "不变量测试 tests/canvas/wire-routing.test.ts + npm run test:canvas（done）",
+            "选中 N 节点折叠为带端口投影的父节点（done）",
+            "自动分组建议 + 虚线预览采纳（done）",
+            "排线 waypoint 快照 + Playwright 截图基线（planned）"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "tests/canvas/wire-routing.test.ts 24 pass",
+            "tests/canvas/graph-groups.test.ts 15 pass",
+            "tests/canvas/group-suggest.test.ts 3 pass",
+            "tests/engine/graph-groups-execution.test.mjs",
+            "npm run qa 11/11（含 test:canvas + engine groups）",
+            "commits: 2e771eb, 63943b5, (canvas integration)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "need": "Workflow HTTP 插拔化 — 任意语言实现 POST /run 即可接入 Web",
+      "approach": "ADR-012；docs/WORKFLOW_RUN_CONTRACT.md；builtin→http→graph-cli；Phase 1 已在 _template/market-truth-cs 验证",
+      "features": [
+        {
+          "name": "Phase 1 适配器 + /run 契约（已验证）",
+          "description": "http-workflow.mjs + http_workflows[] + 契约文档/skills；Python mta-python 跑通",
+          "status": "done",
+          "behavior": [
+            "三路分发 builtin → http → graph-cli",
+            "超时/网络友好降级「工作流服务暂时不可用」",
+            "docs/WORKFLOW_RUN_CONTRACT.md + ADR-012 + skills 更新"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-10: _template/polar/lib/http-workflow.mjs + unit tests",
+            "examples/http-workflow-demo/",
+            "雷老师组测试任务/service/web_workflow_service.py (mta-python:3945)",
+            "market-truth-cs site.config http_workflows + librechat modelSpecs"
+          ]
+        },
+        {
+          "name": "export-release 支持 http_workflows 直出",
+          "description": "导出时可声明外部服务 id/label/url/timeout，写入发行版 site.config",
+          "status": "planned",
+          "behavior": [
+            "export 流水线编译 http_workflows[]",
+            "可选注入 librechat modelSpecs preset"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "画布节点 HTTP Workflow 引用",
+          "description": "图内节点直接引用外部 /run 服务",
+          "status": "planned",
+          "behavior": [
+            "node-def + executor 调用 HTTP 契约",
+            "与 http_workflows 配置对齐"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "契约鉴权（token/公网）",
+          "description": "公网部署时 /run 鉴权；适配器附加 Authorization",
+          "status": "planned",
+          "behavior": [
+            "site.config 声明 token / header",
+            "明文局域网仍为默认 Demo 模式"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "/v1/models label 增强",
+          "description": "HTTP workflow 在模型列表中的 label/元数据更完整",
+          "status": "planned",
+          "behavior": [
+            "listWorkflows 透传 http_workflows[].label 与可选描述"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        },
+        {
+          "name": "history 传递标准化",
+          "description": "Web 壳向 /run 传入对话历史，消除服务进程内 session 内存态",
+          "status": "planned",
+          "behavior": [
+            "契约扩展 history[]（开放问题收口）",
+            "多 worker / 重启不丢上下文"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "need": "双服务定位与彻底瘦身（ADR-011）：a) ClaudeCode 类基础 Agent 搭建；b) Dify 类自进化 Workflow 搭建（ClaudeCode 为原子 + Harness）",
+      "approach": "每阶段 npm run qa 全绿门禁；删除/归档走 P13 六维检查 + ClawBin（260710-polarui-two-services-slimdown）",
+      "features": [
+        {
+          "name": "引擎去兼容层（P1）",
+          "description": "删 .lg.json 回退读取与 graph.library/LG 残留概念，单一执行模型无第二路径",
+          "status": "done",
+          "behavior": [
+            "loader/lib/scripts/tests 不再识别 .lg.json",
+            "无 library==='LG' 分支；_entry/_lg_edges 仅为图元数据",
+            "trace 标注 mode: stepwise|topology"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 849fd31",
+            "npm run qa 10/10"
+          ]
+        },
+        {
+          "name": "claude-code 升格唯一注册 workflow（P2）",
+          "description": "dist 快照恢复为 workflows/claude-code/claude-code.json（26 节点，移除 StemCell/LG_EvolutionGuard）；taoci-outreach、market-truth-cs 归档；QA e2e 重接 claude-code",
+          "status": "done",
+          "behavior": [
+            "run-graph-cli claude-code mock 跑通（finish / tool 双路径 exit 0）",
+            "npm run qa 不再依赖 taoci/market-truth",
+            "sync-workflows 重建 registry.json（1 entry）"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits 660a516, 7383fc8",
+            "archive ~/Desktop/ClawBin/260710-polarui-two-services-slimdown/workflows/",
+            "npm run qa 10/10"
+          ]
+        },
+        {
+          "name": "node-defs 与 lib 瘦身（P3）",
+          "description": "node-defs 17 文件 → 5（core/tools-system/polar-memory/paradigms/annotation，65 节点）；11 个集成包 + 旧 registry-paradigms 归档；lib/taoci-graph 归档（claude-core、session 拆出保留）；executor 去 131 个集成注册",
+          "status": "done",
+          "behavior": [
+            "sync-node-defs 按 index.json 先清后拷",
+            "vue-tsc 0 错误",
+            "npm run build 全链路成功"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits a9acdd6, b378092",
+            "npm run qa 10/10",
+            "残留待清：src/engine checkup-*/ecosystem-architecture/ssot-* 仍被 UI 引用"
+          ]
+        },
+        {
+          "name": "双服务定位文档（P4）",
+          "description": "docs/SERVICES.md 定义服务 A（Agent 搭建）/ 服务 B（Agentic Workflow 搭建）与非 PolarUI 边界；README/SSoT 首屏接入待并发文档改动落地后合并",
+          "status": "in_progress",
+          "behavior": [
+            "docs/SERVICES.md 即定位 SSoT",
+            "服务 B 路线挂 docs/specs/evolution/"
+          ],
+          "test_status": "not_tested",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "R9",
+      "need": "项目引用地图（ADR-013）：用 PolarUI 可视化管理 Polarisor 生态项目与项目间引用结构",
+      "approach": "残留业务模块（checkup/ssot/ecosystem）不删除改重构；依赖解析做成纯函数先行单测；npm run qa 全绿门禁",
+      "features": [
+        {
+          "name": "依赖归一化纯函数",
+          "description": "src/engine/project-deps.ts：统一解析 depends_on 三形态 + upstream/downstream，buildDependencyGraph 产出画布图（tier 分组 + dagre 布局）",
+          "status": "done",
+          "behavior": [
+            "extractProjectDependencies 容忍 string[]/object[]/缺失/注释字符串",
+            "图无悬空边；未知目标项目自动补孤立节点"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 8da4255",
+            "tests/engine/project-deps.test.ts 16/16",
+            "npm run qa 11/11"
+          ]
+        },
+        {
+          "name": "SSoT Tab 项目引用图入口",
+          "description": "生态地图侧栏新增「项目引用图」：scanEcosystem + 并行拉各项目 polaris → buildDependencyGraph → 主画布；点击项目节点下钻单项目需求树",
+          "status": "done",
+          "behavior": [
+            "拉取失败项目降级为孤立节点不阻塞整图",
+            "下钻复用 compileSsotToGraph"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit c97b1da",
+            "vue-tsc 0 错误",
+            "下钻走侧栏项目名（画布节点无点击回调，保持画布不动）"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "need": "自进化重建（ADR-014）：干细胞（主图运行时权柄）与培养皿（沙盒子图分化），TDD 从零",
+      "approach": "变异内核纯函数先行单测；执行器只做薄接线；沙盒绝不触碰主图；npm run qa 全绿门禁",
+      "features": [
+        {
+          "name": "图变异内核 graph-mutation",
+          "description": "MutationOp 五操作 + policy（白名单/预算/保护节点/无悬空边），applyMutations 部分拒绝不中断",
+          "status": "done",
+          "behavior": [
+            "违规 op 进 rejected 并给原因",
+            "audit 记录每 op 结果"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 1621979",
+            "test:evolution 22/22",
+            "npm run qa 12/12",
+            "vue-tsc 0 错误",
+            "白名单/预算/保护节点/级联删边/不可变全覆盖"
+          ]
+        },
+        {
+          "name": "StemCell 干细胞",
+          "description": "context.mutateGraph 接入步进引擎：运行时改当前图，后续步骤可执行新节点；护栏内置（allowed_types/max_mutations）",
+          "status": "done",
+          "behavior": [
+            "超预算输出 graph_edit_granted=false",
+            "不自动持久化主图"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 0db106d",
+            "test:evolution 22/22",
+            "npm run qa 12/12",
+            "vue-tsc 0 错误",
+            "步进 runner 活引用注入 context.mutateGraph",
+            "测试断言后续步骤真正执行了运行时新增节点"
+          ]
+        },
+        {
+          "name": "PetriDish 培养皿",
+          "description": "slave 子图深拷贝沙盒内变异+评估，输出 refined_workflow；savePetriResult 落盘 .petri.json 人审，不进 registry",
+          "status": "done",
+          "behavior": [
+            "主图哈希不变",
+            "applied 默认 false"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 8c38e3b",
+            "test:evolution 22/22",
+            "npm run qa 12/12",
+            "vue-tsc 0 错误",
+            "候选择优/全失败回退/主图不可变",
+            "savePetriResult 落盘 .petri.json，sync 排除不进 registry"
+          ]
+        },
+        {
+          "name": "注册面 evolve.json",
+          "description": "node-defs/evolve.json 仅 StemCell/PetriDish（无 PluripotentCell 旧名兼容），index.json 5→6",
+          "status": "done",
+          "behavior": [
+            "palette 可见分类 Evolve"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 0db106d, 8c38e3b",
+            "test:evolution 22/22",
+            "npm run qa 12/12",
+            "vue-tsc 0 错误",
+            "sync:node-defs 6 packs",
+            "无 PluripotentCell 旧名"
+          ]
         }
       ]
     }

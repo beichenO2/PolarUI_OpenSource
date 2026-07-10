@@ -28,7 +28,7 @@ Given workflow_id = "taoci-outreach" 且 Web_related 下无同名目录
 When 执行 node scripts/export-release.mjs --workflow taoci-outreach
 Then 创建 ~/Desktop/Web_related/taoci-outreach/
 And site.manifest.json.release_id == "taoci-outreach"
-And workflow/snapshot.lg.json 存在且 checksum 匹配源
+And workflow/snapshot.json 存在且 checksum 匹配源
 And EXPORT.log 含全部 compile step
 ```
 
@@ -64,7 +64,7 @@ Then taoci-outreach 中不存在 alice
 
 ```gherkin
 Given export-release.mjs 完成
-Then release 目录含 workflow/snapshot.lg.json
+Then release 目录含 workflow/snapshot.json
 And 含 config/memory-schema.json
 And 含 config/required-executors.json
 And 不含 workflows/ 外部符号链接

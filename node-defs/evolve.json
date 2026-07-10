@@ -1,0 +1,114 @@
+[
+  {
+    "class_type": "StemCell",
+    "category": "Evolve",
+    "execution_mode": "WF",
+    "display_name": "干细胞",
+    "description": "WF 权柄入口：执行经过此节点时准许对当前工作流直接增删改节点与连线（可读可写）；allowed_types 限制可新增的类型。",
+    "color": "#6a5a8a",
+    "inputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞 · 输入「state」（类型 object）"
+      },
+      {
+        "name": "differentiation_signal",
+        "type": "object",
+        "optional": true,
+        "description": "干细胞 · 输入「differentiation_signal」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "object",
+        "description": "干细胞 · 输出「state」（类型 object）"
+      },
+      {
+        "name": "materialized_class",
+        "type": "string",
+        "description": "干细胞 · 输出「materialized_class」（类型 string）"
+      },
+      {
+        "name": "node_id",
+        "type": "string",
+        "description": "干细胞 · 输出「node_id」（类型 string）"
+      },
+      {
+        "name": "graph_edit_granted",
+        "type": "boolean",
+        "description": "干细胞 · 输出「graph_edit_granted」— 本步是否开放工作流结构读写"
+      }
+    ],
+    "params": {
+      "allowed_types": {
+        "type": "text",
+        "default": "LLM,ToolCall,CodeExec,Switch,Output,StemCell",
+        "label": "可新增/改动的 class_type（逗号分隔）"
+      },
+      "allow_graph_edit": {
+        "type": "boolean",
+        "default": true,
+        "label": "准许运行时改主工作流结构"
+      },
+      "max_mutations": {
+        "type": "number",
+        "default": 8,
+        "label": "每 run 最大变异条数"
+      },
+      "purpose": {
+        "type": "text",
+        "default": "",
+        "label": "分化目的说明"
+      }
+    }
+  },
+  {
+    "class_type": "PetriDish",
+    "category": "Evolve",
+    "execution_mode": "WF",
+    "display_name": "培养皿",
+    "description": "WF 结构进化（子图路径）：展开 slave 子工作流，在子图内改图并人审注册；不直接改主图。",
+    "color": "#5a4a6a",
+    "expandable": true,
+    "inputs": [
+      {
+        "name": "seed",
+        "type": "any",
+        "optional": true,
+        "description": "培养皿 · 输入「seed」（类型 any），可选"
+      },
+      {
+        "name": "evolution_signal",
+        "type": "object",
+        "optional": true,
+        "description": "培养皿 · 输入「evolution_signal」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "refined_workflow",
+        "type": "object",
+        "description": "培养皿 · 输出「refined_workflow」（类型 object）"
+      },
+      {
+        "name": "applied",
+        "type": "boolean",
+        "description": "培养皿 · 输出「applied」（类型 boolean）"
+      }
+    ],
+    "params": {
+      "slave_workflow": {
+        "type": "text",
+        "default": "",
+        "label": "Slave 子工作流（workflows/ 路径）"
+      },
+      "allow_graph_edit": {
+        "type": "boolean",
+        "default": true,
+        "label": "允许运行时改图"
+      }
+    }
+  }
+]

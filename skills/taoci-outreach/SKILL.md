@@ -17,8 +17,9 @@ description: >
 |------|------|
 | 架构 | `PolarUI/docs/ARCHITECTURE.md` |
 | 撰写七步 | `PolarUI/skills/polarui-workflow-authoring/SKILL.md` |
+| Web 契约 | `PolarUI/skills/polarui-workflow-contract/SKILL.md` |
+| Web 部署 | `PolarUI/skills/polarui-web-deploy/SKILL.md` |
 | 规格 | `PolarUI/workflows/taoci-outreach/WORKFLOW.spec.md` |
-| Web 发行 | `PolarUI/docs/WEB_EXPORT.md` |
 
 ## 目标图（当前）
 

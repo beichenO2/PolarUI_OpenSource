@@ -6,14 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { scanSkillsDir } from '../lib/toolcall-composite.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const NODE_DEFS = join(ROOT, 'dist/node-defs');
+const NODE_DEFS = join(ROOT, 'node-defs');
 const OUT_DIR = join(ROOT, 'dist/toolcall-editor');
 const OUT_FILE = join(OUT_DIR, 'catalog.json');
 
 const SKIP = new Set([
   'ShellExec', 'ToolCall', 'LLM', 'Switch', 'Output', 'PromptInput',
   'StaticData', 'Merge', 'Condition', 'Validator', 'RetryLoop',
-  'StemCell', 'LG_Entry', 'LG_LLM', 'LG_ToolNode', 'LG_ConditionalEdge',
+  'StemCell',
 ]);
 
 const SKIP_PREFIX = ['Taoci', 'Checkup', 'LG_'];

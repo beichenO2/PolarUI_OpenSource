@@ -1,0 +1,30 @@
+{
+  "_name": "LG single-path stepping",
+  "_description": "_entry/_lg_edges 单路径；未连线 orphan 不执行",
+  "_library": "LG",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "4", "kind": "static" }
+  ],
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "step1", "type": "string" }
+  },
+  "2": {
+    "class_type": "TextTransform",
+    "inputs": { "text": ["1", 0] },
+    "params": { "operation": "uppercase" }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "orphan", "type": "string" }
+  },
+  "4": {
+    "class_type": "Output",
+    "inputs": { "content": ["2", 0] },
+    "params": {}
+  }
+}

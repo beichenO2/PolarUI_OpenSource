@@ -1,0 +1,157 @@
+/* ToolCall 工具列表编辑器 — 画布侧栏样式 */
+.polar-tool-list-row label {
+  display: block;
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 6px;
+}
+
+.polar-tool-list-host {
+  width: 100%;
+}
+
+.ptl-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ptl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: #8b949e;
+}
+
+.ptl-meta-label {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.ptl-chip {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: #58a6ff;
+}
+
+.ptl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+}
+
+.ptl-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #21262d;
+}
+
+.ptl-item:last-child {
+  border-bottom: none;
+}
+
+.ptl-name {
+  font-family: ui-monospace, monospace;
+  color: #e6edf3;
+  font-weight: 600;
+  min-width: 88px;
+}
+
+.ptl-desc {
+  flex: 1;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptl-empty {
+  padding: 10px;
+  color: #8b949e;
+  font-style: italic;
+}
+
+.ptl-add {
+  display: flex;
+  gap: 6px;
+}
+
+.ptl-select,
+.ptl-search {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #e6edf3;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.ptl-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #e6edf3;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ptl-btn:hover {
+  background: #30363d;
+}
+
+.ptl-btn--danger {
+  color: #f85149;
+  padding: 2px 8px;
+  margin-left: auto;
+}
+
+.ptl-skills summary {
+  cursor: pointer;
+  color: #8b949e;
+  user-select: none;
+}
+
+.ptl-skill-results {
+  margin-top: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.ptl-skill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.ptl-skill-row strong {
+  color: #58a6ff;
+  font-size: 12px;
+}
+
+.ptl-skill-row span {
+  flex: 1;
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.polar-tool-list-row input[data-tool-list-sync] {
+  display: none;
+}

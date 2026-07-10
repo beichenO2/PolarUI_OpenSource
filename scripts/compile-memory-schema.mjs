@@ -1,5 +1,5 @@
 /**
- * Compile memory schema from WORKFLOW.spec.md + lg.json node scan.
+ * Compile memory schema from WORKFLOW.spec.md + workflow .json node scan.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';

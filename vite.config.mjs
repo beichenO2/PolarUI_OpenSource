@@ -69,12 +69,31 @@ function polarisDevMiddleware() {
   };
 }
 
+function nodeDefsDevMiddleware() {
+  const nodeDefsRoot = join(POLARUI_ROOT, 'node-defs');
+  return {
+    name: 'node-defs-ssot',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const m = req.url?.match(/^\/node-defs\/(.+)$/);
+        if (!m || req.method !== 'GET') return next();
+        const rel = decodeURIComponent(m[1].split('?')[0]);
+        const filePath = join(nodeDefsRoot, rel);
+        if (!existsSync(filePath) || !filePath.startsWith(nodeDefsRoot)) return next();
+        const type = rel.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8';
+        res.setHeader('Content-Type', type);
+        res.end(readFileSync(filePath));
+      });
+    },
+  };
+}
+
 export default defineConfig({
   root: join(POLARUI_ROOT, 'dist'),
   // `vite preview` serves build.outDir (resolved against root). dist/ IS the
   // prebuilt app here, so point outDir at root itself or preview 404s (dist/dist).
   build: { outDir: '.', emptyOutDir: false },
-  plugins: [exportReleaseMiddleware(), polarisDevMiddleware()],
+  plugins: [exportReleaseMiddleware(), polarisDevMiddleware(), nodeDefsDevMiddleware()],
   server: {
     host: '127.0.0.1',
     port: Number(process.env.POLARUI_PORT ?? 5170),

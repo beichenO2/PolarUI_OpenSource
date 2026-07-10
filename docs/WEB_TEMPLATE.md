@@ -28,8 +28,8 @@
 ├── _template/                    # LibreChat 套壳模版（含 POLAR 改造层）
 ├── taoci-outreach/               # 首发发行版（workflow 快照 A）
 ├── taoci-outreach_1/             # 第二次导出（快照 B），与上并存
-├── taoci-outreach_1_1/           # 第三次导出（快照 C）
-└── {workflow_id}_{suffix}/       # suffix 规则见下
+├── taoci-outreach_2/             # 第三次导出（快照 C）
+└── {workflow_id}_{n}/            # 数字递增 _1 → _2 → _3（见 WEB_EXPORT.md）
 ```
 
 ### 命名规则
@@ -38,10 +38,9 @@
 |------|-----------|
 | 首次导出 `taoci-outreach` | `taoci-outreach` |
 | 同 workflow 再导出 | `taoci-outreach_1` |
-| 从 `_1` 再导出 | `taoci-outreach_1_1` |
-| 从 `_1_1` 再导出 | `taoci-outreach_1_1_1` |
+| 继续导出 | `taoci-outreach_2`、`taoci-outreach_3` … |
 
-**规则**：在**当前发行版文件夹名**后追加 `_1`，不覆盖、不迁移旧站数据。
+**规则**：基名 `{workflow_id}` 不变，后缀 **数字递增**；不覆盖、不迁移旧站数据。历史 `_1_1` 目录可并存，新 export 不再产生该格式。
 
 每个文件夹 = 独立进程 + 独立数据库卷，互不影响。
 
@@ -137,7 +136,7 @@
 {
   "release_id": "taoci-outreach_1",
   "workflow_id": "taoci-outreach",
-  "workflow_snapshot": "workflow/snapshot.lg.json",
+  "workflow_snapshot": "workflow/snapshot.json",
   "export_entry": "cli",
   "exported_at": "2026-07-07T12:00:00+08:00"
 }

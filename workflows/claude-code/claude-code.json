@@ -1,0 +1,543 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+      },
+      "purpose": "Claude Code LG — Agentic coding ReAct"
+    },
+    "params": {
+      "content": "Claude Code coding task",
+      "preload_memory": true,
+      "claude_md": ""
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": [
+        "1",
+        0
+      ],
+      "role": "You are Claude Code, an interactive CLI tool for software engineering.",
+      "constraints": "Use tools. PermissionGate for risky ops. JSON branch tool|finish.",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "ReflectiveContext",
+    "inputs": {
+      "trigger": [
+        "2",
+        0
+      ]
+    },
+    "params": {}
+  },
+  "4": {
+    "class_type": "ContextWindow",
+    "inputs": {
+      "messages": [
+        "1",
+        2
+      ],
+      "new_message": [
+        "1",
+        0
+      ]
+    },
+    "params": {
+      "max_tokens": 200000,
+      "strategy": "summary"
+    }
+  },
+  "5": {
+    "class_type": "StaticData",
+    "inputs": {
+      "trigger": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "value": "[{\"name\":\"FileRead\"},{\"name\":\"FileWrite\"},{\"name\":\"CodeExec\"},{\"name\":\"GlobSearch\"},{\"name\":\"GrepSearch\"},{\"name\":\"WebSearch\"},{\"name\":\"WebFetch\"},{\"name\":\"SubAgent\"},{\"name\":\"GitCommit\"},{\"name\":\"MCPCall\"},{\"name\":\"Notification\"},{\"name\":\"CodeExec\"}]",
+      "type": "json"
+    }
+  },
+  "6": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": [
+        "4",
+        0
+      ],
+      "context": [
+        "2",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "Claude Code ReAct. JSON: {\"branch\":\"tool|finish\",\"tool\":\"FileRead|CodeExec|...\"}"
+    }
+  },
+  "7": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "branches": "tool,finish",
+      "cases": "[{\"id\":\"a\"},{\"id\":\"b\"}]"
+    }
+  },
+  "8": {
+    "class_type": "PermissionGate",
+    "inputs": {
+      "permission_request": {
+        "action": [
+          "7",
+          0
+        ],
+        "tool_name": [
+          "6",
+          0
+        ]
+      }
+    },
+    "params": {
+      "mode": "ask",
+      "whitelist": "[\"FileRead\",\"GlobSearch\",\"GrepSearch\",\"WebSearch\"]"
+    }
+  },
+  "9": {
+    "class_type": "ToolCall",
+    "inputs": {
+      "prompt": [
+        "25",
+        0
+      ],
+      "tool_definitions": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "model": "GLM-5.1"
+    }
+  },
+  "10": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "11": {
+    "class_type": "FileWrite",
+    "inputs": {
+      "path": [
+        "9",
+        0
+      ],
+      "content": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "12": {
+    "class_type": "CodeExec",
+    "inputs": {
+      "code": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "optional": true,
+      "language": "shell"
+    }
+  },
+  "13": {
+    "class_type": "GlobSearch",
+    "inputs": {
+      "pattern": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "14": {
+    "class_type": "GrepSearch",
+    "inputs": {
+      "pattern": [
+        "9",
+        0
+      ],
+      "path": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "15": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "16": {
+    "class_type": "MCPCall",
+    "inputs": {
+      "mcp_request": [
+        "9",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "17": {
+    "class_type": "CodeExec",
+    "inputs": {
+      "code": [
+        "7",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "20": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "purpose": [
+          "1",
+          2
+        ],
+        "expected_pattern": [
+          "1",
+          1
+        ]
+      }
+    },
+    "params": {
+      "verify_mode": "auto"
+    }
+  },
+  "21": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "20",
+        0
+      ],
+      "original_input": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "22": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "format": "markdown"
+    }
+  },
+  "23": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "7",
+        1
+      ]
+    },
+    "params": {
+      "format": "text"
+    }
+  },
+  "24": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "25": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "24",
+        0
+      ],
+      "original_input": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "26": {
+    "class_type": "Validator",
+    "inputs": {
+      "actual_output": [
+        "6",
+        0
+      ],
+      "validation_spec": {
+        "expected_pattern": ".*"
+      }
+    },
+    "params": {
+      "verify_mode": "step"
+    }
+  },
+  "27": {
+    "class_type": "RetryLoop",
+    "inputs": {
+      "passed": [
+        "26",
+        0
+      ],
+      "original_input": [
+        "27",
+        0
+      ]
+    },
+    "params": {
+      "max_retries": 7
+    }
+  },
+  "28": {
+    "class_type": "SubAgent",
+    "inputs": {
+      "task": [
+        "9",
+        0
+      ],
+      "context": [
+        "25",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "_name": "Claude Code",
+  "_description": "Claude Code ReAct — PromptInput→ContextWindow→LLM→Switch→ToolCall/工具回环 | finish→Validator/RetryLoop→Output",
+  "_category": "agent-reference",
+  "_state_schema": {
+    "messages": "array",
+    "claude_md": "string",
+    "branch": "string",
+    "tool": "string"
+  },
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "5",
+      "kind": "static"
+    },
+    {
+      "from": "5",
+      "to": "6",
+      "kind": "static"
+    },
+    {
+      "from": "6",
+      "to": "7",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "8",
+      "kind": "conditional",
+      "when": "tool"
+    },
+    {
+      "from": "8",
+      "to": "9",
+      "kind": "static"
+    },
+    {
+      "from": "9",
+      "to": "10",
+      "kind": "conditional",
+      "when": "FileRead"
+    },
+    {
+      "from": "9",
+      "to": "11",
+      "kind": "conditional",
+      "when": "FileWrite"
+    },
+    {
+      "from": "9",
+      "to": "12",
+      "kind": "conditional",
+      "when": "CodeExec"
+    },
+    {
+      "from": "9",
+      "to": "13",
+      "kind": "conditional",
+      "when": "GlobSearch"
+    },
+    {
+      "from": "9",
+      "to": "14",
+      "kind": "conditional",
+      "when": "GrepSearch"
+    },
+    {
+      "from": "9",
+      "to": "15",
+      "kind": "conditional",
+      "when": "WebSearch"
+    },
+    {
+      "from": "9",
+      "to": "16",
+      "kind": "conditional",
+      "when": "MCPCall"
+    },
+    {
+      "from": "9",
+      "to": "28",
+      "kind": "conditional",
+      "when": "SubAgent"
+    },
+    {
+      "from": "10",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "11",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "12",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "13",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "14",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "15",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "16",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "28",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "20",
+      "to": "21",
+      "kind": "static"
+    },
+    {
+      "from": "21",
+      "to": "22",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "20",
+      "kind": "conditional",
+      "when": "finish"
+    }
+  ]
+}

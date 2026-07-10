@@ -62,7 +62,7 @@ LLM
 PromptInput → ShellExec(node harness/index.mjs) → Output
 ```
 
-Harness 应在 `.lg.json` 里，不是 CLI 文件夹。
+Harness 应在 workflow `.json` 里，不是 CLI 文件夹。
 
 ### B — ToolCall 内部分发（已废弃）
 
@@ -84,7 +84,7 @@ ToolCall executor 内部 W5t() → 偷偷调 FileRead/WebSearch
 |------|------|
 | `dist/workflows/test-multi-turn-chat.json` | WorkingMemory → LLM（多轮参考） |
 | `dist/workflows/claude-code.lg.json` | ⚠️ legacy：含 ShellExec，待迁移 |
-| `workflows/taoci-outreach/taoci-outreach.lg.json` | ⚠️ 反例：ShellExec 黑盒 |
+| `workflows/taoci-outreach/taoci-outreach.json` | 套辞生产图（WYSIWYG 状态机） |
 
 ---
 

@@ -1,0 +1,19 @@
+{
+  "_name": "WF linear topology smoke",
+  "_description": "StaticData → TextTransform(uppercase) → Output",
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "hello", "type": "string" }
+  },
+  "2": {
+    "class_type": "TextTransform",
+    "inputs": { "text": ["1", 0] },
+    "params": { "operation": "uppercase" }
+  },
+  "3": {
+    "class_type": "Output",
+    "inputs": { "content": ["2", 0] },
+    "params": { "format": "text" }
+  }
+}

@@ -1,0 +1,313 @@
+{
+  "1": {
+    "class_type": "Cron",
+    "inputs": {},
+    "params": {
+      "expression": "0 */30 * * * *",
+      "timezone": "Asia/Shanghai"
+    }
+  },
+  "2": {
+    "class_type": "DigestFuse",
+    "inputs": {
+      "topic": [
+        "2s",
+        0
+      ]
+    },
+    "params": {
+      "api_base": "http://127.0.0.1:3800"
+    }
+  },
+  "3": {
+    "class_type": "CheckupEventInbox",
+    "inputs": {},
+    "params": {
+      "agent_id": "@evolution-loop-agent"
+    }
+  },
+  "4": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "PolarUI",
+      "type": "string"
+    }
+  },
+  "5": {
+    "class_type": "SSoTQuery",
+    "inputs": {
+      "project": [
+        "4",
+        0
+      ]
+    },
+    "params": {
+      "filter_status": "all"
+    }
+  },
+  "6": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "2",
+        0
+      ],
+      "input_b": [
+        "3",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "7": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "6",
+        0
+      ],
+      "input_b": [
+        "5",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "concat"
+    }
+  },
+  "8": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "content": "分析合并信号，输出 JSON：{\"action\":\"skip|tool|workflow\",\"target\":\"\",\"payload\":{},\"confidence\":0.0-1.0}。confidence<0.5 必须 skip。",
+      "expected_output": {
+        "body": "\\{\\s*\"action\"\\s*:\\s*\"(skip|tool|workflow)\""
+      },
+      "purpose": "Master 元流水线规范决策：从 digist gaps + checkup 事件 + SSoT 状态输出结构化 JSON（action/target/payload/confidence）"
+    }
+  },
+  "9": {
+    "class_type": "AgenticUnit",
+    "inputs": {
+      "task_input": [
+        "7",
+        0
+      ],
+      "validation_spec": {
+        "purpose": [
+          "8",
+          2
+        ],
+        "expected_pattern": [
+          "8",
+          1
+        ]
+      },
+      "prior_knowledge": [
+        "1f",
+        0
+      ]
+    },
+    "params": {
+      "work_model": "GLM-5.1",
+      "verify_model": "GLM-5.1",
+      "max_retries": 7,
+      "role_declaration": {
+        "role": "master",
+        "responsibility": "元流水线规范决策与派任（非自治 Agent）",
+        "constraints": "拒绝 confidence<0.5；禁止 ClawBin 删除"
+      }
+    }
+  },
+  "10": {
+    "class_type": "JsonParse",
+    "inputs": {
+      "input": [
+        "9",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "Condition",
+    "inputs": {
+      "value": [
+        "10",
+        0
+      ]
+    },
+    "params": {
+      "operator": "action_requires_dispatch"
+    }
+  },
+  "12": {
+    "class_type": "AgentWorkflow",
+    "inputs": {
+      "input": [
+        "10",
+        0
+      ],
+      "branch_ok": [
+        "11",
+        0
+      ]
+    },
+    "params": {
+      "workflow_id": "checkup-triage-and-heal",
+      "workflow_name": "检修事件：分诊→诊断→修复→汇报"
+    }
+  },
+  "13": {
+    "class_type": "HumanApproval",
+    "inputs": {
+      "context": [
+        "9",
+        0
+      ],
+      "branch_alt": [
+        "11",
+        1
+      ]
+    },
+    "params": {
+      "auto_approve": false,
+      "prompt_text": "Master 决策核验未通过或需人工确认，请审核后继续"
+    }
+  },
+  "14": {
+    "class_type": "Merge",
+    "inputs": {
+      "input_a": [
+        "12",
+        0
+      ],
+      "input_b": [
+        "13",
+        0
+      ]
+    },
+    "params": {
+      "strategy": "first_non_null"
+    }
+  },
+  "15": {
+    "class_type": "LearningCapture",
+    "inputs": {
+      "execution_record": {
+        "decision": [
+          "10",
+          0
+        ],
+        "result": [
+          "14",
+          0
+        ],
+        "validation_report": [
+          "9",
+          1
+        ]
+      }
+    }
+  },
+  "16": {
+    "class_type": "RecursionGuard",
+    "inputs": {
+      "value": [
+        "15p",
+        0
+      ]
+    },
+    "params": {
+      "max_depth": 100,
+      "cooldown_ms": 5000,
+      "workflow_key": "evolution-loop"
+    }
+  },
+  "17": {
+    "class_type": "AgentWorkflow",
+    "inputs": {
+      "input": [
+        "16",
+        0
+      ]
+    },
+    "params": {
+      "workflow_id": "evolution-loop",
+      "workflow_name": "Master 元流水线递归循环"
+    }
+  },
+  "18": {
+    "class_type": "Output",
+    "inputs": {
+      "content": [
+        "17",
+        0
+      ]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "_name": "Master 元流水线递归循环",
+  "_description": "固定 DAG 元流水线：拉信号 → 规范决策 → Switch 路由 → LearningCapture → PromptEvolve → 递归触发；跨 run 读 latest.md 注入 AgenticUnit（00 §3.3/§3.4）",
+  "_role": "master",
+  "_category": "agentic",
+  "1p": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "PolarUI/.data/prompt-evolve/latest.md",
+      "type": "string"
+    }
+  },
+  "1f": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": [
+        "1p",
+        0
+      ]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "1h": {
+    "class_type": "HistoryReader",
+    "inputs": {},
+    "params": {
+      "limit": 5
+    }
+  },
+  "2s": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "self-evolving-agent",
+      "type": "string"
+    }
+  },
+  "15p": {
+    "class_type": "PromptEvolve",
+    "inputs": {
+      "evolution_sources": {
+        "capture": [
+          "15",
+          2
+        ],
+        "history_runs": [
+          "1h",
+          0
+        ]
+      }
+    },
+    "params": {
+      "target": "prompt_inject",
+      "read_auto_apply": false,
+      "include_history": false,
+      "memory_key": "evolution-loop"
+    }
+  }
+}

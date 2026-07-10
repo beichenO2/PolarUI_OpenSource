@@ -15,8 +15,7 @@
 | RetryLoop | core.json | 单步失败重试（**非**用户多轮对话） |
 | Output | core.json | 终点 |
 | SubAgent | tools-system.json | 委派子任务 / 子 Agent 环 |
-| FeishuIM | feishu-im.json | 飞书入出站（真实 Bot） |
-| Notification | tools-system.json | ⚠️ 桌面/Hub 通知，**不是**飞书 |
+| Notification | tools-system.json | 桌面/Hub 通知 |
 
 ## ReAct / 工具（palette 可见，Switch 连边执行）
 
@@ -38,7 +37,7 @@
 **状态机：**
 
 ```
-WorkingMemory → Switch(step) → LLM / SubAgent → FeishuIM → Output
+WorkingMemory → Switch(step) → LLM / SubAgent → Output
 ```
 
 **ReAct：**
@@ -69,7 +68,7 @@ S1 调研     → SubAgent ×3 + Merge
 记忆        → WorkingMemory → LLM context
 文件/检索   → Switch → FileRead / WebSearch（明面节点）
 ReAct 调度  → ToolCall（复合）+ Switch → 工具节点
-飞书回复    → FeishuIM
+出站回复    → Output（渠道接入属部署层，ADR-010）
 ```
 
 ## Legacy（待基础设施阶段清理）

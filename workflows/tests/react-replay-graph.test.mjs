@@ -5,10 +5,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const FIXTURE = join(ROOT, 'tests/fixtures/workflows/test-lg-react-replay.json');
 
 describe('test-lg-react-replay (ADR-003 tool routing)', () => {
-  it('lg.json ToolCall 后有按 tool_name 的条件边', () => {
-    const raw = readFileSync(join(ROOT, 'dist/workflows/test-lg-react-replay.lg.json'), 'utf8');
+  it('.json ToolCall 后有按 tool_name 的条件边', () => {
+    const raw = readFileSync(FIXTURE, 'utf8');
     const graph = JSON.parse(raw);
     const edges = graph._lg_edges ?? [];
     const fromToolCall = edges.filter((e) => e.from === '6' && e.kind === 'conditional');
@@ -25,14 +26,12 @@ describe('test-lg-react-replay (ADR-003 tool routing)', () => {
 
     const { resetHeadlessEngine } = await import('../../lib/headless-engine.mjs');
     const { resetMockRegistration } = await import('../../lib/test-mocks/register.mjs');
-    const { resetTaociRegistration } = await import('../../lib/taoci-graph/register.mjs');
     resetHeadlessEngine();
     resetMockRegistration();
-    resetTaociRegistration();
 
     const { runWorkflowGraph } = await import('../../lib/run-graph.mjs');
     const result = await runWorkflowGraph({
-      workflowId: 'test-lg-react-replay',
+      workflowPath: FIXTURE,
       inputs: {
         conversationId: `react-${Date.now()}`,
         message: 'react smoke',
@@ -41,8 +40,8 @@ describe('test-lg-react-replay (ADR-003 tool routing)', () => {
 
     assert.ok(result.node_traces.includes('ToolCall'));
     assert.ok(result.node_traces.includes('FileRead'));
-    assert.ok(!result.node_traces.includes('WebSearch'), 'LG must not run all tool branches');
-    assert.ok(!result.node_traces.includes('CodeExec'), 'LG must not run all tool branches');
+    assert.ok(!result.node_traces.includes('WebSearch'), 'stepwise must not run all tool branches');
+    assert.ok(!result.node_traces.includes('CodeExec'), 'stepwise must not run all tool branches');
 
     delete process.env.POLARUI_MOCK_LLM;
     delete process.env.POLARUI_MOCK_LLM_BRANCH;

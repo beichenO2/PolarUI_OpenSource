@@ -1,0 +1,29 @@
+{
+  "_name": "ForLoop characterization",
+  "_description": "split_lines → ForLoop(max=2) → 收集 results",
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "a\nb\nc", "type": "string" }
+  },
+  "2": {
+    "class_type": "TextTransform",
+    "inputs": { "text": ["1", 0] },
+    "params": { "operation": "split_lines" }
+  },
+  "3": {
+    "class_type": "ForLoop",
+    "inputs": { "items": ["2", 0] },
+    "params": { "max_items": 2 }
+  },
+  "4": {
+    "class_type": "TextTransform",
+    "inputs": { "text": ["3", 0] },
+    "params": { "operation": "uppercase" }
+  },
+  "5": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 2] },
+    "params": {}
+  }
+}

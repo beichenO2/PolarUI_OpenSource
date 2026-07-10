@@ -23,9 +23,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runDeployPreflight } from '../lib/deploy-preflight.mjs';
 import { compileMemorySchema } from './compile-memory-schema.mjs';
 import { compileSiteConfig } from './compile-site-config.mjs';
+import { loadHttpWorkflowDeclarations, parseHttpWorkflowCliArgs } from './http-workflows.mjs';
+import { patchLibreChatHttpWorkflows } from './patch-librechat-http-workflows.mjs';
 import { verifyRelease } from './verify-release.mjs';
 import { deployWebRelease } from './deploy-web-release.mjs';
-import { graphNodeTypes } from './graph-utils.mjs';
+import { graphNodeTypes, resolveWorkflowGraphPath } from './graph-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POLARUI_ROOT = join(__dirname, '..');
@@ -43,6 +45,7 @@ function parseArgs(argv) {
     skipPreflight: false,
     json: false,
     exportEntry: 'cli',
+    httpWorkflows: parseHttpWorkflowCliArgs(argv),
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -52,6 +55,7 @@ function parseArgs(argv) {
     else if (a === '--skip-preflight') out.skipPreflight = true;
     else if (a === '--json') out.json = true;
     else if (a === '--export-entry') out.exportEntry = argv[++i];
+    else if (a === '--http-workflow') i++; // consumed by parseHttpWorkflowCliArgs
   }
   return out;
 }
@@ -147,15 +151,15 @@ export async function exportRelease(opts) {
     return emit({ ok: false, stage: 'input', error: 'workflow id is required' });
   }
   const workflowDir = join(POLARUI_ROOT, 'workflows', workflowId);
-  const lgPath = join(workflowDir, `${workflowId}.lg.json`);
-  if (!existsSync(lgPath)) {
-    return emit({ ok: false, stage: 'input', error: `workflow not found: ${lgPath}` });
+  const graphPath = resolveWorkflowGraphPath(workflowDir, workflowId);
+  if (!graphPath) {
+    return emit({ ok: false, stage: 'input', error: `workflow not found: ${workflowDir}/${workflowId}.json` });
   }
   if (!existsSync(templateDir)) {
     return emit({ ok: false, stage: 'input', error: `template missing: ${templateDir}` });
   }
   let lgGraph;
-  const lgRaw = readFileSync(lgPath, 'utf8');
+  const lgRaw = readFileSync(graphPath, 'utf8');
   try {
     lgGraph = JSON.parse(lgRaw);
   } catch (e) {
@@ -204,8 +208,8 @@ export async function exportRelease(opts) {
 
     await runStep(log, 3, 'graph', 'compileWorkflowGraph', () => {
       mkdirSync(join(stagingRoot, 'workflow'), { recursive: true });
-      writeFileSync(join(stagingRoot, 'workflow/snapshot.lg.json'), lgRaw);
-      return 'workflow/snapshot.lg.json';
+      writeFileSync(join(stagingRoot, 'workflow/snapshot.json'), lgRaw);
+      return 'workflow/snapshot.json';
     });
 
     let registry = {};
@@ -213,8 +217,28 @@ export async function exportRelease(opts) {
       const regPath = join(workflowDir, 'registry-entry.json');
       if (!existsSync(regPath)) return 'no registry-entry.json';
       registry = JSON.parse(readFileSync(regPath, 'utf8'));
+      // http_workflows live in site.config — strip so registry catalog stays clean
+      if (registry && typeof registry === 'object' && 'http_workflows' in registry) {
+        const { http_workflows: _hw, ...rest } = registry;
+        registry = rest;
+      }
       writeFileSync(join(stagingRoot, 'manifest.registry.json'), JSON.stringify(registry, null, 2));
       return 'manifest.registry.json';
+    });
+
+    let httpWorkflows = [];
+    await runStep(log, 4.5, 'http-workflows', 'loadHttpWorkflows', () => {
+      httpWorkflows = loadHttpWorkflowDeclarations({
+        workflowDir,
+        cliWorkflows: opts.httpWorkflows ?? [],
+      });
+      if (httpWorkflows.length === 0) return 'none';
+      mkdirSync(join(stagingRoot, 'config'), { recursive: true });
+      writeFileSync(
+        join(stagingRoot, 'config/http-workflows.json'),
+        JSON.stringify(httpWorkflows, null, 2),
+      );
+      return `${httpWorkflows.length} workflow(s)`;
     });
 
     await runStep(log, 5, 'memory-schema', 'compileMemorySchema', () => {
@@ -240,7 +264,7 @@ export async function exportRelease(opts) {
     await runStep(log, 7, 'executors', 'compileExecutors', () => {
       executors = graphNodeTypes(lgGraph);
       if (executors.length === 0) {
-        throw new Error('no node class_type found in graph — unsupported .lg.json shape?');
+        throw new Error('no node class_type found in graph — unsupported workflow graph shape?');
       }
       writeFileSync(join(stagingRoot, 'config/required-executors.json'), JSON.stringify({ executors }, null, 2));
       return executors.join(',');
@@ -254,21 +278,24 @@ export async function exportRelease(opts) {
         releaseRoot: stagingRoot,
         exportEntry,
         compileSteps: COMPILE_STEPS,
-        workflowSnapshotRel: 'workflow/snapshot.lg.json',
+        workflowSnapshotRel: 'workflow/snapshot.json',
         memorySchemaRel: 'config/memory-schema.json',
         registry,
         requiredExecutors: executors,
         polaruiRoot: POLARUI_ROOT,
+        httpWorkflows,
       });
       manifest = compiled.manifest;
       // web_root must point at the final location, not the staging dir.
       manifest.web_root = releaseRoot;
       writeFileSync(join(stagingRoot, 'site.manifest.json'), JSON.stringify(manifest, null, 2));
       writeFileSync(join(stagingRoot, 'site.config.json'), JSON.stringify(compiled.config, null, 2));
-      return 'site.manifest.json + site.config.json';
+      return httpWorkflows.length
+        ? `site.manifest.json + site.config.json (http_workflows=${httpWorkflows.length})`
+        : 'site.manifest.json + site.config.json';
     });
 
-    await runStep(log, 9, 'patch', 'patchLibreChat (polar/injected)', () => {
+    await runStep(log, 9, 'patch', 'patchLibreChat (polar/injected + http modelSpecs)', () => {
       mkdirSync(join(stagingRoot, 'polar/injected'), { recursive: true });
       writeFileSync(
         join(stagingRoot, 'polar/injected/release.json'),
@@ -281,7 +308,14 @@ export async function exportRelease(opts) {
           writeFileSync(readmePath, readme + `\n\n## Release\n\n- **release_id**: \`${releaseId}\`\n`);
         }
       }
-      return 'polar/injected/release.json';
+      let patchDetail = 'polar/injected/release.json';
+      const lcYamlPath = join(stagingRoot, 'librechat.yaml');
+      if (httpWorkflows.length > 0 && existsSync(lcYamlPath)) {
+        const patched = patchLibreChatHttpWorkflows(readFileSync(lcYamlPath, 'utf8'), httpWorkflows);
+        writeFileSync(lcYamlPath, patched.yaml);
+        patchDetail += ` + modelSpecs(+${patched.added})`;
+      }
+      return patchDetail;
     });
 
     await runStep(log, 10, 'verify', 'verifyRelease', () => {
@@ -351,7 +385,9 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   const args = parseArgs(process.argv);
   if (!args.workflow) {
-    console.error('Usage: node scripts/export-release.mjs --workflow <id> [--from-release x] [--compile-only] [--skip-preflight] [--json]');
+    console.error(
+      'Usage: node scripts/export-release.mjs --workflow <id> [--from-release x] [--compile-only] [--skip-preflight] [--json] [--http-workflow \'<json>\']…',
+    );
     process.exit(1);
   }
   const r = await exportRelease(args);

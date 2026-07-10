@@ -5,9 +5,14 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const FIXTURES = join(ROOT, 'tests/fixtures/workflows');
 
 function loadGraph(name) {
-  return JSON.parse(readFileSync(join(ROOT, 'dist/workflows', name), 'utf8'));
+  // Registered workflow from source; others from test fixtures (ADR-011 P2)
+  if (name === 'claude-code.json') {
+    return JSON.parse(readFileSync(join(ROOT, 'workflows/claude-code/claude-code.json'), 'utf8'));
+  }
+  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
 }
 
 function toolRoutingEdges(graph, toolCallNodeId) {
@@ -23,9 +28,9 @@ function assertNoDirectToolCallLoop(graph, toolCallNodeId, llmNodeId) {
   assert.ok(!bad, `ToolCall(${toolCallNodeId}) must not loop directly to LLM(${llmNodeId})`);
 }
 
-describe('ReAct LG tool routing (_lg_edges)', () => {
+describe('ReAct stepwise tool routing (_lg_edges)', () => {
   it('claude-code: ToolCall(9) → 明面工具节点条件边', () => {
-    const graph = loadGraph('claude-code.lg.json');
+    const graph = loadGraph('claude-code.json');
     const edges = toolRoutingEdges(graph, '9');
     const whens = edges.map((e) => e.when).sort();
     assert.deepEqual(whens, [
@@ -42,7 +47,7 @@ describe('ReAct LG tool routing (_lg_edges)', () => {
   });
 
   it('hermes: ToolCall(11) → 明面工具节点条件边（含 SubAgent/MemoryStore）', () => {
-    const graph = loadGraph('hermes.lg.json');
+    const graph = loadGraph('hermes.json');
     const edges = toolRoutingEdges(graph, '11');
     const whens = edges.map((e) => e.when).sort();
     assert.deepEqual(whens, [
@@ -57,29 +62,6 @@ describe('ReAct LG tool routing (_lg_edges)', () => {
     assertNoDirectToolCallLoop(graph, '11', '9');
   });
 
-  it('polarclaw-web: ToolCall(8) → HubSendPrompt/WebSearch/EcosystemScanner', () => {
-    const graph = loadGraph('polarclaw-web.lg.json');
-    const edges = toolRoutingEdges(graph, '8');
-    assert.deepEqual(edges.map((e) => e.when).sort(), [
-      'EcosystemScanner',
-      'HubSendPrompt',
-      'WebSearch',
-    ]);
-    assertNoDirectToolCallLoop(graph, '8', '6');
-  });
-
-  it('polarclaw-ide: ToolCall(9) → CodeExec/FileRead/FileWrite/MCPCall', () => {
-    const graph = loadGraph('polarclaw-ide.lg.json');
-    const edges = toolRoutingEdges(graph, '9');
-    assert.deepEqual(edges.map((e) => e.when).sort(), [
-      'CodeExec',
-      'FileRead',
-      'FileWrite',
-      'MCPCall',
-    ]);
-    assertNoDirectToolCallLoop(graph, '9', '6');
-  });
-
   it('claude-code graph engine: ToolCall → FileRead 单路径', async () => {
     process.env.POLARUI_MOCK_LLM = '1';
     process.env.POLARUI_MOCK_LLM_BRANCH = 'tool';
@@ -89,10 +71,8 @@ describe('ReAct LG tool routing (_lg_edges)', () => {
 
     const { resetHeadlessEngine } = await import('../../lib/headless-engine.mjs');
     const { resetMockRegistration } = await import('../../lib/test-mocks/register.mjs');
-    const { resetTaociRegistration } = await import('../../lib/taoci-graph/register.mjs');
     resetHeadlessEngine();
     resetMockRegistration();
-    resetTaociRegistration();
 
     const { runWorkflowGraph } = await import('../../lib/run-graph.mjs');
     const result = await runWorkflowGraph({
@@ -119,14 +99,12 @@ describe('ReAct LG tool routing (_lg_edges)', () => {
 
     const { resetHeadlessEngine } = await import('../../lib/headless-engine.mjs');
     const { resetMockRegistration } = await import('../../lib/test-mocks/register.mjs');
-    const { resetTaociRegistration } = await import('../../lib/taoci-graph/register.mjs');
     resetHeadlessEngine();
     resetMockRegistration();
-    resetTaociRegistration();
 
     const { runWorkflowGraph } = await import('../../lib/run-graph.mjs');
     const result = await runWorkflowGraph({
-      workflowId: 'hermes',
+      workflowPath: join(FIXTURES, 'hermes.json'),
       inputs: { conversationId: `hermes-${Date.now()}`, message: 'delegate task' },
     });
 
@@ -140,49 +118,10 @@ describe('ReAct LG tool routing (_lg_edges)', () => {
     delete process.env.POLARUI_MOCK_TOOL_NAME;
   });
 
-  it('polarclaw-web graph engine: ToolCall → WebSearch 单路径', async () => {
-    process.env.POLARUI_MOCK_LLM = '1';
-    process.env.POLARUI_MOCK_LLM_BRANCH = 'tool';
-    process.env.POLARUI_MOCK_TOOLCALL = '1';
-    process.env.POLARUI_MOCK_TOOL_NAME = 'WebSearch';
-    delete process.env.TAOCI_MOCK_LLM;
-
-    const { resetHeadlessEngine } = await import('../../lib/headless-engine.mjs');
-    const { resetMockRegistration } = await import('../../lib/test-mocks/register.mjs');
-    const { resetTaociRegistration } = await import('../../lib/taoci-graph/register.mjs');
-    resetHeadlessEngine();
-    resetMockRegistration();
-    resetTaociRegistration();
-
-    const { runWorkflowGraph } = await import('../../lib/run-graph.mjs');
-    const result = await runWorkflowGraph({
-      workflowId: 'polarclaw-web',
-      inputs: { conversationId: `web-${Date.now()}`, message: 'search' },
-    });
-
-    assert.ok(result.node_traces.includes('ToolCall'));
-    assert.ok(result.node_traces.includes('WebSearch'));
-    assert.ok(!result.node_traces.includes('HubSendPrompt'));
-
-    delete process.env.POLARUI_MOCK_LLM;
-    delete process.env.POLARUI_MOCK_LLM_BRANCH;
-    delete process.env.POLARUI_MOCK_TOOLCALL;
-    delete process.env.POLARUI_MOCK_TOOL_NAME;
-  });
-
   it('hermes-react-replay: ToolCall(6) 条件边', () => {
-    const graph = loadGraph('hermes-react-replay.lg.json');
+    const graph = loadGraph('hermes-react-replay.json');
     const edges = toolRoutingEdges(graph, '6');
     assert.deepEqual(edges.map((e) => e.when).sort(), ['CodeExec', 'FileRead', 'WebSearch']);
   });
 
-  it('polarclaw-feishu: ToolCall(8) 条件边', () => {
-    const graph = loadGraph('polarclaw-feishu.lg.json');
-    const edges = toolRoutingEdges(graph, '8');
-    assert.deepEqual(edges.map((e) => e.when).sort(), [
-      'KnowLeverSearch',
-      'Notification',
-      'WebSearch',
-    ]);
-  });
 });

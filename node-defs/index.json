@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "files": [
+    "core.json",
+    "tools-system.json",
+    "polar-memory.json",
+    "paradigms.json",
+    "annotation.json",
+    "evolve.json"
+  ]
+}

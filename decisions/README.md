@@ -16,12 +16,16 @@
 | 006 | [最简部署路径（MVP）](./006-simplest-deploy-mvp.md) | accepted | 2026-07-06 |
 | 007 | [记忆三层与网站 SSoT](./007-memory-three-layers.md) | accepted | 2026-07-07 |
 | 008 | [Web 发行版 + LibreChat 套壳](./008-web-release-librechat.md) | accepted | 2026-07-07 |
+| 010 | [单引擎统一与纯粹化重构（QA 门禁先行）](./010-single-engine-and-purity-refactor.md) | accepted | 2026-07-10 |
+| 011 | [双服务定位与彻底瘦身](./011-two-services-and-slimdown.md) | accepted | 2026-07-10 |
+| 012 | [Workflow HTTP 插拔（`/run` 契约）](./012-workflow-http-plugin.md) | accepted | 2026-07-10 |
 | — | [~~ToolCall 内部分发~~](./001-toolcall-internal-dispatch.md) | **deprecated** | 2026-07-04 |
 
 ## 阅读顺序
 
-1. ADR-005（两阶段）→ ADR-006（网站 MVP）→ ADR-007（记忆三层）
+1. ADR-005（两阶段）→ ADR-006（网站 MVP）→ ADR-007（记忆三层）→ ADR-008（Web）→ **ADR-012（HTTP `/run`）**
 2. ADR-001–004（图内原则）
+3. ADR-010/011（引擎统一与双服务）
 
 ## 关联
 

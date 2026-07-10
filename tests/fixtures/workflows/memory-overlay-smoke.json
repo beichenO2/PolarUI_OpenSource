@@ -1,0 +1,32 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {},
+    "params": {
+      "content": "memory overlay smoke"
+    }
+  },
+  "2": {
+    "class_type": "ScenarioMemoryLoad",
+    "inputs": {
+      "message": ["1", 0]
+    },
+    "params": {}
+  },
+  "3": {
+    "class_type": "Output",
+    "inputs": {
+      "content": ["2", 0]
+    },
+    "params": {
+      "format": "json"
+    }
+  },
+  "_name": "memory-overlay-smoke",
+  "_description": "Synthetic fixture for GUI/headless overlay smoke (ADR-011 P2). Not a registered workflow.",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "static" }
+  ]
+}

@@ -14,7 +14,7 @@ const WORKFLOW_DIRS = [
   join(ROOT, 'workflows'),
 ];
 
-/** feishu-im.lg.json 是 FeishuIM 复合节点的 internal_workflow，不能用 ShellExec 调 executor */
+/** feishu-im.json 是 FeishuIM 复合节点的 internal_workflow，不能用 ShellExec 调 executor */
 const FEISHU_IM_REWRITE = {
   '1': {
     class_type: 'PromptInput',
@@ -45,7 +45,6 @@ const FEISHU_IM_REWRITE = {
   _name: 'Feishu IM 出站',
   _description: 'WYSIWYG：PromptInput → FeishuIM → Output。无 ShellExec。',
   _category: 'polarclaw',
-  _library: 'LG',
   _entry: '1',
 };
 
@@ -100,7 +99,7 @@ function migrateShellExecNode(node) {
 
 function migrateWorkflow(obj, filePath) {
   const base = filePath.split('/').pop();
-  if (base === 'feishu-im.lg.json') {
+  if (base === 'feishu-im.json') {
     return { ...FEISHU_IM_REWRITE, changed: true, special: 'feishu-im' };
   }
 

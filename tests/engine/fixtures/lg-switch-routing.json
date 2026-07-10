@@ -1,0 +1,43 @@
+{
+  "_name": "LG Switch conditional routing",
+  "_description": "Switch + _lg_edges when 决定单路径",
+  "_library": "LG",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "conditional", "when": "tool" },
+    { "from": "2", "to": "4", "kind": "conditional", "when": "finish" },
+    { "from": "3", "to": "5", "kind": "static" },
+    { "from": "4", "to": "6", "kind": "static" }
+  ],
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "tool", "type": "string" }
+  },
+  "2": {
+    "class_type": "Switch",
+    "inputs": { "value": ["1", 0] },
+    "params": { "branches": "tool,finish" }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "TOOL_PATH", "type": "string" }
+  },
+  "4": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "FINISH_PATH", "type": "string" }
+  },
+  "5": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 0] },
+    "params": {}
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": { "content": ["4", 0] },
+    "params": {}
+  }
+}

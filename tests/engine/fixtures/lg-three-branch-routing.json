@@ -1,0 +1,55 @@
+{
+  "_name": "LG three-branch Switch routing",
+  "_description": "3 条 when 分支，步进引擎必须单路径剪枝",
+  "_library": "LG",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "conditional", "when": "tool" },
+    { "from": "2", "to": "4", "kind": "conditional", "when": "finish" },
+    { "from": "2", "to": "5", "kind": "conditional", "when": "clarify" },
+    { "from": "3", "to": "6", "kind": "static" },
+    { "from": "4", "to": "7", "kind": "static" },
+    { "from": "5", "to": "8", "kind": "static" }
+  ],
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "tool", "type": "string" }
+  },
+  "2": {
+    "class_type": "Switch",
+    "inputs": { "value": ["1", 0] },
+    "params": { "branches": "tool,finish,clarify" }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "BRANCH_TOOL", "type": "string" }
+  },
+  "4": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "BRANCH_FINISH", "type": "string" }
+  },
+  "5": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "BRANCH_CLARIFY", "type": "string" }
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 0] },
+    "params": {}
+  },
+  "7": {
+    "class_type": "Output",
+    "inputs": { "content": ["4", 0] },
+    "params": {}
+  },
+  "8": {
+    "class_type": "Output",
+    "inputs": { "content": ["5", 0] },
+    "params": {}
+  }
+}

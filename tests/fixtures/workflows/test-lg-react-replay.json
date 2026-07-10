@@ -1,0 +1,155 @@
+{
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {
+      "expected_output": {
+        "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+      }
+    },
+    "params": {
+      "content": "react replay smoke",
+      "channel": "cli"
+    }
+  },
+  "2": {
+    "class_type": "PromptInject",
+    "inputs": {
+      "prior_context": ["1", 0],
+      "role": "ReAct replay smoke",
+      "constraints": "",
+      "prior_knowledge": ""
+    }
+  },
+  "3": {
+    "class_type": "ContextWindow",
+    "inputs": {
+      "messages": ["1", 2],
+      "new_message": ["1", 0]
+    },
+    "params": {
+      "max_tokens": 32000
+    }
+  },
+  "4": {
+    "class_type": "LLM",
+    "inputs": {
+      "prompt": ["3", 0],
+      "context": ["2", 0]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "system_prompt": "ReAct JSON: {\"branch\":\"tool|finish\",\"tool\":\"FileRead|WebSearch|CodeExec\"}"
+    }
+  },
+  "5": {
+    "class_type": "Switch",
+    "inputs": {
+      "value": ["4", 0]
+    },
+    "params": {
+      "branches": "tool,finish"
+    }
+  },
+  "6": {
+    "class_type": "ToolCall",
+    "inputs": {
+      "prompt": ["4", 0],
+      "tool_definitions": ["13", 0]
+    },
+    "params": {
+      "model": "GLM-5.1",
+      "tool_list": "[{\"name\":\"FileRead\"},{\"name\":\"WebSearch\"},{\"name\":\"CodeExec\"}]"
+    }
+  },
+  "7": {
+    "class_type": "CodeExec",
+    "inputs": {
+      "code": ["6", 0]
+    },
+    "params": {
+      "optional": true,
+      "language": "shell"
+    }
+  },
+  "8": {
+    "class_type": "WebSearch",
+    "inputs": {
+      "query": ["6", 0]
+    },
+    "params": {
+      "optional": true
+    }
+  },
+  "9": {
+    "class_type": "FileRead",
+    "inputs": {
+      "path": ["6", 0]
+    },
+    "params": {
+      "path": "PolarUI/polaris.json",
+      "optional": true
+    }
+  },
+  "10": {
+    "class_type": "StemCell",
+    "inputs": {
+      "state": ["4", 0]
+    },
+    "params": {
+      "allowed_types": "LLM,ToolCall,CodeExec,FileRead,WebSearch",
+      "purpose": "react 进化槽"
+    }
+  },
+  "11": {
+    "class_type": "SkillCapture",
+    "inputs": {
+      "trajectory": ["4", 0],
+      "task_description": ["1", 0]
+    },
+    "params": {
+      "auto_save": false,
+      "push_suggestion": true
+    }
+  },
+  "12": {
+    "class_type": "Output",
+    "inputs": {
+      "content": ["4", 0]
+    },
+    "params": {}
+  },
+  "13": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": {
+      "value": "[{\"name\":\"FileRead\",\"desc\":\"Read file\"},{\"name\":\"WebSearch\",\"desc\":\"Web search\"},{\"name\":\"CodeExec\",\"desc\":\"Run shell code\"}]",
+      "label": "tool_definitions"
+    }
+  },
+  "_library": "LG",
+  "_name": "LG ReAct Replay Smoke",
+  "_description": "ADR-003：ToolCall intent → LG 条件边路由明面工具节点（单路径）",
+  "_category": "test",
+  "_state_schema": {
+    "messages": "array",
+    "branch": "string",
+    "tool": "string"
+  },
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "static" },
+    { "from": "3", "to": "4", "kind": "static" },
+    { "from": "4", "to": "5", "kind": "static" },
+    { "from": "5", "to": "6", "kind": "conditional", "when": "tool" },
+    { "from": "5", "to": "11", "kind": "conditional", "when": "finish" },
+    { "from": "6", "to": "9", "kind": "conditional", "when": "FileRead" },
+    { "from": "6", "to": "8", "kind": "conditional", "when": "WebSearch" },
+    { "from": "6", "to": "7", "kind": "conditional", "when": "CodeExec" },
+    { "from": "9", "to": "4", "kind": "static", "label": "ReAct 回环" },
+    { "from": "8", "to": "4", "kind": "static", "label": "ReAct 回环" },
+    { "from": "7", "to": "4", "kind": "static", "label": "ReAct 回环" },
+    { "from": "11", "to": "10", "kind": "static" },
+    { "from": "10", "to": "12", "kind": "static" }
+  ]
+}

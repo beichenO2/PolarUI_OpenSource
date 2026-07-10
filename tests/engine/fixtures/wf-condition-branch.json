@@ -1,0 +1,34 @@
+{
+  "_name": "WF Condition branch smoke",
+  "_description": "Condition truthy → 单侧叶子 StaticData → 双侧 Output",
+  "1": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "yes", "type": "string" }
+  },
+  "2": {
+    "class_type": "Condition",
+    "inputs": { "value": ["1", 0] },
+    "params": { "operator": "truthy" }
+  },
+  "3": {
+    "class_type": "StaticData",
+    "inputs": { "value": ["2", 0] },
+    "params": { "value": "TRUE_LEAF", "type": "string" }
+  },
+  "4": {
+    "class_type": "StaticData",
+    "inputs": { "value": ["2", 1] },
+    "params": { "value": "FALSE_LEAF", "type": "string" }
+  },
+  "5": {
+    "class_type": "Output",
+    "inputs": { "content": ["3", 0] },
+    "params": {}
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": { "content": ["4", 0] },
+    "params": {}
+  }
+}

@@ -7,8 +7,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const indexHtml = join(ROOT, 'dist/index.html');
-const assetsDir = join(ROOT, 'dist/assets');
+const distDir = process.argv[2] ? join(ROOT, process.argv[2]) : join(ROOT, 'dist');
+const indexHtml = join(distDir, 'index.html');
+const assetsDir = join(distDir, 'assets');
 const MARKER = 'export-web-button.mjs';
 
 const script = `/**

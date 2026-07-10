@@ -1,0 +1,49 @@
+{
+  "_name": "LG LLM branch routing",
+  "_description": "Mock LLM branch → Switch when 路由",
+  "_library": "LG",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" },
+    { "from": "2", "to": "3", "kind": "static" },
+    { "from": "3", "to": "4", "kind": "conditional", "when": "tool" },
+    { "from": "3", "to": "5", "kind": "conditional", "when": "finish" },
+    { "from": "4", "to": "6", "kind": "static" },
+    { "from": "5", "to": "7", "kind": "static" }
+  ],
+  "1": {
+    "class_type": "PromptInput",
+    "inputs": {},
+    "params": { "content": "route me" }
+  },
+  "2": {
+    "class_type": "LLM",
+    "inputs": { "prompt": ["1", 0] },
+    "params": {}
+  },
+  "3": {
+    "class_type": "Switch",
+    "inputs": { "value": ["2", 0] },
+    "params": { "branches": "tool,finish" }
+  },
+  "4": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "TOOL_BRANCH", "type": "string" }
+  },
+  "5": {
+    "class_type": "StaticData",
+    "inputs": {},
+    "params": { "value": "FINISH_BRANCH", "type": "string" }
+  },
+  "6": {
+    "class_type": "Output",
+    "inputs": { "content": ["4", 0] },
+    "params": {}
+  },
+  "7": {
+    "class_type": "Output",
+    "inputs": { "content": ["5", 0] },
+    "params": {}
+  }
+}

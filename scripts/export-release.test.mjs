@@ -1,6 +1,7 @@
 /**
  * AC-R01~R05 export release tests + pipeline refactor coverage
  * (atomic staging, numeric release ids, executor scan, checksum verify).
+ * ADR-011 P2: exports claude-code (sole registered workflow).
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,6 +15,7 @@ import { graphNodeTypes } from './graph-utils.mjs';
 const WEB_ROOT = join(process.env.HOME ?? '~', 'Desktop/Web_related');
 const TEST_PREFIX = `test-export-${randomUUID().slice(0, 8)}`;
 const TEST_ROOT = join(WEB_ROOT, TEST_PREFIX);
+const WORKFLOW_ID = 'claude-code';
 
 before(() => {
   mkdirSync(TEST_ROOT, { recursive: true });
@@ -48,10 +50,10 @@ test('resolveReleaseId --from-release reduces to base then increments', () => {
   assert.equal(resolveReleaseId('wf-demo', TEST_ROOT, 'wf-demo_1_1'), 'wf-demo_8');
 });
 
-describe('AC-R01/R02 export taoci-outreach', () => {
+describe('AC-R01/R02 export claude-code', () => {
   test('creates release with manifest and snapshot', async () => {
     const r = await exportRelease({
-      workflow: 'taoci-outreach',
+      workflow: WORKFLOW_ID,
       webRoot: TEST_ROOT,
       skipPreflight: true,
       compileOnly: true,
@@ -59,11 +61,11 @@ describe('AC-R01/R02 export taoci-outreach', () => {
       silent: true,
     });
     assert.ok(r.ok, JSON.stringify(r));
-    assert.equal(r.release_id, 'taoci-outreach');
+    assert.equal(r.release_id, WORKFLOW_ID);
     assert.ok(existsSync(r.release_path));
-    assert.equal(r.manifest.workflow_id, 'taoci-outreach');
+    assert.equal(r.manifest.workflow_id, WORKFLOW_ID);
     assert.equal(r.manifest.web_root, r.release_path, 'manifest.web_root must be final path, not staging');
-    assert.ok(existsSync(join(r.release_path, 'workflow/snapshot.lg.json')));
+    assert.ok(existsSync(join(r.release_path, 'workflow/snapshot.json')));
     assert.ok(existsSync(join(r.release_path, 'config/memory-schema.json')));
 
     const log = readFileSync(join(r.release_path, 'EXPORT.log'), 'utf8');
@@ -75,21 +77,21 @@ describe('AC-R01/R02 export taoci-outreach', () => {
 
   test('AC-R02 incremental creates _1', async () => {
     const r = await exportRelease({
-      workflow: 'taoci-outreach',
+      workflow: WORKFLOW_ID,
       webRoot: TEST_ROOT,
       skipPreflight: true,
       compileOnly: true,
       exportEntry: 'cli',
       silent: true,
     });
-    assert.equal(r.release_id, 'taoci-outreach_1');
+    assert.equal(r.release_id, `${WORKFLOW_ID}_1`);
     assert.ok(existsSync(r.release_path));
   });
 });
 
 test('AC-R04 compile steps >= 6', async () => {
   const r = await exportRelease({
-    workflow: 'taoci-outreach',
+    workflow: WORKFLOW_ID,
     webRoot: TEST_ROOT,
     skipPreflight: true,
     compileOnly: true,
@@ -104,7 +106,7 @@ test('AC-R04 compile steps >= 6', async () => {
 
 test('AC-R05 dual entry same compile_steps', async () => {
   const cli = await exportRelease({
-    workflow: 'taoci-outreach',
+    workflow: WORKFLOW_ID,
     webRoot: TEST_ROOT,
     skipPreflight: true,
     compileOnly: true,
@@ -112,7 +114,7 @@ test('AC-R05 dual entry same compile_steps', async () => {
     silent: true,
   });
   const gui = await exportRelease({
-    workflow: 'taoci-outreach',
+    workflow: WORKFLOW_ID,
     webRoot: TEST_ROOT,
     skipPreflight: true,
     compileOnly: true,
@@ -125,14 +127,14 @@ test('AC-R05 dual entry same compile_steps', async () => {
 });
 
 test('executor scan reads numbered-key graph format', async () => {
-  const lg = JSON.parse(readFileSync(join(TEST_ROOT, 'taoci-outreach/workflow/snapshot.lg.json'), 'utf8'));
+  const lg = JSON.parse(readFileSync(join(TEST_ROOT, `${WORKFLOW_ID}/workflow/snapshot.json`), 'utf8'));
   const types = graphNodeTypes(lg);
   assert.ok(types.length > 0, 'numbered-key graph must yield node types');
   assert.ok(types.includes('LLM'));
   assert.ok(types.includes('Output'));
 
   const executors = JSON.parse(
-    readFileSync(join(TEST_ROOT, 'taoci-outreach/config/required-executors.json'), 'utf8'),
+    readFileSync(join(TEST_ROOT, `${WORKFLOW_ID}/config/required-executors.json`), 'utf8'),
   );
   assert.deepEqual(executors.executors, types, 'release must carry the real executor list');
 });
@@ -154,7 +156,7 @@ test('failed export leaves no release dir and no staging garbage', async () => {
 
 test('verifyRelease catches snapshot tampering (checksum)', async () => {
   const r = await exportRelease({
-    workflow: 'taoci-outreach',
+    workflow: WORKFLOW_ID,
     webRoot: TEST_ROOT,
     skipPreflight: true,
     compileOnly: true,
@@ -162,7 +164,7 @@ test('verifyRelease catches snapshot tampering (checksum)', async () => {
   });
   assert.ok(r.ok);
   assert.ok(verifyRelease(r.release_path).ok);
-  const snapPath = join(r.release_path, 'workflow/snapshot.lg.json');
+  const snapPath = join(r.release_path, 'workflow/snapshot.json');
   writeFileSync(snapPath, readFileSync(snapPath, 'utf8') + '\n');
   const v = verifyRelease(r.release_path);
   assert.equal(v.ok, false);
@@ -192,4 +194,32 @@ test('AC-L01 README attribution', () => {
   assert.match(readme, /LibreChat/);
   assert.match(readme, /MIT/);
   assert.match(readme, /github\.com\/danny-avila\/LibreChat/);
+});
+
+test('P2a export merges --http-workflow into site.config + librechat.yaml', async () => {
+  const r = await exportRelease({
+    workflow: WORKFLOW_ID,
+    webRoot: TEST_ROOT,
+    skipPreflight: true,
+    compileOnly: true,
+    silent: true,
+    httpWorkflows: [
+      {
+        id: 'p2a-demo-http',
+        label: 'P2a Demo',
+        description: 'export-release http_workflows smoke',
+        url: 'http://host.docker.internal:3941/run',
+        timeout_ms: 60000,
+      },
+    ],
+  });
+  assert.ok(r.ok, JSON.stringify(r));
+  const cfg = JSON.parse(readFileSync(join(r.release_path, 'site.config.json'), 'utf8'));
+  assert.ok(Array.isArray(cfg.http_workflows));
+  assert.equal(cfg.http_workflows[0].id, 'p2a-demo-http');
+  assert.equal(cfg.http_workflows[0].url, 'http://host.docker.internal:3941/run');
+  const lc = readFileSync(join(r.release_path, 'librechat.yaml'), 'utf8');
+  assert.match(lc, /p2a-demo-http/);
+  assert.match(lc, /P2a Demo/);
+  rmSync(r.release_path, { recursive: true, force: true });
 });
