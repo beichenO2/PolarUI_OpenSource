@@ -6,16 +6,27 @@ import { getCustomWorkflow, isCustomWorkflowRef, customWorkflowIdFromRef } from 
 import type { Graph } from './graph'
 
 async function loadWorkflowFromDisk(ref: string): Promise<Graph | null> {
-  if (typeof window !== 'undefined') return null
+  const isNode = typeof process !== 'undefined' && Boolean(process.versions?.node)
+  if (!isNode) return null
   try {
-    const { readFileSync, existsSync } = await import('node:fs')
+    const injected = (globalThis as {
+      __POLARUI_NODE_FS__?: Pick<typeof import('node:fs'), 'readFileSync' | 'existsSync'>
+    }).__POLARUI_NODE_FS__
+    const { readFileSync, existsSync } = injected ?? await import('node:fs')
     const { join, dirname } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
-    const wfDir = join(dirname(fileURLToPath(import.meta.url)), '../../workflows')
     const file = ref.endsWith('.json') ? ref : `${ref}.json`
-    const path = join(wfDir, file)
-    if (!existsSync(path)) return null
-    return loadWorkflowJson(readFileSync(path, 'utf8'))
+    const moduleDir = dirname(fileURLToPath(import.meta.url))
+    // dist/workflows (GUI bundle) then source workflows/ (headless CLI, unregistered demos)
+    const searchRoots = [
+      join(moduleDir, '../../workflows'),
+      join(moduleDir, '../../../workflows'),
+    ]
+    for (const wfDir of searchRoots) {
+      const path = join(wfDir, file)
+      if (existsSync(path)) return loadWorkflowJson(readFileSync(path, 'utf8'))
+    }
+    return null
   } catch {
     return null
   }

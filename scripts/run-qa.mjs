@@ -22,6 +22,7 @@ const STEPS = [
   { id: 'test:canvas', cmd: 'node', args: ['--import', 'tsx', '--test', 'tests/canvas/graph-groups.test.ts', 'tests/canvas/group-suggest.test.ts', 'tests/canvas/wire-routing.test.ts', 'tests/canvas/canvas-dblclick.test.ts'] },
   { id: 'export-release', cmd: 'node', args: ['--test', 'scripts/export-release.test.mjs', 'scripts/compile-site-config.test.mjs', 'scripts/http-workflows.test.mjs', 'scripts/patch-librechat-http-workflows.test.mjs'] },
   { id: 'claude-code', cmd: 'node', args: ['workflows/claude-code/tests/run.mjs'] },
+  { id: 'evolve-demo', cmd: 'node', args: ['scripts/evolve-demo.mjs'] },
 ];
 
 function runStep(step) {

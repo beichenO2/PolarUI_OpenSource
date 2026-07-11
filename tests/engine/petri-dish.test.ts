@@ -4,10 +4,8 @@ import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import {
-  runPetriDish,
-  savePetriResult,
-} from '../../src/engine/petri-dish.ts'
+import { runPetriDish } from '../../src/engine/petri-dish.ts'
+import { savePetriResult } from '../../lib/save-petri-result.mjs'
 import type { MutationOp, MutationPolicy } from '../../src/engine/graph-mutation.ts'
 import type { Workflow, NodeInstance, Link } from '../../src/engine/types'
 

@@ -586,6 +586,82 @@
     }
   },
   {
+    "class_type": "HttpWorkflow",
+    "category": "Tools",
+    "display_name": "HTTP Workflow",
+    "description": "原子化元件：调用外部 POST /run 契约 workflow 服务（ADR-012）。",
+    "color": "#2d4a5a",
+    "inputs": [
+      {
+        "name": "message",
+        "type": "string",
+        "description": "HTTP Workflow · 输入「message」（类型 string，必填）"
+      },
+      {
+        "name": "history",
+        "type": "array",
+        "optional": true,
+        "description": "HTTP Workflow · 输入「history」（类型 array），可选"
+      },
+      {
+        "name": "memory_payload",
+        "type": "object",
+        "optional": true,
+        "description": "HTTP Workflow · 输入「memory_payload」（类型 object），可选"
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "optional": true,
+        "description": "HTTP Workflow · 输入「config」（类型 object），可选"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "ok",
+        "type": "boolean",
+        "description": "HTTP Workflow · 输出「ok」（类型 boolean）"
+      },
+      {
+        "name": "reply",
+        "type": "string",
+        "description": "HTTP Workflow · 输出「reply」（类型 string）"
+      },
+      {
+        "name": "memory_delta",
+        "type": "object",
+        "description": "HTTP Workflow · 输出「memory_delta」（类型 object）"
+      },
+      {
+        "name": "error",
+        "type": "string",
+        "description": "HTTP Workflow · 输出「error」（类型 string）"
+      }
+    ],
+    "params": {
+      "url": {
+        "type": "string",
+        "default": "",
+        "label": "服务 URL（必填）"
+      },
+      "workflow_id": {
+        "type": "string",
+        "default": "",
+        "label": "Workflow ID"
+      },
+      "timeout_ms": {
+        "type": "number",
+        "default": 60000,
+        "label": "超时(ms)"
+      },
+      "auth_token": {
+        "type": "string",
+        "default": "",
+        "label": "Bearer Token"
+      }
+    }
+  },
+  {
     "class_type": "GlobSearch",
     "category": "Tools",
     "display_name": "Glob 搜索",

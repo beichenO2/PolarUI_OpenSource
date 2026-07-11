@@ -4,7 +4,7 @@
 
 ---
 
-## R7 · Workflow HTTP 插拔化（一级能力） 📋
+## R7 · Workflow HTTP 插拔化（一级能力） ✅
 
 > **契约**：[`WORKFLOW_RUN_CONTRACT.md`](./WORKFLOW_RUN_CONTRACT.md) · [ADR-012](../decisions/012-workflow-http-plugin.md)  
 > **定调**：任意语言实现 `POST /run` 即可插入 Web；Python 部署 + HTTP 连接是正式设计约束，不只是 Demo。
@@ -12,11 +12,11 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | Phase 1 | 通用适配器 `http-workflow.mjs` + `/run` 契约 + `http_workflows[]` 三路分发；`_template` / market-truth-cs / Python `mta-python` 验证 | ✅ |
-| P2a | **export-release 支持 `http_workflows` 配置直出**（导出时可声明外部服务 URL/id/label/timeout） | 📋 planned |
-| P2b | **画布节点「HTTP Workflow 引用」**（图内直接引用外部 `/run` 服务） | 📋 planned |
-| P2c | **契约鉴权**（token / 公网安全；当前仅局域网明文） | 📋 planned |
-| P2d | **`GET /v1/models` 返回 label 增强**（HTTP 条目展示名与元数据更完整） | 📋 planned |
-| P2e | **history 传递标准化**（Web 壳传对话历史给服务，消除服务进程内内存态） | 📋 planned |
+| P2a | **export-release 支持 `http_workflows` 配置直出**（导出时可声明外部服务 URL/id/label/timeout） | ✅ |
+| P2b | **画布节点「HTTP Workflow 引用」**（`HttpWorkflow` 节点，GUI + headless 双路径） | ✅ |
+| P2c | **契约鉴权**（`auth_token` Bearer + `headers` 自定义头；局域网明文仍为默认 Demo） | ✅ |
+| P2d | **`GET /v1/models` 返回 label 增强**（附加 `name`/`description`） | ✅ |
+| P2e | **history 传递标准化**（Web 壳传对话历史给服务，消除服务进程内内存态） | ✅ |
 
 Skills：[`polarui-workflow-contract`](../skills/polarui-workflow-contract/SKILL.md) · [`polarui-web-deploy`](../skills/polarui-web-deploy/SKILL.md)
 

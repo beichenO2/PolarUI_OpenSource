@@ -1,0 +1,42 @@
+{
+  "id": "stemcell-demo",
+  "name": "stemcell-demo",
+  "_entry": "1",
+  "_lg_edges": [
+    { "from": "1", "to": "2", "kind": "static" }
+  ],
+  "nodes": [
+    {
+      "id": "1",
+      "class_type": "StemCell",
+      "x": 0,
+      "y": 0,
+      "width": 220,
+      "height": 100,
+      "params": {
+        "allowed_types": "StaticData,Output,StemCell",
+        "allow_graph_edit": true,
+        "max_mutations": 8,
+        "state": { "seed": true },
+        "differentiation_signal": {
+          "materialize": "StaticData",
+          "params": { "value": "evolve-stem-payload", "type": "string" },
+          "wire_from": "1",
+          "wire_to": "2"
+        }
+      }
+    },
+    {
+      "id": "2",
+      "class_type": "Output",
+      "x": 320,
+      "y": 0,
+      "width": 160,
+      "height": 60,
+      "params": {}
+    }
+  ],
+  "links": [],
+  "created_at": 1,
+  "updated_at": 1
+}

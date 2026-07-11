@@ -55,6 +55,38 @@ describe('normalizeHttpWorkflows', () => {
     assert.equal(out[0].timeout_ms, 60000);
     assert.equal(out[1].timeout_ms, undefined);
   });
+
+  test('passes through auth_token and headers', () => {
+    const out = normalizeHttpWorkflows([
+      {
+        id: 'secured',
+        url: 'http://127.0.0.1:3941/run',
+        auth_token: 'secret-token',
+        headers: { 'X-Custom': 'value', 'X-Api-Key': 'abc' },
+      },
+    ]);
+    assert.equal(out[0].auth_token, 'secret-token');
+    assert.deepEqual(out[0].headers, { 'X-Custom': 'value', 'X-Api-Key': 'abc' });
+  });
+
+  test('rejects invalid auth_token and headers types', () => {
+    assert.throws(
+      () => normalizeHttpWorkflows([{ id: 'a', url: 'http://x/run', auth_token: '' }]),
+      /auth_token.*non-empty string/i,
+    );
+    assert.throws(
+      () => normalizeHttpWorkflows([{ id: 'a', url: 'http://x/run', auth_token: 123 }]),
+      /auth_token.*non-empty string/i,
+    );
+    assert.throws(
+      () => normalizeHttpWorkflows([{ id: 'a', url: 'http://x/run', headers: 'bad' }]),
+      /headers must be an object/i,
+    );
+    assert.throws(
+      () => normalizeHttpWorkflows([{ id: 'a', url: 'http://x/run', headers: { 'X-Custom': 1 } }]),
+      /headers keys and values must be strings/i,
+    );
+  });
 });
 
 describe('compileSiteConfig http_workflows', () => {

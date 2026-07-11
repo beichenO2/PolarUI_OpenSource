@@ -19,13 +19,15 @@
 | 010 | [单引擎统一与纯粹化重构（QA 门禁先行）](./010-single-engine-and-purity-refactor.md) | accepted | 2026-07-10 |
 | 011 | [双服务定位与彻底瘦身](./011-two-services-and-slimdown.md) | accepted | 2026-07-10 |
 | 012 | [Workflow HTTP 插拔（`/run` 契约）](./012-workflow-http-plugin.md) | accepted | 2026-07-10 |
+| 013 | [项目引用地图（Project Map）](./013-project-map-refactor.md) | accepted | 2026-07-10 |
+| 014 | [自进化重建：干细胞与培养皿](./014-evolution-rebuild.md) | accepted | 2026-07-10 |
 | — | [~~ToolCall 内部分发~~](./001-toolcall-internal-dispatch.md) | **deprecated** | 2026-07-04 |
 
 ## 阅读顺序
 
 1. ADR-005（两阶段）→ ADR-006（网站 MVP）→ ADR-007（记忆三层）→ ADR-008（Web）→ **ADR-012（HTTP `/run`）**
 2. ADR-001–004（图内原则）
-3. ADR-010/011（引擎统一与双服务）
+3. ADR-010/011（引擎统一与双服务）→ ADR-013（Project Map）→ ADR-014（自进化重建）
 
 ## 关联
 

@@ -26,6 +26,7 @@
     "test:canvas": "node --import tsx --test tests/canvas/graph-groups.test.ts tests/canvas/group-suggest.test.ts tests/canvas/wire-routing.test.ts tests/canvas/canvas-dblclick.test.ts",
     "stats:canvas": "node --import tsx tests/canvas/wire-routing-stats.ts",
     "qa": "node scripts/run-qa.mjs",
+    "demo:evolve": "node scripts/evolve-demo.mjs",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --mac dmg"

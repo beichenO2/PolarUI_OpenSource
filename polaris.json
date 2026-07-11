@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-10T22:50:00+08:00"
+    "last_synced_at": "2026-07-11T15:10:00+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -531,56 +531,77 @@
         {
           "name": "export-release 支持 http_workflows 直出",
           "description": "导出时可声明外部服务 id/label/url/timeout，写入发行版 site.config",
-          "status": "planned",
+          "status": "done",
           "behavior": [
             "export 流水线编译 http_workflows[]",
             "可选注入 librechat modelSpecs preset"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "commit f1dc377: scripts/http-workflows.mjs + patch-librechat-http-workflows.mjs + compile-site-config http_workflows 直出",
+            "scripts/*.test.mjs 15/15；run-qa export-release 步挂入门禁",
+            "2026-07-11 npm run qa 12/12"
+          ]
         },
         {
           "name": "画布节点 HTTP Workflow 引用",
           "description": "图内节点直接引用外部 /run 服务",
-          "status": "planned",
+          "status": "done",
           "behavior": [
-            "node-def + executor 调用 HTTP 契约",
-            "与 http_workflows 配置对齐"
+            "node-defs/tools-system.json HttpWorkflow（url/workflow_id/timeout_ms/auth_token）",
+            "GUI executor.ts + headless lib/http-workflow-graph 双路径行为一致",
+            "网络错误/超时/非2xx → ok:false 不中断图"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "lib/http-workflow-graph/register.test.mjs 6/6",
+            "vue-tsc 0 错误；sync-node-defs 6 packs",
+            "2026-07-11 npm run qa 12/12"
+          ]
         },
         {
           "name": "契约鉴权（token/公网）",
           "description": "公网部署时 /run 鉴权；适配器附加 Authorization",
-          "status": "planned",
+          "status": "done",
           "behavior": [
-            "site.config 声明 token / header",
-            "明文局域网仍为默认 Demo 模式"
+            "http_workflows[].auth_token → Authorization: Bearer；headers 自定义头（不覆盖 Content-Type）",
+            "明文局域网仍为默认 Demo 模式；服务端校验由实现方自理"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "compile-site-config normalize 校验透传 + 单测 8/8",
+            "_template/polar/lib/http-workflow.mjs 鉴权头 + 单测",
+            "WORKFLOW_RUN_CONTRACT.md 安全边界更新"
+          ]
         },
         {
           "name": "/v1/models label 增强",
           "description": "HTTP workflow 在模型列表中的 label/元数据更完整",
-          "status": "planned",
+          "status": "done",
           "behavior": [
             "listWorkflows 透传 http_workflows[].label 与可选描述"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "_template/polar/server.mjs /v1/models 附加 name/description",
+            "registry.mjs listWorkflows 透传 description",
+            "_template 单测断言 models shape"
+          ]
         },
         {
           "name": "history 传递标准化",
           "description": "Web 壳向 /run 传入对话历史，消除服务进程内 session 内存态",
-          "status": "planned",
+          "status": "done",
           "behavior": [
             "契约扩展 history[]（开放问题收口）",
             "多 worker / 重启不丢上下文"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "_template/polar/lib/process-chat.mjs buildRunHistory 注入 history",
+            "_template/polar/tests/unit/process-chat-history.test.mjs",
+            "WORKFLOW_RUN_CONTRACT.md history 章节标注已实现"
+          ]
         }
       ]
     },
@@ -638,14 +659,19 @@
         },
         {
           "name": "双服务定位文档（P4）",
-          "description": "docs/SERVICES.md 定义服务 A（Agent 搭建）/ 服务 B（Agentic Workflow 搭建）与非 PolarUI 边界；README/SSoT 首屏接入待并发文档改动落地后合并",
-          "status": "in_progress",
+          "description": "docs/SERVICES.md 定义服务 A（Agent 搭建）/ 服务 B（Agentic Workflow 搭建）与非 PolarUI 边界；README 首屏双服务表格 + SSoT 定位层/核心原则接入；ADR-013/014 补入索引",
+          "status": "done",
           "behavior": [
             "docs/SERVICES.md 即定位 SSoT",
             "服务 B 路线挂 docs/specs/evolution/"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-11: README.md 双服务定位首屏表格（A/B 原子+参考实现）",
+            "2026-07-11: docs/SSoT.md 文档层级加定位层 SERVICES.md + 核心原则第一条 + R8/R9/R10 进度 + ADR-013/014 索引",
+            "2026-07-11: decisions/README.md 补 013/014 行与阅读顺序",
+            "npm run qa 全绿"
+          ]
         }
       ]
     },
@@ -759,6 +785,22 @@
             "vue-tsc 0 错误",
             "sync:node-defs 6 packs",
             "无 PluripotentCell 旧名"
+          ]
+        },
+        {
+          "name": "headless 端到端演示",
+          "description": "workflows/evolve-demo/ 三图 + scripts/evolve-demo.mjs：StemCell 运行时插节点并执行、PetriDish 候选择优 + .petri.json 人审落盘；挂入 QA 门禁",
+          "status": "done",
+          "behavior": [
+            "StemCell demo：graph_edit_granted=true，新节点 StaticData 数据出现在最终输出",
+            "Petri demo：三候选评估排序择优 score=10，applied=false，savePetriResult 落盘 *.petri.json（gitignore，不进 registry）",
+            "全程无 API key；registry 仍仅 claude-code"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "scripts/evolve-demo.mjs exit 0（主 Agent 亲自复跑）",
+            "npm run qa 13/13（新增 evolve-demo 步）",
+            "docs/specs/evolution/README.md 端到端演示小节"
           ]
         }
       ]

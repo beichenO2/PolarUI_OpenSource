@@ -1,0 +1,34 @@
+{
+  "id": "petri-demo",
+  "name": "petri-demo",
+  "nodes": [
+    {
+      "id": "1",
+      "class_type": "PetriDish",
+      "x": 0,
+      "y": 0,
+      "width": 260,
+      "height": 120,
+      "params": {
+        "slave_workflow": "evolve-demo/slave-scorer",
+        "allow_graph_edit": true,
+        "evolution_signal": {
+          "candidates": [
+            [
+              { "op": "set_param", "node_id": "1", "key": "value", "value": "{\"score\": 1}" }
+            ],
+            [
+              { "op": "set_param", "node_id": "1", "key": "value", "value": "{\"score\": 5}" }
+            ],
+            [
+              { "op": "set_param", "node_id": "1", "key": "value", "value": "{\"score\": 10}" }
+            ]
+          ]
+        }
+      }
+    }
+  ],
+  "links": [],
+  "created_at": 1,
+  "updated_at": 1
+}

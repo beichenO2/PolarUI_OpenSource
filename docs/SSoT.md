@@ -6,6 +6,7 @@
 
 | 层级 | 文件 | 回答什么问题 |
 |------|------|-------------|
+| **定位** | [`SERVICES.md`](./SERVICES.md) | PolarUI 提供哪两种服务（A Agent 搭建 / B Agentic Workflow）？什么不属于 PolarUI？ |
 | **架构** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | 系统怎么分层？测试和部署怎么隔离？ |
 | **前端** | [`FRONTEND.md`](./FRONTEND.md) | 怎么启动、怎么加载 workflow、画布看什么 |
 | **网站模版** | [`WEB_TEMPLATE.md`](./WEB_TEMPLATE.md) | LibreChat 套壳、发行版命名、多模态 |
@@ -22,12 +23,14 @@
 
 | 领域 | Skill | 回答什么问题 |
 |------|-------|-------------|
-| 工作流 · 画布 | [`polarui-workflow-authoring`](../skills/polarui-workflow-authoring/SKILL.md) | 怎么写 `.lg.json` 图 |
+| 工作流 · 画布 | [`polarui-workflow-authoring`](../skills/polarui-workflow-authoring/SKILL.md) | 怎么写 workflow `.json` 图 |
 | 工作流 · Web 契约 | [`polarui-workflow-contract`](../skills/polarui-workflow-contract/SKILL.md) | Web 需要什么 workflow（builtin / **HTTP `/run`** / memory_delta） |
 | Web · 部署 | [`polarui-web-deploy`](../skills/polarui-web-deploy/SKILL.md) | 怎么 export + Docker 上线（含外部 HTTP 服务） |
 | 通用 | [`polarui-usage`](../skills/polarui-usage/SKILL.md) · [`polarui-deploy`](../skills/polarui-deploy/SKILL.md) | 启动 GUI · 部署入口索引 |
 
 ## 核心原则（一句话）
+
+**双服务定位（ADR-011）**：PolarUI 只做 a) ClaudeCode 类基础 Agent 搭建（LLM + 结构化输出原子）与 b) Dify 类自进化 Agentic Workflow 搭建（ClaudeCode 型 Agent 为原子 + Harness）。详见 [`SERVICES.md`](./SERVICES.md)。
 
 **Web = Workflow 发行版**（快速部署，无自动同步；更新 = 新文件夹 `原名_1`）
 
@@ -65,6 +68,8 @@
 | 010 | [单引擎统一与纯粹化](../decisions/010-single-engine-and-purity-refactor.md) | accepted |
 | 011 | [双服务定位与彻底瘦身](../decisions/011-two-services-and-slimdown.md) | accepted |
 | 012 | [Workflow HTTP 插拔（`/run` 契约）](../decisions/012-workflow-http-plugin.md) | accepted |
+| 013 | [项目引用地图（Project Map）](../decisions/013-project-map-refactor.md) | accepted |
+| 014 | [自进化重建：干细胞与培养皿](../decisions/014-evolution-rebuild.md) | accepted |
 
 ## 进度追踪
 
@@ -76,7 +81,10 @@
 - **R3** — Workflow 记忆节点
 - **R5** — 飞书渠道（**cancelled**，ADR-010 移出 PolarUI）
 - **R6** — 单引擎统一与纯粹化（ADR-010/011）
-- **R7** — Workflow HTTP 插拔（Phase 1 ✅；P2 planned）— **当前设计重点之一**
+- **R7** — Workflow HTTP 插拔（Phase 1 + P2a–P2e 全部 ✅，ADR-012）
+- **R8** — 双服务定位与彻底瘦身（ADR-011；定位 SSoT = [`SERVICES.md`](./SERVICES.md)）
+- **R9** — 项目引用地图 Project Map（ADR-013）
+- **R10** — 自进化重建 StemCell / PetriDish（ADR-014）
 
 ## 关联生态
 

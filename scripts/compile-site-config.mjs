@@ -41,6 +41,26 @@ export function normalizeHttpWorkflows(list) {
     if (raw.label != null) entry.label = String(raw.label);
     if (raw.description != null) entry.description = String(raw.description);
     if (raw.timeout_ms != null) entry.timeout_ms = Number(raw.timeout_ms);
+    if (raw.auth_token != null) {
+      if (typeof raw.auth_token !== 'string' || raw.auth_token.trim() === '') {
+        throw new Error(`http_workflows[${i}].auth_token must be a non-empty string`);
+      }
+      entry.auth_token = raw.auth_token;
+    }
+    if (raw.headers != null) {
+      if (!raw.headers || typeof raw.headers !== 'object' || Array.isArray(raw.headers)) {
+        throw new Error(`http_workflows[${i}].headers must be an object`);
+      }
+      /** @type {Record<string, string>} */
+      const headers = {};
+      for (const [k, v] of Object.entries(raw.headers)) {
+        if (typeof k !== 'string' || typeof v !== 'string') {
+          throw new Error(`http_workflows[${i}].headers keys and values must be strings`);
+        }
+        headers[k] = v;
+      }
+      entry.headers = headers;
+    }
     out.push(entry);
   }
   return out;

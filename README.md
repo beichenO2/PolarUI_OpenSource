@@ -2,17 +2,28 @@
 
 ComfyUI 风格 workflow 编辑器与图执行引擎。
 
+## 双服务定位（ADR-011）
+
+PolarUI 对外只提供两种服务，全部节点/workflow/文档/测试都必须能归属其一（详见 [`docs/SERVICES.md`](./docs/SERVICES.md)）：
+
+| 服务 | 一句话 | 原子 | 参考实现 |
+|------|--------|------|----------|
+| **A · Agent 搭建**（ClaudeCode 类） | 从 LLM + 结构化抽取原子逐步搭出完整 Agent | `node-defs/core.json` + `tools-system.json` | [`workflows/claude-code/`](./workflows/claude-code/)（唯一注册 workflow，QA e2e 黄金样例） |
+| **B · Agentic Workflow 搭建**（Dify 类自进化） | 以 ClaudeCode 型 Agent 为原子 + Harness（图本身，ADR-002）编排自进化系统 | `node-defs/paradigms.json` + `polar-memory.json` + `evolve.json` | 自进化内核 StemCell / PetriDish（ADR-014） |
+
+不属于 A/B 的（业务集成节点、飞书/IDE 渠道）已移出 PolarUI。
+
 ## 导航
 
 两大领域分开读——**工作流**（画布设计）与 **Web 部署**（发行版运维）职责不同、文档不同。
 
 ### 🔷 工作流（画布编辑 · 图引擎 · 节点）
 
-在 PolarUI 里设计、测试 workflow 图（`.lg.json`），与网站用户/会话无关。
+在 PolarUI 里设计、测试 workflow 图（`.json`，单一执行模型 ADR-010），与网站用户/会话无关。
 
 | 入口 | 一句话 |
 |------|--------|
-| [`skills/polarui-workflow-authoring/SKILL.md`](./skills/polarui-workflow-authoring/SKILL.md) | 七步撰写：spec → 节点 → `.lg.json` → mock 测试 |
+| [`skills/polarui-workflow-authoring/SKILL.md`](./skills/polarui-workflow-authoring/SKILL.md) | 七步撰写：spec → 节点 → workflow `.json` → mock 测试 |
 | [`skills/polarui-workflow-contract/SKILL.md`](./skills/polarui-workflow-contract/SKILL.md) | **Web 需要什么 workflow**：builtin / **HTTP `/run`** / memory_delta |
 | [`workflows/`](./workflows/) | workflow 源码目录 |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | 两阶段隔离、WYSIWYG 原则 |
@@ -60,5 +71,5 @@ ComfyUI 风格 workflow 编辑器与图执行引擎。
 ```bash
 npm run build
 npm run qa
-node lib/run-graph-cli.mjs --workflow taoci-outreach --conversation-id test --message "你好"
+node lib/run-graph-cli.mjs --workflow claude-code --conversation-id test --message "你好"
 ```
