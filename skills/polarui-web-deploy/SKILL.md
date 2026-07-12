@@ -10,6 +10,7 @@ description: >
 # PolarUI Web 部署
 
 > **导出流水线详规** → [`docs/WEB_EXPORT.md`](../../docs/WEB_EXPORT.md)  
+> **三层正交铁律** → [`docs/DEPLOYMENT_SPEC.md`](../../docs/DEPLOYMENT_SPEC.md)  
 > **workflow 契约** → [`polarui-workflow-contract`](../polarui-workflow-contract/SKILL.md)  
 > **HTTP `/run` 规范** → [`docs/WORKFLOW_RUN_CONTRACT.md`](../../docs/WORKFLOW_RUN_CONTRACT.md) · [ADR-012](../../decisions/012-workflow-http-plugin.md)  
 > **模版接入** → `~/Desktop/Web_related/_template/docs/WORKFLOW_INTEGRATION.md`

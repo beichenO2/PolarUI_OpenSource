@@ -1,6 +1,6 @@
 # Web 发行版导出
 
-> **网站规格**：[`WEB_TEMPLATE.md`](./WEB_TEMPLATE.md) · **验收**：[`WEB_ACCEPTANCE.md`](./WEB_ACCEPTANCE.md)
+> **网站规格**：[`WEB_TEMPLATE.md`](./WEB_TEMPLATE.md) · **验收**：[`WEB_ACCEPTANCE.md`](./WEB_ACCEPTANCE.md) · **三层正交铁律**：[`DEPLOYMENT_SPEC.md`](./DEPLOYMENT_SPEC.md)
 
 ---
 
@@ -11,7 +11,7 @@
 | **脚本生成，禁止手写** | 网站由 `export-release.mjs` 流水线**编译**产出；Agent **不得**直接写网站代码 |
 | **双入口，同一脚本** | PolarUI Web 按钮 与 CLI 均调用同一导出脚本 |
 | **Workflow 逐一编译** | 从 workflow 目录按清单提取、变换、写入发行版 |
-| **发行版冻结** | 导出物自包含；不引用可变源路径 |
+| **发行版冻结** | 导出物自包含；不引用可变源路径（详见 [`DEPLOYMENT_SPEC.md`](./DEPLOYMENT_SPEC.md) §2–§3） |
 
 ---
 

@@ -2,9 +2,10 @@
  * 节点几何 SSOT — 绘制、命中测试、libavoid 障碍盒同源。
  * 对齐 avoid-edge-routing-example 的 edgeToNodeSpacing / handle 布局。
  */
-import type { Link, NodeInstance } from './types'
+import type { Link, NodeDef, NodeInstance } from './types'
 import { registry } from './registry'
 import { GROUP_BOX_CLASS } from './graph-groups'
+import { nodeShape, isFnCollapsed } from './node-shape'
 
 export const SLOT_RADIUS = 6
 /** 260531：画布字号 +50% 后同步抬高标题区与正文区 */
@@ -13,13 +14,44 @@ export const CONTENT_AREA_HEIGHT = 108
 export const SLOT_HEIGHT = 24
 export const SLOT_PADDING = 14
 export const NODE_BOTTOM_PAD = 10
-export const NODE_DEFAULT_WIDTH = 200
+/** 260712：200→260 消除标题/内容预览溢出 */
+export const NODE_DEFAULT_WIDTH = 260
 export const COLLISION_MARGIN = 16
 /** Dify-style compact end card — single input, no content preview band */
-export const OUTPUT_CARD_WIDTH = 176
+export const OUTPUT_CARD_WIDTH = 220
+
+/** 简单几何形状（流程图原子）：slot 垂直均分，高度只依赖 slot 数（确定性） */
+export const SIMPLE_SLOT_SPACING = 26
+export const SIMPLE_NODE_MIN_H = 72
+/** fn 盒收起态（可伸缩函数的"签名行"） */
+export const FN_COLLAPSED_SLOT_SPACING = 18
+export const FN_COLLAPSED_MIN_H = 48
+
+export function simpleShapeHeight(maxSlots: number): number {
+  return Math.max(SIMPLE_NODE_MIN_H, maxSlots * SIMPLE_SLOT_SPACING + 24)
+}
+
+export function fnCollapsedHeight(maxSlots: number): number {
+  return Math.max(FN_COLLAPSED_MIN_H, maxSlots * FN_COLLAPSED_SLOT_SPACING + 16)
+}
+
+/**
+ * 节点高度统一入口 — 按形状 + 收起态。
+ * def 缺失（测试 Stub 等）时调用方自行保留 fixture 高度。
+ */
+export function nodeHeightFor(classType: string, def: NodeDef, collapsed?: boolean): number {
+  const shape = nodeShape(classType, def)
+  const maxSlots = Math.max(def.inputs.length, def.outputs.length, 1)
+  if (shape === 'fn') {
+    return collapsed !== false
+      ? fnCollapsedHeight(maxSlots)
+      : calcNodeHeight(def.inputs.length, def.outputs.length)
+  }
+  return simpleShapeHeight(maxSlots)
+}
 export const WIRE_LOOP_MARGIN = 32
 export const BACKWARD_LINK_LANE_SPACING = 14
-export const DEFAULT_LINK_LINE_WIDTH = 1.5
+export const DEFAULT_LINK_LINE_WIDTH = 2.5
 
 /** 线碰撞管半径（中心线到边缘）— 平行线段中心距须 ≥ 2×radius + lineWidth */
 export const WIRE_COLLISION_RADIUS = 7
@@ -48,23 +80,25 @@ export function calcNodeHeight(inputCount: number, outputCount: number): number 
   return HEADER_HEIGHT + CONTENT_AREA_HEIGHT + SLOT_PADDING + slotCount * SLOT_HEIGHT + NODE_BOTTOM_PAD
 }
 
-/** Compact end card — header + one input row (aligns with Dify End node). */
+/** Output 终点 stadium — 与其它简单形状同一高度公式。 */
 export function calcOutputNodeHeight(inputCount = 1): number {
-  return HEADER_HEIGHT + SLOT_PADDING + inputCount * SLOT_HEIGHT + NODE_BOTTOM_PAD
+  return simpleShapeHeight(Math.max(inputCount, 1))
+}
+
+export function normalizeNodeDimension(node: NodeInstance): void {
+  if (node.class_type === 'NoteCard') return
+  if (isOutputTerminalNode(node)) {
+    normalizeOutputTerminalSize(node)
+    return
+  }
+  const def = registry.get(node.class_type)
+  if (!def) return
+  node.width = NODE_DEFAULT_WIDTH
+  node.height = nodeHeightFor(node.class_type, def, node.collapsed)
 }
 
 export function normalizeGraphNodeDimensions(nodes: NodeInstance[]): void {
-  for (const node of nodes) {
-    if (node.class_type === 'NoteCard') continue
-    if (isOutputTerminalNode(node)) {
-      normalizeOutputTerminalSize(node)
-      continue
-    }
-    const def = registry.get(node.class_type)
-    if (!def) continue
-    node.width = NODE_DEFAULT_WIDTH
-    node.height = calcNodeHeight(def.inputs.length, def.outputs.length)
-  }
+  for (const node of nodes) normalizeNodeDimension(node)
 }
 
 export function wireExtraNodeClearance(): number {
@@ -131,7 +165,7 @@ export function countNodeOverlaps(nodes: NodeInstance[], margin = 0): number {
   return n
 }
 
-export function slotGraphY(node: NodeInstance, slot: number): number {
+export function slotGraphY(node: NodeInstance, slot: number, side: 'in' | 'out' = 'out'): number {
   if (node.class_type === GROUP_BOX_CLASS) {
     const inputCount = Math.max(Number(node.params.input_port_count ?? 0), 1)
     const outputCount = Math.max(Number(node.params.output_port_count ?? 0), 1)
@@ -140,22 +174,28 @@ export function slotGraphY(node: NodeInstance, slot: number): number {
     const contentOffset = CONTENT_AREA_HEIGHT
     return node.y + HEADER_HEIGHT + contentOffset + SLOT_PADDING + idx * SLOT_HEIGHT
   }
-  const contentOffset = isOutputTerminalNode(node) ? 0 : CONTENT_AREA_HEIGHT
-  return node.y + HEADER_HEIGHT + contentOffset + SLOT_PADDING + slot * SLOT_HEIGHT
+  const def = registry.get(node.class_type)
+  if (!def) {
+    // 未注册 class（测试 Stub 等）保持旧行式布局
+    const contentOffset = isOutputTerminalNode(node) ? 0 : CONTENT_AREA_HEIGHT
+    return node.y + HEADER_HEIGHT + contentOffset + SLOT_PADDING + slot * SLOT_HEIGHT
+  }
+  const shape = nodeShape(node.class_type, def)
+  if (shape === 'fn' && !isFnCollapsed(node)) {
+    // fn 盒展开态：header + 内容预览区 + slot 行
+    return node.y + HEADER_HEIGHT + CONTENT_AREA_HEIGHT + SLOT_PADDING + slot * SLOT_HEIGHT
+  }
+  // 简单形状 / fn 收起态：该侧 slot 沿高度垂直均分（经典流程图锚点）
+  const count = side === 'in' ? def.inputs.length : def.outputs.length
+  const n = Math.max(count, 1)
+  return node.y + (node.height * (slot + 1)) / (n + 1)
 }
 
 export function linkAnchor(node: NodeInstance, slot: number, side: 'in' | 'out'): Vec2 {
-  if (node.class_type === GROUP_BOX_CLASS) {
-    const b = nodeDrawBounds(node)
-    return {
-      x: side === 'out' ? b.x + b.w : b.x,
-      y: slotGraphY(node, slot),
-    }
-  }
   const b = nodeDrawBounds(node)
   return {
     x: side === 'out' ? b.x + b.w : b.x,
-    y: slotGraphY(node, slot),
+    y: slotGraphY(node, slot, side),
   }
 }
 

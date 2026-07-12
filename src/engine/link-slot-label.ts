@@ -9,6 +9,77 @@ export function formatLinkSlotLabel(link: Link, nodes: NodeInstance[]): string {
   return `${outSlot} → ${inSlot}`
 }
 
+export const WIRE_CHIP_ZOOM_THRESHOLD = 0.7
+export const WIRE_CHIP_MAX_CHARS = 18
+
+/** Midpoint chip: source slot, or `out→in` when names differ and fit. */
+export function formatWireChipLabel(
+  link: Link,
+  nodes: NodeInstance[],
+  maxChars = WIRE_CHIP_MAX_CHARS,
+): string {
+  const { outSlot, inSlot } = describeLinkEndpoints(link, nodes)
+  if (outSlot === inSlot) return outSlot
+  const pair = `${outSlot}→${inSlot}`
+  if (pair.length <= maxChars) return pair
+  return outSlot.length <= maxChars ? outSlot : `${outSlot.slice(0, maxChars - 1)}…`
+}
+
+export interface WireChipRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export function rectsIntersect(a: WireChipRect, b: WireChipRect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
+
+/** Segment index containing the path midpoint (for perpendicular chip nudge). */
+export function polylineMidpointSegmentIndex(pts: Vec2[]): number {
+  if (pts.length < 2) return 0
+  let total = 0
+  const segLens: number[] = []
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+    segLens.push(d)
+    total += d
+  }
+  if (total <= 0) return Math.max(0, Math.floor(pts.length / 2) - 1)
+  let half = total / 2
+  for (let i = 0; i < segLens.length; i++) {
+    if (half <= segLens[i]) return i
+    half -= segLens[i]
+  }
+  return Math.max(0, segLens.length - 1)
+}
+
+export function pathNormalAtSegment(pts: Vec2[], segIndex: number): Vec2 {
+  if (pts.length < 2) return { x: 0, y: -1 }
+  const i = Math.min(Math.max(segIndex, 0), pts.length - 2)
+  const dx = pts[i + 1].x - pts[i].x
+  const dy = pts[i + 1].y - pts[i].y
+  const len = Math.hypot(dx, dy) || 1
+  return { x: -dy / len, y: dx / len }
+}
+
+/** Single-pass overlap mitigation: nudge later chips perpendicular to the wire. */
+export function nudgeOverlappingWireChips(
+  chips: Array<{ rect: WireChipRect; normal: Vec2 }>,
+): void {
+  for (let i = 1; i < chips.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (rectsIntersect(chips[i].rect, chips[j].rect)) {
+        const shift = chips[i].rect.h
+        chips[i].rect.x += chips[i].normal.x * shift
+        chips[i].rect.y += chips[i].normal.y * shift
+        break
+      }
+    }
+  }
+}
+
 export function shouldShowLinkSlotLabel(
   link: Link,
   hoverComponentId: string | null,

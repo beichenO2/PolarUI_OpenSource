@@ -48,7 +48,7 @@
 
 - 新增 `node-defs/evolve.json`：仅 StemCell、PetriDish 两节点（不带旧名
   PluripotentCell 兼容——无旧实现原则）。index.json 同步（5→6 文件）。
-- 不回接 claude-code 图；提供测试 fixture 演示。
+- 不回接 claude-code 图；提供测试 fixture 演示。（~~演示范围~~ → 见文末 **2026-07-12 修订**）
 
 ## 验收（QA 门禁）
 
@@ -58,3 +58,19 @@
 - `tests/engine/petri-dish.test.ts`：沙盒产出 refined_workflow，主图哈希不变；
   savePetriResult 落盘不进 registry。
 - `npm run qa` 全绿；vue-tsc 0 错误。
+
+---
+
+## 修订（2026-07-12）：D4 claude-code 演示约束解除
+
+**状态**：supersedes D4 演示范围（原文保留）
+
+D4 原文「不回接 claude-code 图；提供测试 fixture 演示」仍描述 R10 初版决策，现由本修订**取代其演示范围**（注册面其余条款不变）。
+
+**变更**：
+
+- headless 演示现以**真实** `workflows/claude-code/claude-code.json` 为 StemCell 宿主与 PetriDish slave（内存拷贝变异，**磁盘文件与 registry 不变**）。
+- Mock LLM 环境：`POLARUI_MOCK_LLM=1`、`POLARUI_MOCK_LLM_BRANCH=finish`（无 API key、可离线 QA）。
+- 人工门控不变：`applied=false`；Petri 结果写 `*.petri.json`；`sync-workflows` 排除；不进 `registry.json`。
+- 命令：`npm run demo:evolve-claude`（`scripts/evolve-claude-demo.mjs`）；`npm run qa` 含 `evolve-claude-demo` 步骤。
+- 原 `workflows/evolve-demo/` fixture 演示（`demo:evolve`）保留，作为最小隔离回归。

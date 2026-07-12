@@ -1,0 +1,115 @@
+[
+  {
+    "class_type": "LLM",
+    "category": "LLM",
+    "display_name": "LLM 调用",
+    "description": "原子化元件：一次大模型 API 调用。输入 prompt → 输出 response。最小粒度，不含工具调用、不含结构化解析。",
+    "color": "#1a472a",
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "string",
+        "description": "发给大模型的用户任务正文；可来自 PromptInput 或上游组件。"
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "optional": true,
+        "description": "可选背景上下文（RAG、记忆块等），拼入 system 或 user 消息。"
+      },
+      {
+        "name": "intra_round_hint",
+        "type": "string",
+        "optional": true,
+        "description": "RetryLoop 轮内修正提示；非轮间 SSOT，仅本轮迭代注入。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "response",
+        "type": "string",
+        "description": "模型生成的文本结果，供下游 Validator / Output 等消费。"
+      },
+      {
+        "name": "usage",
+        "type": "object",
+        "description": "Token 用量等元数据；蒸馏采集可悬空不连线。"
+      }
+    ],
+    "params": {
+      "model": {
+        "type": "select",
+        "default": "GLM-5.1",
+        "options": [
+          "GLM-5.1",
+          "MiniMax-2.7-HighSpeed",
+          "qwen-plus"
+        ],
+        "label": "模型"
+      },
+      "temperature": {
+        "type": "number",
+        "default": 0.7,
+        "label": "温度"
+      },
+      "stream": {
+        "type": "boolean",
+        "default": false,
+        "label": "流式输出"
+      },
+      "system_prompt": {
+        "type": "text",
+        "default": "",
+        "label": "System Prompt"
+      }
+    }
+  },
+  {
+    "class_type": "VLM",
+    "category": "LLM",
+    "display_name": "VLM 调用",
+    "description": "原子化元件：视觉语言模型调用。输入 (image, prompt) → 输出 response。用于图像/文档视觉核验。",
+    "color": "#1a4a4a",
+    "inputs": [
+      {
+        "name": "image",
+        "type": "string",
+        "description": "图像 URL 或 base64 输入。"
+      },
+      {
+        "name": "prompt",
+        "type": "string",
+        "description": "用户或上游传入的提示/任务正文，作为本组件主要处理对象。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "response",
+        "type": "string",
+        "description": "本组件产出的主结果，供下游连线消费。"
+      },
+      {
+        "name": "usage",
+        "type": "object",
+        "description": "Token/调用元数据；可无下游连线（蒸馏采集）。"
+      }
+    ],
+    "params": {
+      "model": {
+        "type": "select",
+        "default": "qwen3-vl",
+        "options": [
+          "qwen3-vl",
+          "GLM-5.1-V",
+          "gpt-4o"
+        ],
+        "label": "模型"
+      },
+      "temperature": {
+        "type": "number",
+        "default": 0.3,
+        "label": "温度"
+      }
+    }
+  }
+]

@@ -34,12 +34,6 @@ run('node', ['scripts/sync-node-defs.mjs', OUT]);
 console.log('\n▶ write-headless-entry.mjs');
 run('node', ['scripts/write-headless-entry.mjs', OUT]);
 
-console.log(`\n▶ patch-gui-overlay-boot.mjs (${OUT})`);
-run('node', ['scripts/patch-gui-overlay-boot.mjs', OUT]);
-
-console.log(`\n▶ patch-export-web-button.mjs (${OUT})`);
-run('node', ['scripts/patch-export-web-button.mjs', OUT]);
-
 if (!IS_SRC_ONLY) {
   console.log('\n▶ generate:toolcall-catalog');
   run('npm', ['run', 'generate:toolcall-catalog']);

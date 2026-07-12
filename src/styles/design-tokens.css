@@ -1,0 +1,47 @@
+:root {
+  --font-ui: 'Inter', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-valid: #059669;
+  --color-error: #dc2626;
+  --toolbar-h: 48px;
+  --sidebar-w: 240px;
+  --canvas-bg: #f8fafc;
+  --canvas-grid: #e8ecf1;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}

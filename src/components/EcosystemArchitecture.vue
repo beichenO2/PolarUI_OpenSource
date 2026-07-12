@@ -87,15 +87,16 @@ defineExpose({ reload: loadArchitecture })
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 .eco-arch-title {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #7ee8fa;
+  color: var(--color-text);
 }
 .eco-arch-error {
-  color: #e74c3c;
+  color: var(--color-error);
   padding: 8px 12px;
   margin: 0;
 }

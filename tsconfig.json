@@ -11,11 +11,12 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "src/**/*.vue"],
+  "include": ["src/**/*", "src/**/*.vue", "lib/http-workflow-graph/run-http-workflow.mjs"],
   "exclude": ["node_modules", "dist", "electron"]
 }

@@ -19,8 +19,8 @@
       "class_type": "Output",
       "x": 300,
       "y": 0,
-      "width": 176,
-      "height": 90,
+      "width": 220,
+      "height": 72,
       "params": {}
     }
   ],
@@ -34,5 +34,5 @@
     }
   ],
   "created_at": 1,
-  "updated_at": 1783754387308
+  "updated_at": 1783879468787
 }

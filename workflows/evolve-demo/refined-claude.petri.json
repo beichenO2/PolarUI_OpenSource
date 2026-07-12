@@ -1,0 +1,816 @@
+{
+  "id": "37",
+  "name": "Claude Code",
+  "nodes": [
+    {
+      "id": "1",
+      "class_type": "PromptInput",
+      "x": 100,
+      "y": 80,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "expected_output": {
+          "body": "\\{[\\s\\S]*\"branch\"[\\s\\S]*\\}"
+        },
+        "purpose": "Claude Code LG — Agentic coding ReAct",
+        "content": "Claude Code coding task",
+        "variables": "{}",
+        "preload_memory": true,
+        "claude_md": ""
+      }
+    },
+    {
+      "id": "2",
+      "class_type": "PromptInject",
+      "x": 400,
+      "y": 80,
+      "width": 260,
+      "height": 52,
+      "params": {
+        "role": "You are Claude Code, an interactive CLI tool for software engineering.",
+        "constraints": "Use tools. PermissionGate for risky ops. JSON branch tool|finish.",
+        "prior_knowledge": "",
+        "use_trigger_engine": true,
+        "trigger_text": ""
+      }
+    },
+    {
+      "id": "3",
+      "class_type": "ReflectiveContext",
+      "x": 700,
+      "y": 80,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "include_descriptions": true,
+        "include_agent_rules": true,
+        "cache_ttl_s": 30
+      }
+    },
+    {
+      "id": "4",
+      "class_type": "ContextWindow",
+      "x": 400,
+      "y": 220,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "max_tokens": 200000,
+        "compress_threshold": 0.5,
+        "strategy": "summary"
+      }
+    },
+    {
+      "id": "5",
+      "class_type": "StaticData",
+      "x": 700,
+      "y": 220,
+      "width": 260,
+      "height": 72,
+      "params": {
+        "value": "[{\"name\":\"FileRead\"},{\"name\":\"FileWrite\"},{\"name\":\"CodeExec\"},{\"name\":\"GlobSearch\"},{\"name\":\"GrepSearch\"},{\"name\":\"WebSearch\"},{\"name\":\"WebFetch\"},{\"name\":\"SubAgent\"},{\"name\":\"GitCommit\"},{\"name\":\"MCPCall\"},{\"name\":\"Notification\"},{\"name\":\"CodeExec\"}]",
+        "type": "json"
+      }
+    },
+    {
+      "id": "6",
+      "class_type": "LLM",
+      "x": 700,
+      "y": 360,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "model": "GLM-5.1",
+        "temperature": 0.7,
+        "stream": false,
+        "system_prompt": "Claude Code ReAct. JSON: {\"branch\":\"tool|finish\",\"tool\":\"FileRead|CodeExec|...\"}"
+      }
+    },
+    {
+      "id": "7",
+      "class_type": "Switch",
+      "x": 1600,
+      "y": 80,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "cases": "[{\"id\":\"a\"},{\"id\":\"b\"}]",
+        "branches": "tool,finish"
+      }
+    },
+    {
+      "id": "8",
+      "class_type": "PermissionGate",
+      "x": 1900,
+      "y": 80,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "mode": "ask",
+        "whitelist": "[\"FileRead\",\"GlobSearch\",\"GrepSearch\",\"WebSearch\"]",
+        "_inputBindings": {
+          "permission_request": {
+            "action": [
+              "7",
+              0
+            ],
+            "tool_name": [
+              "6",
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "9",
+      "class_type": "ToolCall",
+      "x": 1600,
+      "y": 220,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "model": "GLM-5.1",
+        "tool_list": "[]"
+      }
+    },
+    {
+      "id": "10",
+      "class_type": "FileRead",
+      "x": 1900,
+      "y": 220,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "encoding": "utf-8",
+        "optional": true
+      }
+    },
+    {
+      "id": "11",
+      "class_type": "FileWrite",
+      "x": 1900,
+      "y": 360,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "create_dirs": true,
+        "optional": true
+      }
+    },
+    {
+      "id": "12",
+      "class_type": "CodeExec",
+      "x": 1900,
+      "y": 500,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "language": "shell",
+        "timeout_s": 30,
+        "sandbox": true,
+        "optional": true
+      }
+    },
+    {
+      "id": "13",
+      "class_type": "GlobSearch",
+      "x": 1900,
+      "y": 640,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "cwd": ".",
+        "optional": true
+      }
+    },
+    {
+      "id": "14",
+      "class_type": "GrepSearch",
+      "x": 1900,
+      "y": 780,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "case_insensitive": false,
+        "glob": "",
+        "optional": true
+      }
+    },
+    {
+      "id": "15",
+      "class_type": "WebSearch",
+      "x": 1900,
+      "y": 920,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "max_results": 5,
+        "optional": true
+      }
+    },
+    {
+      "id": "16",
+      "class_type": "MCPCall",
+      "x": 1900,
+      "y": 1060,
+      "width": 260,
+      "height": 76,
+      "params": {
+        "timeout_s": 30,
+        "optional": true
+      }
+    },
+    {
+      "id": "17",
+      "class_type": "CodeExec",
+      "x": 1900,
+      "y": 1200,
+      "width": 260,
+      "height": 102,
+      "params": {
+        "language": "python",
+        "timeout_s": 30,
+        "sandbox": true,
+        "optional": true
+      }
+    },
+    {
+      "id": "20",
+      "class_type": "Validator",
+      "x": 1000,
+      "y": 220,
+      "width": 260,
+      "height": 180,
+      "params": {
+        "strict": true,
+        "flags": "g",
+        "verify_mode": "auto",
+        "verify_model": "GLM-5.1",
+        "_inputBindings": {
+          "validation_spec": {
+            "purpose": [
+              "1",
+              2
+            ],
+            "expected_pattern": [
+              "1",
+              1
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "21",
+      "class_type": "RetryLoop",
+      "x": 1300,
+      "y": 220,
+      "width": 260,
+      "height": 154,
+      "params": {
+        "max_retries": 7
+      }
+    },
+    {
+      "id": "22",
+      "class_type": "Output",
+      "x": 1600,
+      "y": 360,
+      "width": 220,
+      "height": 72,
+      "params": {
+        "format": "markdown",
+        "save_to": "",
+        "output_description": "",
+        "merge_strategy": "last"
+      }
+    },
+    {
+      "id": "23",
+      "class_type": "Output",
+      "x": 1900,
+      "y": 1340,
+      "width": 220,
+      "height": 72,
+      "params": {
+        "format": "text",
+        "save_to": "",
+        "output_description": "",
+        "merge_strategy": "last"
+      }
+    },
+    {
+      "id": "24",
+      "class_type": "Validator",
+      "x": 1000,
+      "y": 80,
+      "width": 260,
+      "height": 180,
+      "params": {
+        "strict": true,
+        "flags": "g",
+        "verify_mode": "step",
+        "verify_model": "GLM-5.1",
+        "validation_spec": {
+          "expected_pattern": ".*"
+        }
+      }
+    },
+    {
+      "id": "25",
+      "class_type": "RetryLoop",
+      "x": 1300,
+      "y": 80,
+      "width": 260,
+      "height": 154,
+      "params": {
+        "max_retries": 7
+      }
+    },
+    {
+      "id": "26",
+      "class_type": "Validator",
+      "x": 1000,
+      "y": 360,
+      "width": 260,
+      "height": 180,
+      "params": {
+        "strict": true,
+        "flags": "g",
+        "verify_mode": "step",
+        "verify_model": "GLM-5.1",
+        "validation_spec": {
+          "expected_pattern": ".*"
+        }
+      }
+    },
+    {
+      "id": "27",
+      "class_type": "RetryLoop",
+      "x": 1300,
+      "y": 360,
+      "width": 260,
+      "height": 154,
+      "params": {
+        "max_retries": 7
+      }
+    },
+    {
+      "id": "28",
+      "class_type": "SubAgent",
+      "x": 1900,
+      "y": 1480,
+      "width": 260,
+      "height": 52,
+      "params": {
+        "model": "GLM-5.1",
+        "timeout_s": 300,
+        "sandbox": true,
+        "optional": true
+      }
+    },
+    {
+      "id": "petri_gate",
+      "class_type": "StaticData",
+      "x": 0,
+      "y": 0,
+      "width": 220,
+      "height": 100,
+      "params": {
+        "value": "petri-gate-ok",
+        "type": "string"
+      }
+    },
+    {
+      "id": "petri_sc",
+      "class_type": "StemCell",
+      "x": 0,
+      "y": 0,
+      "width": 220,
+      "height": 100,
+      "params": {
+        "allow_graph_edit": false,
+        "state": {
+          "score": 10
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "38",
+      "from_node": "1",
+      "from_slot": 0,
+      "to_node": "2",
+      "to_slot": 0
+    },
+    {
+      "id": "39",
+      "from_node": "2",
+      "from_slot": 0,
+      "to_node": "3",
+      "to_slot": 0
+    },
+    {
+      "id": "40",
+      "from_node": "1",
+      "from_slot": 2,
+      "to_node": "4",
+      "to_slot": 0
+    },
+    {
+      "id": "41",
+      "from_node": "1",
+      "from_slot": 0,
+      "to_node": "4",
+      "to_slot": 1
+    },
+    {
+      "id": "42",
+      "from_node": "4",
+      "from_slot": 0,
+      "to_node": "5",
+      "to_slot": 0
+    },
+    {
+      "id": "43",
+      "from_node": "4",
+      "from_slot": 0,
+      "to_node": "6",
+      "to_slot": 0
+    },
+    {
+      "id": "44",
+      "from_node": "2",
+      "from_slot": 0,
+      "to_node": "6",
+      "to_slot": 1
+    },
+    {
+      "id": "45",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "7",
+      "to_slot": 0
+    },
+    {
+      "id": "46",
+      "from_node": "7",
+      "from_slot": 0,
+      "to_node": "8",
+      "to_slot": 0
+    },
+    {
+      "id": "47",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "9",
+      "to_slot": 0
+    },
+    {
+      "id": "48",
+      "from_node": "5",
+      "from_slot": 0,
+      "to_node": "9",
+      "to_slot": 1
+    },
+    {
+      "id": "49",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "10",
+      "to_slot": 0
+    },
+    {
+      "id": "50",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "11",
+      "to_slot": 0
+    },
+    {
+      "id": "51",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "11",
+      "to_slot": 1
+    },
+    {
+      "id": "52",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "12",
+      "to_slot": 0
+    },
+    {
+      "id": "53",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "13",
+      "to_slot": 0
+    },
+    {
+      "id": "54",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "14",
+      "to_slot": 0
+    },
+    {
+      "id": "55",
+      "from_node": "5",
+      "from_slot": 0,
+      "to_node": "14",
+      "to_slot": 1
+    },
+    {
+      "id": "56",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "15",
+      "to_slot": 0
+    },
+    {
+      "id": "57",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "16",
+      "to_slot": 0
+    },
+    {
+      "id": "58",
+      "from_node": "7",
+      "from_slot": 0,
+      "to_node": "17",
+      "to_slot": 0
+    },
+    {
+      "id": "59",
+      "from_node": "6",
+      "from_slot": 0,
+      "to_node": "20",
+      "to_slot": 0
+    },
+    {
+      "id": "60",
+      "from_node": "1",
+      "from_slot": 2,
+      "to_node": "20",
+      "to_slot": 5
+    },
+    {
+      "id": "61",
+      "from_node": "20",
+      "from_slot": 0,
+      "to_node": "21",
+      "to_slot": 0
+    },
+    {
+      "id": "62",
+      "from_node": "4",
+      "from_slot": 0,
+      "to_node": "21",
+      "to_slot": 2
+    },
+    {
+      "id": "63",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "22",
+      "to_slot": 0
+    },
+    {
+      "id": "64",
+      "from_node": "7",
+      "from_slot": 1,
+      "to_node": "23",
+      "to_slot": 0
+    },
+    {
+      "id": "65",
+      "from_node": "6",
+      "from_slot": 0,
+      "to_node": "24",
+      "to_slot": 0
+    },
+    {
+      "id": "66",
+      "from_node": "24",
+      "from_slot": 0,
+      "to_node": "25",
+      "to_slot": 0
+    },
+    {
+      "id": "67",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "25",
+      "to_slot": 2
+    },
+    {
+      "id": "68",
+      "from_node": "6",
+      "from_slot": 0,
+      "to_node": "26",
+      "to_slot": 0
+    },
+    {
+      "id": "69",
+      "from_node": "26",
+      "from_slot": 0,
+      "to_node": "27",
+      "to_slot": 0
+    },
+    {
+      "id": "70",
+      "from_node": "27",
+      "from_slot": 0,
+      "to_node": "27",
+      "to_slot": 2
+    },
+    {
+      "id": "71",
+      "from_node": "9",
+      "from_slot": 0,
+      "to_node": "28",
+      "to_slot": 0
+    },
+    {
+      "id": "72",
+      "from_node": "25",
+      "from_slot": 0,
+      "to_node": "28",
+      "to_slot": 1
+    }
+  ],
+  "created_at": 1783879471174,
+  "updated_at": 1783879473482,
+  "_entry": "1",
+  "_lg_edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "kind": "static"
+    },
+    {
+      "from": "2",
+      "to": "3",
+      "kind": "static"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "kind": "static"
+    },
+    {
+      "from": "4",
+      "to": "5",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "8",
+      "kind": "conditional",
+      "when": "tool"
+    },
+    {
+      "from": "8",
+      "to": "9",
+      "kind": "static"
+    },
+    {
+      "from": "9",
+      "to": "10",
+      "kind": "conditional",
+      "when": "FileRead"
+    },
+    {
+      "from": "9",
+      "to": "11",
+      "kind": "conditional",
+      "when": "FileWrite"
+    },
+    {
+      "from": "9",
+      "to": "12",
+      "kind": "conditional",
+      "when": "CodeExec"
+    },
+    {
+      "from": "9",
+      "to": "13",
+      "kind": "conditional",
+      "when": "GlobSearch"
+    },
+    {
+      "from": "9",
+      "to": "14",
+      "kind": "conditional",
+      "when": "GrepSearch"
+    },
+    {
+      "from": "9",
+      "to": "15",
+      "kind": "conditional",
+      "when": "WebSearch"
+    },
+    {
+      "from": "9",
+      "to": "16",
+      "kind": "conditional",
+      "when": "MCPCall"
+    },
+    {
+      "from": "9",
+      "to": "28",
+      "kind": "conditional",
+      "when": "SubAgent"
+    },
+    {
+      "from": "10",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "11",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "12",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "13",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "14",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "15",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "16",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "28",
+      "to": "6",
+      "kind": "static",
+      "label": "ReAct 回环"
+    },
+    {
+      "from": "20",
+      "to": "21",
+      "kind": "static"
+    },
+    {
+      "from": "21",
+      "to": "22",
+      "kind": "static"
+    },
+    {
+      "from": "7",
+      "to": "20",
+      "kind": "conditional",
+      "when": "finish"
+    },
+    {
+      "from": "5",
+      "to": "petri_gate",
+      "kind": "static"
+    },
+    {
+      "from": "petri_gate",
+      "to": "6",
+      "kind": "static"
+    },
+    {
+      "from": "6",
+      "to": "petri_sc",
+      "kind": "static"
+    },
+    {
+      "from": "petri_sc",
+      "to": "7",
+      "kind": "static"
+    }
+  ]
+}

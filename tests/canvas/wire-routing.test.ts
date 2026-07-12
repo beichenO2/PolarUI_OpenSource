@@ -12,6 +12,13 @@ import { linear3, fanOut6, react2Loops, denseCorridor } from './fixtures/synthet
 import { loadTaociDenseFixture, loadHermesReactFixture } from './fixtures/workflow-fixtures.ts'
 import { deriveViewGraph } from '../../src/engine/graph-groups.ts'
 import type { NodeInstance, Link } from '../../src/engine/types'
+import {
+  semanticWireColor,
+  SEMANTIC_OUTPUT_COLOR,
+  SEMANTIC_CONTROL_FLOW_COLOR,
+  BACKWARD_EDGE_PALETTE,
+  buildLinkColorMaps,
+} from '../../src/engine/wire-colors.ts'
 
 interface Fixture {
   name: string
@@ -130,6 +137,53 @@ describe('wire routing invariants', () => {
       const { I5 } = runInvariants({ name: 'linear-3-collapsed', nodes: view.nodes, links: view.links, backLinks: base.backLinks })
       assert.equal(I5.length, 0)
     })
+  })
+})
+
+describe('semanticWireColor', () => {
+  const nodes: NodeInstance[] = [
+    { id: 'sw', class_type: 'Switch', x: 0, y: 0, width: 200, height: 120, params: {} },
+    { id: 'out', class_type: 'Output', x: 400, y: 0, width: 160, height: 80, params: {} },
+    { id: 'llm', class_type: 'LLMCall', x: 200, y: 0, width: 200, height: 100, params: {} },
+  ]
+
+  it('colors wires into Output green', () => {
+    const link: Link = { id: 'l1', from_node: 'llm', from_slot: 0, to_node: 'out', to_slot: 0 }
+    assert.equal(semanticWireColor(link, { nodes }), SEMANTIC_OUTPUT_COLOR)
+  })
+
+  it('colors control-flow sources indigo', () => {
+    const link: Link = { id: 'l2', from_node: 'sw', from_slot: 0, to_node: 'llm', to_slot: 0 }
+    assert.equal(semanticWireColor(link, { nodes }), SEMANTIC_CONTROL_FLOW_COLOR)
+  })
+
+  it('colors lg conditional edges indigo', () => {
+    const fwdNodes: NodeInstance[] = [
+      { id: 'a', class_type: 'LLMCall', x: 0, y: 0, width: 200, height: 100, params: {} },
+      { id: 'b', class_type: 'StaticData', x: 400, y: 0, width: 200, height: 100, params: {} },
+    ]
+    const link: Link = { id: 'l3', from_node: 'a', from_slot: 0, to_node: 'b', to_slot: 0 }
+    const lgEdges = [{ from: 'a', to: 'b', kind: 'conditional' as const, when: 'x' }]
+    assert.equal(semanticWireColor(link, { nodes: fwdNodes, lgEdges }), SEMANTIC_CONTROL_FLOW_COLOR)
+  })
+
+  it('returns null for ordinary forward wires', () => {
+    const link: Link = { id: 'l4', from_node: 'llm', from_slot: 0, to_node: 'sw', to_slot: 0 }
+    assert.equal(semanticWireColor(link, { nodes }), null)
+  })
+
+  it('assigns backward wires to red family palette', () => {
+    const links: Link[] = [
+      { id: 'b1', from_node: 'out', from_slot: 0, to_node: 'llm', to_slot: 0 },
+      { id: 'b2', from_node: 'llm', from_slot: 0, to_node: 'sw', to_slot: 0 },
+    ]
+    const backLinks = new Set(['b1', 'b2'])
+    const maps = buildLinkColorMaps(links, nodes, backLinks)
+    for (const id of ['b1', 'b2'] as const) {
+      const color = maps.backwardByLink.get(id)
+      assert.ok(color && BACKWARD_EDGE_PALETTE.includes(color as typeof BACKWARD_EDGE_PALETTE[number]))
+    }
+    assert.notEqual(maps.backwardByLink.get('b1'), maps.backwardByLink.get('b2'))
   })
 })
 

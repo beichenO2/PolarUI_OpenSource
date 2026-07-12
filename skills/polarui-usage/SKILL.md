@@ -1,6 +1,6 @@
 # PolarUI — 使用指南
 
-> 前端详情：[`docs/FRONTEND.md`](../docs/FRONTEND.md)
+> 前端详情：[`docs/FRONTEND.md`](../../docs/FRONTEND.md)
 
 ## 启动
 
@@ -16,10 +16,10 @@ npm run dev -- --port 5170
 
 | 阶段 | Skill / 文档 |
 |------|-------------|
-| 画布编辑 | [`polarui-workflow-authoring`](../skills/polarui-workflow-authoring/SKILL.md) |
-| Web 运行时契约 | [`polarui-workflow-contract`](../skills/polarui-workflow-contract/SKILL.md) |
-| 部署到 Web | [`polarui-web-deploy`](../skills/polarui-web-deploy/SKILL.md) |
-| 架构 | [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) |
+| 画布编辑 | [`polarui-workflow-authoring`](../polarui-workflow-authoring/SKILL.md) |
+| Web 运行时契约 | [`polarui-workflow-contract`](../polarui-workflow-contract/SKILL.md) |
+| 部署到 Web | [`polarui-web-deploy`](../polarui-web-deploy/SKILL.md) |
+| 架构 | [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) |
 
 ## 依赖服务（可选）
 

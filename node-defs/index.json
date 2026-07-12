@@ -1,10 +1,16 @@
 {
   "version": 2,
   "files": [
-    "core.json",
-    "tools-system.json",
-    "polar-memory.json",
-    "paradigms.json",
+    "primitives/input.json",
+    "primitives/output.json",
+    "primitives/llm.json",
+    "primitives/route.json",
+    "primitives/tool.json",
+    "primitives/memory.json",
+    "functions/core.json",
+    "functions/tools-system.json",
+    "functions/polar-memory.json",
+    "functions/paradigms.json",
     "annotation.json",
     "evolve.json"
   ]

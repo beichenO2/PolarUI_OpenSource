@@ -1,0 +1,91 @@
+[
+  {
+    "class_type": "MCPCall",
+    "category": "Tools",
+    "display_name": "MCP 调用",
+    "description": "原子化元件：调用外部 MCP Server 的工具。mcp_request = { server, tool_name, arguments }。",
+    "color": "#2d4a5a",
+    "inputs": [
+      {
+        "name": "mcp_request",
+        "type": "object",
+        "label": "{ server, tool_name, arguments }",
+        "description": "MCP 调用 · 输入「mcp_request」（类型 object）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "any",
+        "description": "处理结果输出。"
+      },
+      {
+        "name": "error",
+        "type": "string",
+        "description": "MCP 调用 · 输出「error」（类型 string）"
+      }
+    ],
+    "params": {
+      "timeout_s": {
+        "type": "number",
+        "default": 30,
+        "label": "超时(秒)"
+      }
+    }
+  },
+  {
+    "class_type": "CodeExec",
+    "category": "Tools",
+    "display_name": "代码执行",
+    "description": "原子化元件：在沙箱中执行代码片段（Python/JS/Shell）。",
+    "color": "#2d634a",
+    "inputs": [
+      {
+        "name": "code",
+        "type": "string",
+        "description": "代码执行 · 输入「code」（类型 string）"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "stdout",
+        "type": "string",
+        "description": "代码执行 · 输出「stdout」（类型 string）"
+      },
+      {
+        "name": "stderr",
+        "type": "string",
+        "optional": true,
+        "description": "代码执行 · 输出「stderr」（类型 string），可选"
+      },
+      {
+        "name": "exit_code",
+        "type": "number",
+        "optional": true,
+        "description": "代码执行 · 输出「exit_code」（类型 number），可选"
+      }
+    ],
+    "params": {
+      "language": {
+        "type": "select",
+        "default": "python",
+        "options": [
+          "python",
+          "javascript",
+          "shell"
+        ],
+        "label": "语言"
+      },
+      "timeout_s": {
+        "type": "number",
+        "default": 30,
+        "label": "超时(秒)"
+      },
+      "sandbox": {
+        "type": "boolean",
+        "default": true,
+        "label": "沙箱隔离"
+      }
+    }
+  }
+]

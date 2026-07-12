@@ -1,70 +1,5 @@
 [
   {
-    "class_type": "LLM",
-    "category": "LLM",
-    "display_name": "LLM 调用",
-    "description": "原子化元件：一次大模型 API 调用。输入 prompt → 输出 response。最小粒度，不含工具调用、不含结构化解析。",
-    "color": "#1a472a",
-    "inputs": [
-      {
-        "name": "prompt",
-        "type": "string",
-        "description": "发给大模型的用户任务正文；可来自 PromptInput 或上游组件。"
-      },
-      {
-        "name": "context",
-        "type": "string",
-        "optional": true,
-        "description": "可选背景上下文（RAG、记忆块等），拼入 system 或 user 消息。"
-      },
-      {
-        "name": "intra_round_hint",
-        "type": "string",
-        "optional": true,
-        "description": "RetryLoop 轮内修正提示；非轮间 SSOT，仅本轮迭代注入。"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "response",
-        "type": "string",
-        "description": "模型生成的文本结果，供下游 Validator / Output 等消费。"
-      },
-      {
-        "name": "usage",
-        "type": "object",
-        "description": "Token 用量等元数据；蒸馏采集可悬空不连线。"
-      }
-    ],
-    "params": {
-      "model": {
-        "type": "select",
-        "default": "GLM-5.1",
-        "options": [
-          "GLM-5.1",
-          "MiniMax-2.7-HighSpeed",
-          "qwen-plus"
-        ],
-        "label": "模型"
-      },
-      "temperature": {
-        "type": "number",
-        "default": 0.7,
-        "label": "温度"
-      },
-      "stream": {
-        "type": "boolean",
-        "default": false,
-        "label": "流式输出"
-      },
-      "system_prompt": {
-        "type": "text",
-        "default": "",
-        "label": "System Prompt"
-      }
-    }
-  },
-  {
     "class_type": "ToolCall",
     "category": "LLM",
     "display_name": "工具调用",
@@ -159,54 +94,6 @@
     }
   },
   {
-    "class_type": "VLM",
-    "category": "LLM",
-    "display_name": "VLM 调用",
-    "description": "原子化元件：视觉语言模型调用。输入 (image, prompt) → 输出 response。用于图像/文档视觉核验。",
-    "color": "#1a4a4a",
-    "inputs": [
-      {
-        "name": "image",
-        "type": "string",
-        "description": "图像 URL 或 base64 输入。"
-      },
-      {
-        "name": "prompt",
-        "type": "string",
-        "description": "用户或上游传入的提示/任务正文，作为本组件主要处理对象。"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "response",
-        "type": "string",
-        "description": "本组件产出的主结果，供下游连线消费。"
-      },
-      {
-        "name": "usage",
-        "type": "object",
-        "description": "Token/调用元数据；可无下游连线（蒸馏采集）。"
-      }
-    ],
-    "params": {
-      "model": {
-        "type": "select",
-        "default": "qwen3-vl",
-        "options": [
-          "qwen3-vl",
-          "GLM-5.1-V",
-          "gpt-4o"
-        ],
-        "label": "模型"
-      },
-      "temperature": {
-        "type": "number",
-        "default": 0.3,
-        "label": "温度"
-      }
-    }
-  },
-  {
     "class_type": "HumanApproval",
     "category": "Control",
     "display_name": "人工审批",
@@ -257,47 +144,6 @@
         "type": "boolean",
         "default": false,
         "label": "推送到建议 inbox（OpenClaw 范式）"
-      }
-    }
-  },
-  {
-    "class_type": "Condition",
-    "category": "Control",
-    "display_name": "条件分支",
-    "description": "原子化元件：输入数据 + 条件表达式 → 输出 true/false 分支路由。",
-    "color": "#5a3d0c",
-    "inputs": [
-      {
-        "name": "data",
-        "type": "any",
-        "optional": true,
-        "description": "通用数据载荷（对象/数组/标量）。"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "true_branch",
-        "type": "any",
-        "optional": true,
-        "description": "条件分支 · 输出「true_branch」（类型 any），可选"
-      },
-      {
-        "name": "false_branch",
-        "type": "any",
-        "optional": true,
-        "description": "条件分支 · 输出「false_branch」（类型 any），可选"
-      }
-    ],
-    "params": {
-      "expression": {
-        "type": "text",
-        "default": "",
-        "label": "条件表达式 (JS)"
-      },
-      "branch_count": {
-        "type": "number",
-        "default": 2,
-        "label": "分支数（≥2，默认 2）"
       }
     }
   },
@@ -585,56 +431,6 @@
     }
   },
   {
-    "class_type": "PromptInput",
-    "category": "Input",
-    "display_name": "Prompt 植入",
-    "description": "原子化元件：定义初始输入与总体输出预期。expected_output 为 JSON 对象：键=分块字段名，值=该块 function-calling JSON 须匹配的正则。",
-    "color": "#3a3a5c",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "prompt",
-        "type": "string",
-        "optional": true,
-        "description": "用户或上游传入的提示/任务正文，作为本组件主要处理对象。"
-      },
-      {
-        "name": "expected_pattern",
-        "type": "string",
-        "optional": true,
-        "description": "Prompt 植入 · 输出「expected_pattern」（类型 string），可选"
-      },
-      {
-        "name": "context",
-        "type": "object",
-        "optional": true,
-        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
-      }
-    ],
-    "params": {
-      "expected_output": {
-        "type": "text",
-        "default": "{}",
-        "label": "输出预期（JSON 分块，必填）"
-      },
-      "purpose": {
-        "type": "text",
-        "default": "",
-        "label": "总目标 / 角色"
-      },
-      "content": {
-        "type": "text",
-        "default": "",
-        "label": "Prompt 内容"
-      },
-      "variables": {
-        "type": "text",
-        "default": "{}",
-        "label": "变量 (JSON)"
-      }
-    }
-  },
-  {
     "class_type": "PromptInject",
     "category": "Input",
     "display_name": "Prompt 注入",
@@ -720,96 +516,6 @@
         "type": "text",
         "default": "",
         "label": "附加规范文本（可选）"
-      }
-    }
-  },
-  {
-    "class_type": "StaticData",
-    "category": "Input",
-    "display_name": "静态数据",
-    "description": "原子化元件：输出固定的 JSON/文本数据。用于配置注入；可选接上游 trigger 表示执行顺序。",
-    "color": "#3a4a5c",
-    "inputs": [
-      {
-        "name": "trigger",
-        "type": "any",
-        "optional": true,
-        "label": "上游触发",
-        "description": "触发信号（定时、事件或上游脉冲）。"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "data",
-        "type": "any",
-        "description": "通用数据载荷（对象/数组/标量）。"
-      }
-    ],
-    "params": {
-      "value": {
-        "type": "text",
-        "default": "{}",
-        "label": "数据内容 (JSON/文本)"
-      },
-      "type": {
-        "type": "select",
-        "default": "json",
-        "options": [
-          "json",
-          "text",
-          "number"
-        ],
-        "label": "数据类型"
-      }
-    }
-  },
-  {
-    "class_type": "Output",
-    "category": "Output",
-    "display_name": "Output",
-    "description": "原子化元件：工作流终点。可多节点并联输出；画布上以紧凑卡片呈现（对齐 Dify End）。",
-    "color": "#166534",
-    "inputs": [
-      {
-        "name": "content",
-        "type": "any",
-        "description": "汇聚到终点的交付内容（任意类型）。"
-      }
-    ],
-    "outputs": [],
-    "params": {
-      "format": {
-        "type": "select",
-        "default": "auto",
-        "options": [
-          "auto",
-          "json",
-          "markdown",
-          "plain",
-          "yaml"
-        ],
-        "label": "输出格式"
-      },
-      "save_to": {
-        "type": "string",
-        "default": "",
-        "label": "保存路径（留空不保存）"
-      },
-      "output_description": {
-        "type": "text",
-        "default": "",
-        "label": "交付物说明（期望输出什么）"
-      },
-      "merge_strategy": {
-        "type": "select",
-        "default": "last",
-        "options": [
-          "concat",
-          "first",
-          "last",
-          "json_merge"
-        ],
-        "label": "多 Output 合并策略"
       }
     }
   },
@@ -1147,47 +853,6 @@
         "type": "text",
         "default": "",
         "label": "自定义 Reduce 表达式"
-      }
-    }
-  },
-  {
-    "class_type": "Switch",
-    "category": "Control",
-    "display_name": "多路分支",
-    "description": "原子化元件：可变路数（默认 2 路 + default）；cases JSON 项数决定出口数，非固定 4 口。",
-    "color": "#5a4a2d",
-    "inputs": [
-      {
-        "name": "value",
-        "type": "any",
-        "description": "待分支或判断的值。"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "case_0",
-        "type": "any",
-        "optional": true,
-        "description": "多路分支 · 输出「case_0」（类型 any），可选"
-      },
-      {
-        "name": "case_1",
-        "type": "any",
-        "optional": true,
-        "description": "多路分支 · 输出「case_1」（类型 any），可选"
-      },
-      {
-        "name": "default",
-        "type": "any",
-        "optional": true,
-        "description": "多路分支 · 输出「default」（类型 any），可选"
-      }
-    ],
-    "params": {
-      "cases": {
-        "type": "text",
-        "default": "[{\"label\":\"情况1\"},{\"label\":\"情况2\"}]",
-        "label": "Case 列表 (JSON，≥2 项)"
       }
     }
   },

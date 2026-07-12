@@ -1,8 +1,13 @@
+import './styles/design-tokens.css'
+import './styles/theme-hermes.css'
+import './styles/shell.css'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { registry } from './engine/registry'
 import { executeGraph as __keepExecuteGraphExport } from './engine/workflow-runner'
+import { registerExecutor } from './engine/executor'
+import { registerGuiOverlays } from '../lib/gui-overlay-browser.mjs'
 
 export { executeGraph } from './engine/workflow-runner'
 export { loadWorkflowJson as parseWorkflow } from './engine/loader'
@@ -25,6 +30,9 @@ async function bootstrap() {
   }
 
   if ((globalThis as { __POLAR_HEADLESS__?: boolean }).__POLAR_HEADLESS__) return
+
+  await registerGuiOverlays(registerExecutor)
+  console.log('[PolarUI] GUI overlay: ScenarioMemory registered')
 
   const app = createApp(App)
   app.use(createPinia())

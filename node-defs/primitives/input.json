@@ -1,0 +1,92 @@
+[
+  {
+    "class_type": "PromptInput",
+    "category": "Input",
+    "display_name": "Prompt 植入",
+    "description": "原子化元件：定义初始输入与总体输出预期。expected_output 为 JSON 对象：键=分块字段名，值=该块 function-calling JSON 须匹配的正则。",
+    "color": "#3a3a5c",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "prompt",
+        "type": "string",
+        "optional": true,
+        "description": "用户或上游传入的提示/任务正文，作为本组件主要处理对象。"
+      },
+      {
+        "name": "expected_pattern",
+        "type": "string",
+        "optional": true,
+        "description": "Prompt 植入 · 输出「expected_pattern」（类型 string），可选"
+      },
+      {
+        "name": "context",
+        "type": "object",
+        "optional": true,
+        "description": "可选上下文（记忆块、RAG、前置节点输出等）。"
+      }
+    ],
+    "params": {
+      "expected_output": {
+        "type": "text",
+        "default": "{}",
+        "label": "输出预期（JSON 分块，必填）"
+      },
+      "purpose": {
+        "type": "text",
+        "default": "",
+        "label": "总目标 / 角色"
+      },
+      "content": {
+        "type": "text",
+        "default": "",
+        "label": "Prompt 内容"
+      },
+      "variables": {
+        "type": "text",
+        "default": "{}",
+        "label": "变量 (JSON)"
+      }
+    }
+  },
+  {
+    "class_type": "StaticData",
+    "category": "Input",
+    "display_name": "静态数据",
+    "description": "原子化元件：输出固定的 JSON/文本数据。用于配置注入；可选接上游 trigger 表示执行顺序。",
+    "color": "#3a4a5c",
+    "inputs": [
+      {
+        "name": "trigger",
+        "type": "any",
+        "optional": true,
+        "label": "上游触发",
+        "description": "触发信号（定时、事件或上游脉冲）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "data",
+        "type": "any",
+        "description": "通用数据载荷（对象/数组/标量）。"
+      }
+    ],
+    "params": {
+      "value": {
+        "type": "text",
+        "default": "{}",
+        "label": "数据内容 (JSON/文本)"
+      },
+      "type": {
+        "type": "select",
+        "default": "json",
+        "options": [
+          "json",
+          "text",
+          "number"
+        ],
+        "label": "数据类型"
+      }
+    }
+  }
+]

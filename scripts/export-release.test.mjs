@@ -5,11 +5,13 @@
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, mkdirSync, readdirSync, writeFileSync, mkdtempSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { exportRelease, resolveReleaseId } from './export-release.mjs';
 import { verifyRelease } from './verify-release.mjs';
+import { verifyOrthogonality } from './verify-orthogonality.mjs';
 import { graphNodeTypes } from './graph-utils.mjs';
 
 const WEB_ROOT = join(process.env.HOME ?? '~', 'Desktop/Web_related');
@@ -170,6 +172,91 @@ test('verifyRelease catches snapshot tampering (checksum)', async () => {
   assert.equal(v.ok, false);
   assert.ok(v.errors.some((e) => e.includes('checksum mismatch')));
   rmSync(r.release_path, { recursive: true, force: true });
+});
+
+describe('AC-R06 orthogonality gate', () => {
+  /** @type {string[]} */
+  const cleanup = [];
+
+  after(() => {
+    for (const dir of cleanup) {
+      try {
+        if (existsSync(dir)) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      } catch {
+        /* best effort */
+      }
+    }
+  });
+
+  test('verifyOrthogonality passes clean staging fixture', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ortho-clean-'));
+    cleanup.push(dir);
+    writeFileSync(join(dir, '.env.example'), 'POLARFLOW_LLM_API_KEY=\nEMAIL_PASSWORD=\nPORT=8065\n');
+    writeFileSync(join(dir, 'site.config.json'), '{"url":"http://127.0.0.1:8065/run"}');
+    const v = verifyOrthogonality(dir);
+    assert.ok(v.ok, v.errors.join('\n'));
+  });
+
+  test('verifyOrthogonality rejects dev port reference', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ortho-port-'));
+    cleanup.push(dir);
+    writeFileSync(join(dir, '.env.example'), 'PORT=\n');
+    writeFileSync(join(dir, 'bad.json'), '{"url":"http://127.0.0.1:8120/run"}');
+    const v = verifyOrthogonality(dir);
+    assert.equal(v.ok, false);
+    assert.ok(v.errors.some((e) => e.includes('8120')), v.errors.join('\n'));
+  });
+
+  test('verifyOrthogonality rejects external symlink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ortho-link-'));
+    cleanup.push(dir);
+    writeFileSync(join(dir, '.env.example'), 'PORT=\n');
+    mkdirSync(join(dir, 'engine', 'vendor'), { recursive: true });
+    symlinkSync('~/Polarisor/PolarFlow', join(dir, 'engine', 'vendor', 'polarflow'));
+    const v = verifyOrthogonality(dir);
+    assert.equal(v.ok, false);
+    assert.ok(v.errors.some((e) => e.includes('symlink outside staging')), v.errors.join('\n'));
+  });
+
+  test('verifyOrthogonality rejects non-empty env secret', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ortho-env-'));
+    cleanup.push(dir);
+    writeFileSync(join(dir, '.env.example'), 'POLARFLOW_LLM_API_KEY=sk-live-secret\n');
+    const v = verifyOrthogonality(dir);
+    assert.equal(v.ok, false);
+    assert.ok(v.errors.some((e) => e.includes('env secret')), v.errors.join('\n'));
+  });
+
+  test('verifyOrthogonality skips upstream vendor .env.example secrets', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ortho-upstream-'));
+    cleanup.push(dir);
+    writeFileSync(join(dir, '.env.example'), 'POLARFLOW_LLM_API_KEY=\n');
+    mkdirSync(join(dir, 'upstream/librechat'), { recursive: true });
+    writeFileSync(
+      join(dir, 'upstream/librechat/.env.example'),
+      'OPENAI_API_KEY=user_provided\nJWT_SECRET=16f8c0ef4a5d391b26034086c628469d3f9f497f08163ab9b40137092f2909ef\n',
+    );
+    const v = verifyOrthogonality(dir);
+    assert.ok(v.ok, v.errors.join('\n'));
+  });
+
+  test('export fails at orthogonality when staging would contain :8120', async () => {
+    const r = await exportRelease({
+      workflow: WORKFLOW_ID,
+      webRoot: TEST_ROOT,
+      skipPreflight: true,
+      compileOnly: true,
+      silent: true,
+    });
+    if (!r.ok && r.stage === 'orthogonality') {
+      assert.match(r.error, /8120|12790|Polarisor|\.env\.example|symlink/);
+      assert.ok(!existsSync(r.release_path ?? join(TEST_ROOT, r.release_id ?? 'missing')));
+      return;
+    }
+    assert.ok(r.ok, `expected orthogonality failure or ok with clean template: ${JSON.stringify(r)}`);
+    assert.match(readFileSync(join(r.release_path, 'EXPORT.log'), 'utf8'), /Step 10\.5 verifyOrthogonality/);
+    rmSync(r.release_path, { recursive: true, force: true, maxRetries: 3 });
+  });
 });
 
 test('AC-R03 release DB isolation', async () => {

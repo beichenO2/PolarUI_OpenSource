@@ -97,7 +97,8 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: Number(process.env.POLARUI_PORT ?? 5170),
-    strictPort: false,
+    // 端口固定 5170：被占用时直接报错，不允许静默漂移到 5171+
+    strictPort: true,
     proxy: {
       '/api/polaris': {
         target: HUB,

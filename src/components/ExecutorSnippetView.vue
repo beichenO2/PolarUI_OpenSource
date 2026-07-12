@@ -20,20 +20,20 @@ const html = computed(() => highlightExecutorSnippet(props.source))
   padding: 10px;
   font-size: 10px;
   line-height: 1.5;
-  font-family: ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', monospace;
-  background: #1e1e1e;
-  border: 1px solid #3c3c3c;
+  font-family: var(--font-mono);
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  color: #d4d4d4;
+  color: var(--color-text);
   overflow-x: auto;
   white-space: pre;
   tab-size: 2;
 }
-.executor-snippet-pre :deep(.tok-comment) { color: #6a9955; font-style: italic; }
-.executor-snippet-pre :deep(.tok-string) { color: #ce9178; }
-.executor-snippet-pre :deep(.tok-keyword) { color: #569cd6; }
-.executor-snippet-pre :deep(.tok-number) { color: #b5cea8; }
-.executor-snippet-pre :deep(.tok-type) { color: #4ec9b0; }
-.executor-snippet-pre :deep(.tok-fn) { color: #dcdcaa; }
-.executor-snippet-pre :deep(.tok-ident) { color: #9cdcfe; }
+.executor-snippet-pre :deep(.tok-comment) { color: #6e7781; font-style: italic; }
+.executor-snippet-pre :deep(.tok-string) { color: #0a3069; }
+.executor-snippet-pre :deep(.tok-keyword) { color: #cf222e; }
+.executor-snippet-pre :deep(.tok-number) { color: #0550ae; }
+.executor-snippet-pre :deep(.tok-type) { color: #953800; }
+.executor-snippet-pre :deep(.tok-fn) { color: #8250df; }
+.executor-snippet-pre :deep(.tok-ident) { color: #24292f; }
 </style>

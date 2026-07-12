@@ -4,13 +4,11 @@
   "description": "PolarUI — ComfyUI-style workflow editor for Polarisor Agent orchestration",
   "type": "module",
   "scripts": {
-    "dev": "npm run sync:node-defs && npm run patch:gui-overlay && npm run patch:export-web && vite",
+    "dev": "npm run sync:node-defs && vite",
     "build": "node scripts/build-app.mjs",
     "sync:node-defs": "node scripts/sync-node-defs.mjs",
     "sync:workflows": "node scripts/sync-workflows.mjs",
     "generate:toolcall-catalog": "node scripts/generate-toolcall-catalog.mjs",
-    "patch:gui-overlay": "node scripts/patch-gui-overlay-boot.mjs",
-    "patch:export-web": "node scripts/patch-export-web-button.mjs",
     "test:toolcall-gui": "node lib/toolcall-gui/tool-list.test.mjs",
     "test:toolcall-composite": "node lib/toolcall-composite.test.mjs",
     "test:headless": "node --test lib/headless-engine.test.mjs",
@@ -23,10 +21,13 @@
     "test:engine": "node --test tests/engine/",
     "test:project-deps": "node --import tsx --test tests/engine/project-deps.test.ts",
     "test:evolution": "node --import tsx --test tests/engine/graph-mutation.test.ts tests/engine/stemcell.test.ts tests/engine/petri-dish.test.ts",
-    "test:canvas": "node --import tsx --test tests/canvas/graph-groups.test.ts tests/canvas/group-suggest.test.ts tests/canvas/wire-routing.test.ts tests/canvas/canvas-dblclick.test.ts",
+    "test:canvas": "node --import tsx --test tests/canvas/graph-groups.test.ts tests/canvas/group-suggest.test.ts tests/canvas/wire-routing.test.ts tests/canvas/wire-routing-snapshot.test.ts tests/canvas/canvas-dblclick.test.ts",
+    "test:canvas-baseline": "playwright test",
     "stats:canvas": "node --import tsx tests/canvas/wire-routing-stats.ts",
     "qa": "node scripts/run-qa.mjs",
+    "serve:run": "node lib/run-graph-server.mjs",
     "demo:evolve": "node scripts/evolve-demo.mjs",
+    "demo:evolve-claude": "node scripts/evolve-claude-demo.mjs",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --mac dmg"
@@ -40,6 +41,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^5.2.0",
     "concurrently": "^9.1.2",
     "electron": "^34.2.0",

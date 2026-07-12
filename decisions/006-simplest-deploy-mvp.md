@@ -1,7 +1,13 @@
 # ADR-006：最简部署路径（网站 MVP）
 
 **日期**：2026-07-06（修订 2026-07-07）  
-**状态**：accepted
+**状态**：superseded（2026-07-12，由 ADR-008 / ADR-010 取代）
+
+> **2026-07-12 修订**：PolarUI 对外唯一「一键上线」路径确立为 **R4 export-release
+> （LibreChat 模版，ADR-008）**；ADR-010 已从 PolarUI 剥离 PolarClaw GUI 集成。
+> 本 ADR 描述的「画布 → PUT /api/deployments → chat_url」不再实现 GUI 入口。
+> PolarClaw 侧 `/api/workflow/chat` 与 `/api/deployments` 保留为**开发调试工具**
+> （curl 手动调用），不属于 PolarUI 对外部署契约。R2 相应关闭（cancelled）。
 
 ## 背景
 

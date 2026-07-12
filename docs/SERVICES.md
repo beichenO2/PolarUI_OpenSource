@@ -7,10 +7,11 @@
 
 从 **LLM + 正则化/结构化抽取** 开始，逐步搭建完整 Agent 体系。
 
-- **原子**：`node-defs/core.json`（LLM、RegexMatch、SchemaExtract、ToolCall、
-  ContextWindow、PromptInject、Switch、Validator、RetryLoop、PermissionGate…）
-  + `node-defs/tools-system.json`（FileRead/Write、Glob/Grep、WebSearch、MCPCall、
-  SubAgent、CodeExec…）
+- **原子**：`node-defs/primitives/`（R11 六原语包：input=PromptInput/StaticData、
+  output=Output、llm=LLM/VLM、route=Switch/Condition、tool=MCPCall/CodeExec、
+  memory=MemoryStore/MemorySearch）+ `node-defs/functions/core.json`、
+  `functions/tools-system.json`（ToolCall、Validator、RetryLoop、FileRead/Write、
+  Glob/Grep、WebSearch、SubAgent…——函数化候选，将逐批迁移为带签名子图）
 - **参考实现**：[`workflows/claude-code/claude-code.json`](../workflows/claude-code/)
   —— 26 节点 ClaudeCode 复现图，也是仓库**唯一注册 workflow**、QA e2e 的黄金样例。
 - **典型路径**：PromptInput → ContextWindow → LLM → Switch →（ToolCall → 工具 →
@@ -22,9 +23,10 @@
 以 **ClaudeCode 型 Agent 为原子 + Harness（图本身，ADR-002）** 编排工作流，
 目标是自进化的 Agentic 系统。
 
-- **原子**：`node-defs/paradigms.json`（AgentWorkflow、AgenticUnit、AgenticChain、
-  Planner、WorkflowMeta、SelfHealUnit）+ `node-defs/polar-memory.json`（三层记忆，
-  ADR-007）。
+- **原子**：`node-defs/functions/paradigms.json`（AgentWorkflow、AgenticUnit、
+  AgenticChain、Planner、WorkflowMeta、SelfHealUnit）+
+  `node-defs/functions/polar-memory.json`（三层记忆，ADR-007）——均为 R11
+  函数化候选。
 - **自进化**：旧实现已归档（ADR-010 P4），设计稿在
   [`specs/evolution/`](./specs/evolution/)；将在服务 A 地基上按新契约重建，
   不复活旧代码。

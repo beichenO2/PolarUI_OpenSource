@@ -1,34 +1,36 @@
 # PolarUI 节点清单（撰写 workflow 时对照）
 
 > 来源：`PolarUI/dist/node-defs/index.json`  
-> 原则：见 `docs/ARCHITECTURE.md`、ADR-001
+> 原则：见 `docs/ARCHITECTURE.md`、ADR-001  
+> R11 两层结构：`primitives/`（六原语：input/output/llm/route/tool/memory）+
+> `functions/`（函数化候选，逐批迁移为带签名子图）
 
 ## 多轮 / 状态机常用（palette 可见）
 
 | class_type | 文件 | 用途 |
 |------------|------|------|
-| PromptInput | core.json | 入站消息 / 触发 |
-| WorkingMemory | polar-memory.json | 多轮 session / conversation_id |
-| LLM | core.json | 单步 LLM 调用 |
-| Switch | core.json | 条件路由（step / branch / tool_name） |
-| Validator | core.json | 单步输出校验 |
-| RetryLoop | core.json | 单步失败重试（**非**用户多轮对话） |
-| Output | core.json | 终点 |
-| SubAgent | tools-system.json | 委派子任务 / 子 Agent 环 |
-| Notification | tools-system.json | 桌面/Hub 通知 |
+| PromptInput | primitives/input.json | 入站消息 / 触发 |
+| WorkingMemory | functions/polar-memory.json | 多轮 session / conversation_id |
+| LLM | primitives/llm.json | 单步 LLM 调用 |
+| Switch | primitives/route.json | 条件路由（step / branch / tool_name） |
+| Validator | functions/core.json | 单步输出校验 |
+| RetryLoop | functions/core.json | 单步失败重试（**非**用户多轮对话） |
+| Output | primitives/output.json | 终点 |
+| SubAgent | functions/tools-system.json | 委派子任务 / 子 Agent 环 |
+| Notification | functions/tools-system.json | 桌面/Hub 通知 |
 
 ## ReAct / 工具（palette 可见，Switch 连边执行）
 
 | class_type | 文件 | 用途 |
 |------------|------|------|
-| **ToolCall** | core.json | **复合节点**：tool list + LLM function calling（见 ADR-003） |
-| FileRead | tools-system.json | 读文件 — **明面节点**，Switch 连边 |
-| FileWrite | tools-system.json | 写文件 |
-| WebSearch | tools-system.json | 检索 |
-| KnowLeverSearch | knowlever.json | 知识库 |
-| GrepSearch / GlobSearch | tools-system.json | 代码搜索 |
-| MCPCall | tools-system.json | MCP |
-| CodeExec | tools-system.json | 沙箱代码 |
+| **ToolCall** | functions/core.json | **复合节点**：tool list + LLM function calling（见 ADR-003） |
+| FileRead | functions/tools-system.json | 读文件 — **明面节点**，Switch 连边 |
+| FileWrite | functions/tools-system.json | 写文件 |
+| WebSearch | functions/tools-system.json | 检索 |
+| KnowLeverSearch | knowlever.json（已归档，勿用） | 知识库 |
+| GrepSearch / GlobSearch | functions/tools-system.json | 代码搜索 |
+| MCPCall | primitives/tool.json | MCP |
+| CodeExec | primitives/tool.json | 沙箱代码 |
 
 ⛔ **没有 ShellExec**（ADR-004）
 
@@ -73,4 +75,4 @@ ReAct 调度  → ToolCall（复合）+ Switch → 工具节点
 
 ## Legacy（待基础设施阶段清理）
 
-`dist/node-defs/tools-system.json` 中 **ShellExec** 仍存在于 node-defs，**不得**用于新 workflow。
+`dist/node-defs/functions/tools-system.json` 中 **ShellExec** 仍存在于 node-defs，**不得**用于新 workflow。

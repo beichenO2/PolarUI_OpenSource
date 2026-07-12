@@ -13,6 +13,7 @@
 | **HTTP `/run` 契约** | [`WORKFLOW_RUN_CONTRACT.md`](./WORKFLOW_RUN_CONTRACT.md) | 任意语言插拔 Web 的一级约束（ADR-012） |
 | **记忆设计** | [`MEMORY.md`](./MEMORY.md) | 三层记忆 + **分层查看 UI** |
 | **验收标准** | [`WEB_ACCEPTANCE.md`](./WEB_ACCEPTANCE.md) | TDD 自动化门禁 |
+| **三层部署** | [`DEPLOYMENT_SPEC.md`](./DEPLOYMENT_SPEC.md) | WorkFlow / Web Demo / 独立 Web 正交铁律与发布门禁 |
 | **开源参考** | [`WEB_REFERENCES.md`](./WEB_REFERENCES.md) | 可借鉴的开源 Chat UI |
 | **路线图** | [`ROADMAP.md`](./ROADMAP.md) | 现在做什么、以后做什么、什么先搁置 |
 | **决策** | [`../decisions/`](../decisions/) | 为什么这样设计（ADR） |
@@ -76,7 +77,7 @@
 `polaris.json` 按 requirement 分组：
 
 - **R1** — 图引擎、WYSIWYG、套辞 workflow（测试开发）
-- **R2** — PolarClaw Chat 壳（过渡）
+- **R2** — PolarClaw Chat 壳（**cancelled**，2026-07-12 收敛为 R4 export-release；ADR-006 superseded）
 - **R4** — 网站模版 `~/Desktop/Web_related/`
 - **R3** — Workflow 记忆节点
 - **R5** — 飞书渠道（**cancelled**，ADR-010 移出 PolarUI）
@@ -84,7 +85,7 @@
 - **R7** — Workflow HTTP 插拔（Phase 1 + P2a–P2e 全部 ✅，ADR-012）
 - **R8** — 双服务定位与彻底瘦身（ADR-011；定位 SSoT = [`SERVICES.md`](./SERVICES.md)）
 - **R9** — 项目引用地图 Project Map（ADR-013）
-- **R10** — 自进化重建 StemCell / PetriDish（ADR-014）
+- **R10** — 自进化重建 StemCell / PetriDish（ADR-014；含真实 claude-code headless 演示，D4 demo 约束已解除）
 
 ## 关联生态
 

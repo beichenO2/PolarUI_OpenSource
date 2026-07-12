@@ -1,92 +1,117 @@
 <template>
-  <div class="app-container">
-    <header class="app-header">
-      <div class="header-left">
-        <span class="logo">◈ PolarUI</span>
-        <span class="ui-build-stamp" title="260531 · 宋体">宋体·260531</span>
+  <div class="app-shell">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <span class="logo">PolarUI</span>
         <div class="mode-tabs">
           <button class="mode-tab" :class="{ active: viewMode === 'workflow' }" @click="viewMode = 'workflow'">工作流</button>
           <button class="mode-tab" :class="{ active: viewMode === 'ssot' }" @click="viewMode = 'ssot'">SSoT</button>
           <button class="mode-tab" :class="{ active: viewMode === 'health' }" @click="viewMode = 'health'">健康</button>
         </div>
+        <span class="workflow-name">{{ workflowStore.currentName }}</span>
         <div class="quick-mode-bar" v-if="viewMode === 'workflow'">
           <span class="quick-label">原模型</span>
           <button class="btn btn-sm" @click="quickLoadSeed()">MVP Seed</button>
         </div>
       </div>
-      <div class="header-center">
-        <span class="workflow-name">{{ workflowStore.currentName }}</span>
+      <div class="toolbar-center">
         <template v-if="viewMode === 'workflow'">
-          <button class="btn btn-run" @click="executeWorkflow" :disabled="workflowStore.execution.status === 'running'">
+          <button
+            class="validation-pill"
+            :class="{
+              valid: compileCheckResult.valid && !compileCheckResult.warnings.length,
+              invalid: !compileCheckResult.valid,
+              warn: compileCheckResult.valid && compileCheckResult.warnings.length > 0,
+            }"
+            title="校验组件注册、必填输入接线与引用完整性"
+            @click="onValidationPillClick"
+          >
+            <template v-if="!compileCheckResult.valid">
+              ✗ {{ compileCheckResult.errors.length }} 个编译错误
+            </template>
+            <template v-else-if="compileCheckResult.warnings.length">
+              ⚠ {{ compileCheckResult.warnings.length }} 个警告
+            </template>
+            <template v-else>
+              ✓ 编译通过
+            </template>
+          </button>
+        </template>
+      </div>
+      <div class="toolbar-right">
+        <template v-if="viewMode === 'workflow'">
+          <button
+            class="btn btn-primary"
+            @click="executeWorkflow"
+            :disabled="workflowStore.execution.status === 'running'"
+          >
             <span v-if="workflowStore.execution.status === 'running'" class="spinner" />
-            {{ workflowStore.execution.status === 'running' ? '▶ 执行中' : '▶ 执行' }}
+            {{ workflowStore.execution.status === 'running' ? '执行中' : '执行' }}
+          </button>
+          <button class="btn" @click="openJsonFile">打开</button>
+          <button class="btn" @click="exportWorkflow">导出</button>
+          <button
+            class="btn"
+            :class="{ active: rightPanelOpen && rightPanelTab === 'chat' }"
+            title="侧边栏 Chat（本地 workflow 对话）"
+            @click="toggleRightPanelTab('chat')"
+          >
+            Chat
           </button>
           <button
             class="btn"
-            :class="{ 'btn-compile-fail': !compileCheckResult.valid }"
-            @click="runCompileCheck"
-            title="校验组件注册、必填输入接线与引用完整性"
-          >🔍 编译检查</button>
-          <button
-            class="btn btn-sm"
-            title="在视口中心添加注释卡片（特殊类，不参与执行）"
-            @click="addNoteCardAtViewCenter"
-          >📝 注释</button>
-          <button
-            class="btn btn-sm"
-            title="Shift+点击多选节点，再折叠为组（快捷键 G）"
-            @click="collapseSelectionAsGroup"
-          >📦 折叠为组</button>
-          <button
-            class="btn btn-sm"
-            title="连通性启发式建议分组（虚线预览，点击采纳）"
-            @click="runGroupSuggestPreview"
-          >✨ 自动分组建议</button>
-          <button class="btn" @click="openJsonFile">📂 打开</button>
-          <button class="btn" @click="exportWorkflow">💾 导出</button>
-          <button
-            class="btn"
-            :class="{ active: chatSidebarOpen }"
-            title="侧边栏 Chat（本地 workflow 对话）"
-            @click="chatSidebarOpen = !chatSidebarOpen"
+            :class="{ active: rightPanelOpen && rightPanelTab === 'runs' }"
+            title="运行记录与轨迹回放"
+            @click="toggleRightPanelTab('runs')"
           >
-            💬 Chat
+            运行
           </button>
           <button class="btn suggestion-btn" @click="suggestionInboxOpen = true">
-            💡 建议
+            建议
             <span v-if="suggestionPending > 0" class="suggestion-badge" />
           </button>
+          <div class="more-menu">
+            <button class="btn" @click="toolbarMoreOpen = !toolbarMoreOpen">更多 ▾</button>
+            <div v-if="toolbarMoreOpen" class="more-dropdown">
+              <button class="btn btn-sm" title="在视口中心添加注释卡片" @click="onMoreAction(addNoteCardAtViewCenter)">注释</button>
+              <button class="btn btn-sm" title="Shift+点击多选节点，再折叠为组（快捷键 G）" @click="onMoreAction(collapseSelectionAsGroup)">折叠为组</button>
+              <button class="btn btn-sm" title="连通性启发式建议分组" @click="onMoreAction(runGroupSuggestPreview)">自动分组建议</button>
+              <button class="btn btn-sm" @click="onMoreAction(fitView)">适配</button>
+              <button
+                v-if="canResetLayout"
+                class="btn btn-sm"
+                title="清除已记忆的布局并恢复默认自动排布"
+                @click="onMoreAction(resetLayout)"
+              >重置布局</button>
+            </div>
+          </div>
         </template>
         <template v-else>
           <button class="btn btn-uptodate" @click="handleUpToDate" :disabled="ssotUpdating">
             <span v-if="ssotUpdating" class="spinner" />
             {{ ssotUpdating ? '检查中...' : 'Up to date' }}
           </button>
-          <button class="btn btn-run" @click="handleExecPending" :disabled="ssotExecuting">
+          <button class="btn btn-primary" @click="handleExecPending" :disabled="ssotExecuting">
             <span v-if="ssotExecuting" class="spinner" />
             {{ ssotExecuting ? '执行中...' : '执行未完成项' }}
           </button>
         </template>
-      </div>
-      <div class="header-right">
         <span class="vault-status" :class="{ connected: vaultUnlocked }" :title="vaultUnlocked ? 'PolarPrivate vault 已解锁' : 'PolarPrivate 未就绪或 vault 未解锁'">
           {{ vaultUnlocked ? '● Vault' : '○ Vault' }}
         </span>
         <span class="hub-status" :class="{ connected: hubConnected }">
           {{ hubConnected ? '● Hub' : '○ Hub' }}
         </span>
-        <button class="btn btn-sm" @click="fitView">适配</button>
         <button
-          v-if="viewMode !== 'health' && canResetLayout"
           class="btn btn-sm"
-          title="清除已记忆的布局并恢复默认自动排布"
-          @click="resetLayout"
-        >重置布局</button>
+          :title="uiTheme === 'hermes' ? '切换到浅色主题' : '切换到 Hermes 深色主题'"
+          @click="toggleTheme"
+        >{{ uiTheme === 'hermes' ? '☀' : '☾' }}</button>
       </div>
     </header>
 
-    <div class="main-content">
-      <aside class="node-palette">
+    <div class="main-row">
+      <aside class="sidebar node-palette">
         <div class="palette-header palette-header--stacked" v-if="viewMode === 'workflow'">
           <div class="ssot-panel-tabs">
             <button class="panel-tab" :class="{ active: workflowPanelMode === 'registry' }" @click="workflowPanelMode = 'registry'">已注册</button>
@@ -135,7 +160,7 @@
           </template>
           <div
             v-if="registryWorkflowGroups.length === 0"
-            style="color:#6e7681; font-size:11px; padding:12px; text-align:center;"
+            style="color:var(--color-text-muted); font-size:11px; padding:12px; text-align:center;"
           >
             暂无匹配项<br />工作流 CLI：<br /><code style="font-size:10px;">node cli/register-workflow.mjs &lt;file&gt;</code>
           </div>
@@ -256,6 +281,7 @@
       >
         <div class="canvas-primary" :class="{ 'canvas-primary--split': expandedSubgraph }">
           <canvas ref="canvasEl" />
+          <div class="canvas-shortcuts">拖拽平移 · 滚轮缩放 · ⌘D 复制 · Delete 删除 · G 分组</div>
           <div v-if="outputPip" class="output-pip" @mousedown.stop @click.stop>
             <div class="output-pip-header">
               <span class="output-pip-title">▷ {{ outputPip.title }}</span>
@@ -263,6 +289,7 @@
             </div>
             <pre class="output-pip-body" :class="{ 'output-pip-body--error': outputPip.isError }">{{ outputPip.text }}</pre>
           </div>
+          <RunDrawer :on-highlight="applyTraceHighlight" />
         </div>
         <div v-if="expandedSubgraph" class="canvas-secondary">
           <div class="subgraph-header">
@@ -281,17 +308,22 @@
         </div>
       </main>
 
-      <aside
-        class="properties-panel"
-        v-if="selectedLinkDetail || selectedNodeDef || selectedWorkflowGroup"
-        :style="{ width: `${propertiesPanelWidth}px` }"
+      <RightPanel
+        v-if="viewMode === 'workflow'"
+        v-model:open="rightPanelOpen"
+        v-model:active-tab="rightPanelTab"
+        v-model:width="rightPanelWidth"
+        @resized="onRightPanelResized"
       >
-        <div
-          class="properties-panel-resize"
-          title="拖拽调节侧栏宽度"
-          @mousedown.prevent="startPropertiesPanelResize"
-        />
-        <template v-if="selectedLinkDetail && !selectedNodeId">
+        <template #inspect>
+          <div
+            v-if="!selectedLinkDetail && !selectedNodeDef && !selectedWorkflowGroup"
+            class="inspector-empty"
+          >
+            未选中任何节点
+          </div>
+
+          <template v-else-if="selectedLinkDetail && !selectedNodeId">
           <div class="panel-header">连线</div>
           <div class="panel-desc">
             {{ selectedLinkDetail.fromLabel }} → {{ selectedLinkDetail.toLabel }}
@@ -463,7 +495,7 @@
 
         <!-- 规划器执行区 -->
         <div v-if="selectedNodeDef.class_type === 'Planner'" class="panel-section polar-claw-exec">
-          <button class="btn btn-run btn-full" @click="runPlanner" :disabled="plannerRunning">
+          <button class="btn btn-primary btn-full" @click="runPlanner" :disabled="plannerRunning">
             <span v-if="plannerRunning" class="spinner" />
             {{ plannerRunning ? '规划中...' : '▶ 执行规划' }}
           </button>
@@ -533,12 +565,12 @@
         </div>
         <button class="btn btn-danger" @click="deleteSelected">删除组件 (Delete)</button>
         </template>
-      </aside>
-
-      <ChatSidebar v-if="chatSidebarOpen && viewMode === 'workflow'" />
+        </template>
+      </RightPanel>
     </div>
 
     <footer class="app-footer">
+      <span class="ui-build-stamp" title="260712 · Inter">Inter·260712</span>
       <span>组件: {{ workflowStore.graph?.nodes.length || 0 }}</span>
       <span>连线: {{ workflowStore.graph?.links.length || 0 }}</span>
       <span
@@ -607,6 +639,8 @@
       @approved="onSuggestionApproved"
     />
 
+    <ExportWebButton />
+
     <div v-if="executorDocOpen" class="executor-doc-overlay" @click.self="executorDocOpen = false">
       <div class="executor-doc-panel">
         <div class="executor-doc-header">
@@ -622,6 +656,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import ExecutorSnippetView from './components/ExecutorSnippetView.vue'
+import ExportWebButton from './components/ExportWebButton.vue'
 import { useWorkflowStore } from './stores/workflow'
 import { suggestGroups } from './engine/group-suggest'
 import { groupBoxNodeId } from './engine/graph-groups'
@@ -659,7 +694,8 @@ import {
   type WorkflowEntry,
 } from './engine/workflow-registry'
 import SuggestionInbox from './components/SuggestionInbox.vue'
-import ChatSidebar from './components/ChatSidebar.vue'
+import RightPanel, { type RightPanelTab } from './components/RightPanel.vue'
+import RunDrawer from './components/RunDrawer.vue'
 import { loadSuggestions, pendingCount, type EvolutionSuggestion } from './engine/suggestion-store'
 import {
   applyStoredLayout,
@@ -770,7 +806,8 @@ function focusCompileCheckItem(item: CompileChecklistItem): void {
 }
 const hubConnected = ref(false)
 const vaultUnlocked = ref(false)
-const chatSidebarOpen = ref(false)
+const rightPanelOpen = ref(false)
+const rightPanelTab = ref<RightPanelTab>('inspect')
 const selectedNodeId = ref<string | null>(null)
 const selectedLinkId = ref<string | null>(null)
 const searchQuery = ref('')
@@ -815,6 +852,18 @@ const registrySearch = ref('')
 const registryWorkflows = ref<WorkflowEntry[]>([])
 const activeRegistryId = ref<string>('')
 const suggestionInboxOpen = ref(false)
+const toolbarMoreOpen = ref(false)
+
+/** 双主题：hermes（默认深 Teal）/ light（PolarFlow 浅色）。canvas 每帧自读 data-theme。 */
+const uiTheme = ref<'hermes' | 'light'>(
+  document.documentElement.dataset.theme === 'light' ? 'light' : 'hermes',
+)
+
+function toggleTheme() {
+  uiTheme.value = uiTheme.value === 'hermes' ? 'light' : 'hermes'
+  document.documentElement.dataset.theme = uiTheme.value
+  localStorage.setItem('polarui-theme', uiTheme.value)
+}
 const suggestionPending = ref(pendingCount(loadSuggestions()))
 /** bump after dynamic model list refresh — palette param options react */
 const registryVersion = ref(0)
@@ -1173,34 +1222,28 @@ const selectedNodeExecution = computed(() => {
 const PROPERTIES_PANEL_WIDTH_KEY = 'polarui.propertiesPanelWidth'
 const PROPERTIES_PANEL_MIN = 280
 const PROPERTIES_PANEL_MAX = 720
-const propertiesPanelWidth = ref(
+const rightPanelWidth = ref(
   Math.min(
     PROPERTIES_PANEL_MAX,
     Math.max(
       PROPERTIES_PANEL_MIN,
-      Number(localStorage.getItem(PROPERTIES_PANEL_WIDTH_KEY)) || 320,
+      Number(localStorage.getItem(PROPERTIES_PANEL_WIDTH_KEY)) || 340,
     ),
   ),
 )
-function startPropertiesPanelResize(e: MouseEvent): void {
-  const startX = e.clientX
-  const startW = propertiesPanelWidth.value
-  const onMove = (ev: MouseEvent) => {
-    const next = Math.min(
-      PROPERTIES_PANEL_MAX,
-      Math.max(PROPERTIES_PANEL_MIN, startW - (ev.clientX - startX)),
-    )
-    propertiesPanelWidth.value = next
+
+function toggleRightPanelTab(tab: 'chat' | 'runs'): void {
+  if (rightPanelOpen.value && rightPanelTab.value === tab) {
+    rightPanelOpen.value = false
+  } else {
+    rightPanelOpen.value = true
+    rightPanelTab.value = tab
   }
-  const onUp = () => {
-    localStorage.setItem(PROPERTIES_PANEL_WIDTH_KEY, String(propertiesPanelWidth.value))
-    window.removeEventListener('mousemove', onMove)
-    window.removeEventListener('mouseup', onUp)
-    graphCanvas?.resize()
-    subGraphCanvas?.resize()
-  }
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
+}
+
+function onRightPanelResized(): void {
+  graphCanvas?.resize()
+  subGraphCanvas?.resize()
 }
 
 const selectedComponentStatus = computed(() => {
@@ -1296,6 +1339,11 @@ function syncCanvasExecutionResults() {
   subGraphCanvas?.setExecutionResults(workflowStore.execution.results)
   graphCanvas?.setNodeStates(workflowStore.execution.node_states)
   subGraphCanvas?.setNodeStates(workflowStore.execution.node_states)
+}
+
+function applyTraceHighlight(nodeIds: string[]) {
+  graphCanvas?.setTraceHighlight(nodeIds)
+  subGraphCanvas?.setTraceHighlight(nodeIds)
 }
 
 const selectedNodeParams = computed((): Record<string, any> => {
@@ -1560,6 +1608,15 @@ function runCompileCheck() {
   }
 }
 
+function onValidationPillClick() {
+  runCompileCheck()
+}
+
+function onMoreAction(fn: () => void) {
+  toolbarMoreOpen.value = false
+  fn()
+}
+
 async function executeWorkflow() {
   if (!workflowStore.graph) return
   const check = compileCheckGraph(workflowStore.graph)
@@ -1786,9 +1843,34 @@ const selectedWorkflowGroup = computed(() => {
   return graph.groups.find(g => g.id === gid) ?? null
 })
 
+watch(
+  [selectedNodeId, selectedLinkId],
+  () => {
+    if (selectedNodeId.value || selectedLinkId.value) {
+      rightPanelOpen.value = true
+      rightPanelTab.value = 'inspect'
+    }
+  },
+)
+
+watch(rightPanelOpen, () => {
+  nextTick(() => {
+    graphCanvas?.resize()
+    subGraphCanvas?.resize()
+  })
+})
+
 function handleGlobalKeyDown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
+    const canvas = activeCanvas()
+    if (canvas?.duplicateSelection()) {
+      e.preventDefault()
+      workflowStore.markDirty()
+      return
+    }
+  }
   if ((e.key === 'g' || e.key === 'G') && !e.metaKey && !e.ctrlKey) {
     collapseSelectionAsGroup()
     e.preventDefault()
@@ -1940,6 +2022,12 @@ onMounted(() => {
     syncCanvasNodeDblClick()
     graphCanvas.setExecutionResults(workflowStore.execution.results)
     console.log('[PolarUI] Canvas initialized, graph nodes:', workflowStore.graph.nodes.length)
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        graphCanvas?.requestRender()
+        subGraphCanvas?.requestRender()
+      })
+    }
   } else {
     console.warn('[PolarUI] Canvas NOT initialized! canvasEl:', !!canvasEl.value, 'graph:', !!workflowStore.graph)
   }
@@ -2006,498 +2094,112 @@ watch(viewMode, (mode, oldMode) => {
 </script>
 
 <style>
-.app-container {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-}
+/* Inspector / right-panel slot content — shell chrome lives in src/styles/shell.css */
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 48px;
-  padding: 0 16px;
-  background: #0d1117;
-  border-bottom: 1px solid #30363d;
-}
-
-.header-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-
-.quick-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 8px;
-  border-left: 1px solid #30363d;
-}
-.quick-label {
-  font-size: 10px;
-  color: #8b949e;
-  margin-right: 2px;
-}
-
-.mode-tabs {
-  display: flex;
-  background: #161b22;
-  border-radius: 6px;
-  padding: 2px;
-  border: 1px solid #30363d;
-}
-.mode-tab {
-  padding: 4px 12px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: #8b949e;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.mode-tab.active {
-  background: #21262d;
-  color: #e6edf3;
-}
-.mode-tab:hover:not(.active) { color: #c9d1d9; }
-.header-center { display: flex; align-items: center; gap: 12px; }
-.header-right { display: flex; align-items: center; gap: 8px; }
-.suggestion-btn { position: relative; }
-.suggestion-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f85149;
-  border: 1px solid #161b22;
-}
-
-.lg-replay-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  background: #f0fdf4;
-  border: 1px solid #86efac;
-  border-radius: 6px;
-  font-size: 11px;
-}
-
-.lg-replay-slider { width: 120px; }
-.lg-replay-step { color: #166534; min-width: 48px; }
-.lg-replay-label { color: #15803d; }
-.lg-replay-detail {
-  color: #ca8a04;
-  font-size: 11px;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.logo {
-  font-size: 16px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #7ee8fa, #eec643);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.workflow-name {
-  font-size: 13px;
-  color: #8b949e;
-}
-
-.hub-status {
-  font-size: 11px;
-  color: #f85149;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(248, 81, 73, 0.1);
-}
-.hub-status.connected {
-  color: #2ea043;
-  background: rgba(46, 160, 67, 0.1);
-}
-
-.vault-status {
-  font-size: 11px;
-  color: #d29922;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(210, 153, 34, 0.1);
-}
-.vault-status.connected {
-  color: #2ea043;
-  background: rgba(46, 160, 67, 0.1);
-}
-
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid #30363d;
-  background: #21262d;
-  color: #e6edf3;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn:hover { background: #30363d; }
-.btn:active { transform: scale(0.97); }
-.btn-run { background: #238636; border-color: #2ea043; }
-.btn-run:hover { background: #2ea043; }
-.btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-uptodate { background: #6b5b1f; border-color: #d29922; color: #f0d060; }
-.btn-uptodate:hover { background: #7a6a25; }
-.btn-uptodate:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-sm { padding: 4px 8px; font-size: 11px; }
-.btn-danger { background: #da3633; border-color: #f85149; margin-top: 16px; width: 100%; }
-.btn-danger:hover { background: #f85149; }
-.btn-full { width: 100%; justify-content: center; display: flex; align-items: center; padding: 10px; font-size: 13px; }
-
-.exec-hint {
-  font-size: 10px;
-  color: #6e7681;
-  margin-top: 8px;
-  line-height: 1.4;
-}
-
-.spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-right: 6px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.main-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.node-palette {
-  width: 220px;
-  background: #0d1117;
-  border-right: 1px solid #30363d;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.palette-header {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #e6edf3;
-}
-
-.palette-header--stacked {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.library-mode-tabs .panel-tab {
-  flex: 1;
-  font-size: 11px;
-}
-
-.palette-search {
-  width: 100%;
-  padding: 6px 10px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  border: 1px solid #30363d;
-  background: #161b22;
-  color: #e6edf3;
-  font-size: 12px;
-  outline: none;
-}
-.palette-search:focus { border-color: #58a6ff; }
-
-.category-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: #c9d1d9;
-  margin-top: 10px;
-  margin-bottom: 4px;
-  padding: 4px 4px;
-  border-radius: 4px;
-  user-select: none;
-}
-.category-title.collapsible { cursor: pointer; }
-.category-title.collapsible:hover { background: #161b22; }
-.collapse-icon {
-  font-size: 8px;
-  color: #6e7681;
-  width: 12px;
-  flex-shrink: 0;
-  text-align: center;
-}
-
-.category-count {
-  margin-left: auto;
-  font-size: 10px;
-  color: #6e7681;
-  background: #21262d;
-  padding: 1px 5px;
-  border-radius: 8px;
-}
-
-.sub-category { margin-left: 8px; }
-.sub-category-title {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #8b949e;
-  padding: 3px 4px;
-  margin: 4px 0 2px;
-  border-radius: 4px;
-  user-select: none;
-}
-
-.palette-node {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: grab;
-  transition: background 0.15s;
-}
-.palette-node:hover { background: #161b22; }
-.palette-node:active { cursor: grabbing; }
-.palette-node.sub-node { margin-left: 12px; font-size: 11px; }
-.node-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-label :deep(.search-hit),
-.eco-name :deep(.search-hit) {
-  background: #3d2e00;
-  color: #ffd866;
-  border-radius: 2px;
-  padding: 0 1px;
-}
-.expand-btn {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #30363d;
-  border-radius: 4px;
-  background: #21262d;
-  color: #7ee8fa;
-  font-size: 12px;
-  cursor: pointer;
+.inspector-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: all 0.15s;
-  padding: 0;
-}
-.palette-node:hover .expand-btn { opacity: 1; }
-.expand-btn:hover {
-  background: #30363d;
-  border-color: #58a6ff;
-  transform: scale(1.1);
+  min-height: 120px;
+  padding: 24px 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
-.node-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.health-main {
-  flex: 1;
-  min-width: 0;
-  background: #0f1419;
-}
-
-.canvas-area {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-}
-.canvas-area--split { flex-direction: row; }
-.canvas-primary {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-.canvas-primary--split { flex: 1; border-right: 2px solid #30363d; }
-.canvas-primary canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.ui-build-stamp {
-  margin-left: 8px;
-  padding: 2px 8px;
-  font-family: "SimSun", "宋体", "Songti SC", sans-serif;
-  font-size: 11px;
-  font-weight: bold;
-  line-height: 1.2;
-  color: #fff;
-  background: #16a34a;
-  border-radius: 4px;
-}
-.canvas-secondary {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.canvas-secondary canvas {
-  flex: 1;
-  width: 100%;
-}
-.subgraph-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  flex-shrink: 0;
-  gap: 8px;
-}
-.subgraph-breadcrumb {
-  font-size: 11px;
-  color: #8b949e;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.subgraph-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.subgraph-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #7ee8fa;
-}
-
-.properties-panel {
-  position: relative;
-  flex-shrink: 0;
-  min-width: 280px;
-  max-width: 720px;
-  background: #0d1117;
-  border-left: 1px solid #30363d;
-  overflow-y: auto;
-  padding: 16px;
-}
-.properties-panel-resize {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  cursor: col-resize;
-  z-index: 2;
-}
-.properties-panel-resize:hover {
-  background: rgba(88, 166, 255, 0.25);
-}
 .component-status {
   display: inline-block;
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-bottom: 10px;
 }
-.component-status--idle { background: #21262d; color: #8b949e; }
-.component-status--running { background: #1f3d2a; color: #3fb950; }
-.component-status--ok { background: #1f3d2a; color: #58a6ff; }
-.component-status--error { background: #3d1f1f; color: #f85149; }
+.component-status--idle { background: #f3f4f6; color: var(--color-text-muted); }
+.component-status--running { background: #ecfdf5; color: #047857; }
+.component-status--ok { background: #eff6ff; color: #1d4ed8; }
+.component-status--error { background: #fef2f2; color: #b91c1c; }
+
 .panel-hint {
-  font-size: 10px;
-  color: #6e7681;
+  font-size: 11px;
+  color: var(--color-text-muted);
   margin: 0 0 8px;
   line-height: 1.4;
 }
+
 .input-value-row {
   margin-bottom: 10px;
   padding: 8px;
-  background: #161b22;
+  background: #f9fafb;
   border-radius: 6px;
-  border: 1px solid #21262d;
+  border: 1px solid var(--color-border);
 }
+
 .input-value-head {
   display: flex;
   align-items: baseline;
   gap: 6px;
   margin-bottom: 4px;
 }
+
 .input-value-name {
   font-size: 14px;
   font-weight: 600;
-  color: #e6edf3;
+  color: var(--color-text);
 }
+
 .input-slot-doc {
   margin: 0 0 4px;
   font-size: 11px;
   line-height: 1.45;
-  color: #8b949e;
+  color: var(--color-text-muted);
 }
+
 .input-value-source {
   font-size: 10px;
-  color: #8b949e;
+  color: var(--color-text-muted);
   margin-bottom: 4px;
 }
+
 .input-value-body {
   margin: 0;
   max-height: 120px;
 }
+
 .next-step-btn {
   display: block;
   width: 100%;
   text-align: left;
   margin-bottom: 6px;
   padding: 8px 10px;
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: #fff;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  color: #e6edf3;
+  color: var(--color-text);
   font-size: 12px;
   cursor: pointer;
 }
+
 .next-step-btn:hover {
-  border-color: #58a6ff;
-  background: #1c2128;
+  border-color: var(--color-primary);
+  background: #f9fafb;
 }
+
 .next-step-wire {
   display: block;
   font-size: 10px;
-  color: #8b949e;
+  color: var(--color-text-muted);
   margin-top: 2px;
 }
+
 .panel-config-details summary {
   cursor: pointer;
   list-style: none;
 }
+
 .panel-config-details summary::-webkit-details-marker {
   display: none;
 }
+
 .section-title-row {
   display: flex;
   align-items: center;
@@ -2505,38 +2207,43 @@ watch(viewMode, (mode, oldMode) => {
   gap: 8px;
   margin-bottom: 8px;
 }
+
 .section-title-row .section-title {
   margin-bottom: 0;
 }
+
 .executor-doc-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
 }
+
 .executor-doc-panel {
   width: min(900px, 92vw);
   max-height: 85vh;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
 }
+
 .executor-doc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--color-border);
   font-size: 13px;
   font-weight: 600;
 }
+
 .executor-doc-body {
   margin: 0;
   padding: 16px;
@@ -2544,8 +2251,9 @@ watch(viewMode, (mode, oldMode) => {
   font-size: 11px;
   max-height: calc(85vh - 56px);
   border: none;
-  background: #1e1e1e;
+  background: #f9fafb;
 }
+
 .panel-code-section :deep(.executor-snippet-pre) {
   max-height: 280px;
 }
@@ -2554,48 +2262,64 @@ watch(viewMode, (mode, oldMode) => {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 4px;
+  color: var(--color-text);
 }
 
 .panel-desc {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--color-text-muted);
   margin-bottom: 12px;
 }
 
 .panel-section {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #21262d;
+  border-top: 1px solid var(--color-border);
 }
 
 .section-title {
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #8b949e;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
 
 .param-row {
   margin-bottom: 10px;
 }
+
 .param-row label {
   display: block;
   font-size: 11px;
-  color: #8b949e;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
   margin-bottom: 4px;
 }
 
 .param-input {
   width: 100%;
   padding: 6px 8px;
-  border-radius: 4px;
-  border: 1px solid #30363d;
-  background: #161b22;
-  color: #e6edf3;
-  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text);
+  font-size: 13px;
 }
-.param-textarea { resize: vertical; font-family: monospace; }
+
+.param-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.param-textarea {
+  resize: vertical;
+  font-family: var(--font-mono);
+}
 
 .slot-info {
   display: flex;
@@ -2604,28 +2328,32 @@ watch(viewMode, (mode, oldMode) => {
   padding: 3px 0;
   font-size: 12px;
 }
+
 .slot-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
-.slot-dot.input { background: #7ee8fa; }
-.slot-dot.output { background: #eec643; }
-.slot-type { color: #6e7681; font-size: 10px; }
 
-.link-arrow { color: #8b949e; margin: 0 4px; }
+.slot-dot.input { background: #7c3aed; }
+.slot-dot.output { background: #059669; }
+.slot-type { color: var(--color-text-muted); font-size: 10px; }
+
+.link-arrow { color: var(--color-text-muted); margin: 0 4px; }
+
 .link-color-swatch {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
+
 .link-payload-pre {
   margin: 0;
   padding: 8px;
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 11px;
   line-height: 1.45;
@@ -2633,25 +2361,29 @@ watch(viewMode, (mode, oldMode) => {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #c9d1d9;
+  color: var(--color-text);
+  font-family: var(--font-mono);
 }
 
 .output-terminal-guide {
-  background: #0f2419;
-  border: 1px solid #2d8a5a;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
   border-radius: 6px;
   padding: 10px;
 }
+
 .output-terminal-intro {
   margin: 0 0 8px;
   font-size: 12px;
   line-height: 1.5;
-  color: #b6dfc8;
+  color: #047857;
 }
+
 .output-terminal-intro code {
   font-size: 11px;
-  color: #7ee8a8;
+  color: var(--color-valid);
 }
+
 .output-spec-row {
   display: flex;
   align-items: center;
@@ -2659,20 +2391,25 @@ watch(viewMode, (mode, oldMode) => {
   margin-bottom: 4px;
   font-size: 12px;
 }
+
 .output-spec-label {
-  color: #8b949e;
+  color: var(--color-text-muted);
   min-width: 64px;
 }
+
 .output-spec-value {
-  color: #2d8a5a;
+  color: var(--color-valid);
   font-size: 11px;
+  font-family: var(--font-mono);
 }
+
 .output-format-hint {
   margin: 0 0 10px;
   font-size: 11px;
-  color: #8b949e;
+  color: var(--color-text-muted);
   line-height: 1.4;
 }
+
 .output-pip {
   position: absolute;
   right: 16px;
@@ -2682,40 +2419,45 @@ watch(viewMode, (mode, oldMode) => {
   display: flex;
   flex-direction: column;
   border-radius: 8px;
-  background: rgba(13, 17, 23, 0.96);
-  border: 1px solid #30363d;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   z-index: 20;
   overflow: hidden;
 }
+
 .output-pip-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid #30363d;
-  background: #161b22;
+  border-bottom: 1px solid var(--color-border);
+  background: #f9fafb;
 }
+
 .output-pip-title {
   font-size: 12px;
   font-weight: 600;
-  color: #2d8a5a;
+  color: var(--color-valid);
 }
+
 .output-pip-close {
   border: none;
   background: transparent;
-  color: #8b949e;
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
   padding: 2px 6px;
   border-radius: 4px;
 }
+
 .output-pip-close:hover {
-  color: #e6edf3;
-  background: #21262d;
+  color: var(--color-text);
+  background: #f3f4f6;
 }
+
 .output-pip-body {
   margin: 0;
   padding: 10px 12px;
@@ -2724,266 +2466,61 @@ watch(viewMode, (mode, oldMode) => {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #e6edf3;
+  color: var(--color-text);
   flex: 1;
+  font-family: var(--font-mono);
 }
+
 .output-pip-body--error {
-  color: #f85149;
+  color: var(--color-error);
 }
 
 .meta-compare-panel { margin-top: 8px; }
+
 .meta-compare-status {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
+
 .meta-compare-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+
 .meta-compare-label {
   font-size: 11px;
   font-weight: 600;
-  color: #58a6ff;
+  color: var(--color-primary);
   margin-bottom: 4px;
 }
+
 .meta-compare-pre {
   margin: 0;
   max-height: 200px;
   overflow: auto;
   padding: 6px;
-  border-radius: 4px;
-  background: #0d1117;
-  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
   font-size: 10px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #c9d1d9;
+  color: var(--color-text);
+  font-family: var(--font-mono);
 }
 
-.app-footer {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 28px;
-  padding: 0 16px;
-  background: #0d1117;
-  border-top: 1px solid #30363d;
+.exec-hint {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+  line-height: 1.4;
 }
 
-.exec-warn { color: #f85149; }
-.exec-running {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #58a6ff;
-}
-.exec-progress-bar {
-  display: inline-block;
-  width: 72px;
-  height: 4px;
-  background: #21262d;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.exec-progress-fill {
-  display: block;
-  height: 100%;
-  background: #58a6ff;
-  transition: width 0.2s ease;
-}
-.compile-status { cursor: pointer; }
-.compile-status--ok { color: #3fb950; }
-.compile-status--warn { color: #d29922; }
-.btn-compile-fail { border-color: #f85149; color: #f85149; }
-
-.compile-panel {
-  position: fixed;
-  right: 16px;
-  bottom: 36px;
-  width: min(480px, calc(100vw - 32px));
-  max-height: 40vh;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-}
-.compile-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid #30363d;
-  font-size: 12px;
-  color: #e6edf3;
-}
-.compile-checklist {
-  list-style: none;
-  margin: 0;
-  padding: 8px 12px;
-  max-height: 160px;
-  overflow: auto;
-  border-bottom: 1px solid #30363d;
-}
-.compile-checklist-item {
-  font-size: 11px;
-  line-height: 1.45;
-  padding: 4px 0;
-  color: #c9d1d9;
-}
-.compile-checklist-item--error { color: #f85149; }
-.compile-checklist-item--warning { color: #d29922; }
-.compile-checklist-item--clickable {
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.compile-checklist-item--clickable:hover { color: #58a6ff; }
-.compile-panel-body {
-  margin: 0;
-  padding: 10px 12px;
-  overflow: auto;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #c9d1d9;
-  white-space: pre-wrap;
-}
-
-.ssot-panel-tabs {
-  display: flex;
-  background: #161b22;
-  border-radius: 4px;
-  padding: 2px;
-  border: 1px solid #30363d;
+.btn-danger {
+  margin-top: 16px;
   width: 100%;
-}
-.panel-tab {
-  flex: 1;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #8b949e;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.panel-tab.active {
-  background: #21262d;
-  color: #e6edf3;
-}
-.panel-tab:hover:not(.active) { color: #c9d1d9; }
-
-.ecosystem-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.registry-palette-section {
-  margin-bottom: 10px;
-}
-.registry-section-title {
-  margin: 6px 0 4px;
-  font-size: 11px;
-  color: #8b949e;
-  cursor: default;
-}
-.registry-paradigm-item {
-  margin-bottom: 2px;
-}
-.ecosystem-item {
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #161b22;
-  border: 1px solid #21262d;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.ecosystem-item--draggable {
-  cursor: grab;
-}
-.ecosystem-item--draggable:active {
-  cursor: grabbing;
-}
-.ecosystem-item:hover {
-  border-color: #58a6ff;
-  background: #1c2531;
-}
-.ecosystem-item--active {
-  border-color: #58a6ff;
-  background: #1a3050;
-  box-shadow: inset 3px 0 0 #58a6ff;
-}
-.eco-item-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-.eco-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.eco-dot.active { background: #2ea043; }
-.eco-dot.planning { background: #d29922; }
-.eco-dot.archived { background: #6e7681; }
-.eco-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: #e6edf3;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.eco-tier {
-  font-size: 9px;
-  color: #8b949e;
-  background: #21262d;
-  padding: 1px 5px;
-  border-radius: 6px;
-}
-.eco-item-progress {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.eco-progress-bar {
-  flex: 1;
-  height: 3px;
-  background: #21262d;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.eco-progress-fill {
-  height: 100%;
-  background: #238636;
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-.eco-progress-text {
-  font-size: 9px;
-  color: #6e7681;
-  white-space: nowrap;
-}
-.eco-refresh {
-  margin-top: 12px;
-  width: 100%;
-}
-.eco-map-btn {
-  margin-top: 12px;
-  width: 100%;
-}
-.eco-map-btn + .eco-refresh {
-  margin-top: 6px;
 }
 </style>

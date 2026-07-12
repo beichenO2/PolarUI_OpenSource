@@ -1,0 +1,21 @@
+{
+  "step": "S0_Clarify",
+  "teacher": {
+    "name": "",
+    "institution": "",
+    "url": ""
+  },
+  "student": {
+    "profile": "",
+    "files": []
+  },
+  "research": null,
+  "selected_direction": null,
+  "outreach_draft": null,
+  "artifacts": {
+    "overview_pdf": null,
+    "prep_pdf": null
+  },
+  "history": [],
+  "updated_at": "2026-07-12T08:46:59.112Z"
+}

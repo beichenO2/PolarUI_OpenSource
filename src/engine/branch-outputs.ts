@@ -2,7 +2,7 @@
  * 多路分支（Condition / Switch）可变出口 SSOT — 画布槽位、几何、编译、执行共用。
  */
 import type { NodeDef, NodeInstance } from './types'
-import { calcNodeHeight, NODE_DEFAULT_WIDTH } from './node-geometry'
+import { simpleShapeHeight, NODE_DEFAULT_WIDTH } from './node-geometry'
 
 export const MIN_ROUTING_BRANCHES = 2
 export const MAX_ROUTING_BRANCHES = 12
@@ -82,7 +82,8 @@ export function syncRoutingNodeGeometry(node: NodeInstance, def?: NodeDef | null
   const inCount = d?.inputs.length ?? 1
   const outCount = routingOutletCount(node, d)
   node.width = NODE_DEFAULT_WIDTH
-  node.height = calcNodeHeight(inCount, outCount)
+  // 路由分支组件（Switch/Condition）是简单六边形 — 高度随出口数
+  node.height = simpleShapeHeight(Math.max(inCount, outCount, 1))
 }
 
 export function normalizeRoutingBranchParams(node: NodeInstance): void {

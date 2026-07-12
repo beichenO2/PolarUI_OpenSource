@@ -26,16 +26,21 @@ const displayLines = computed(() => props.lines.slice(-100))
 .run-trace-terminal {
   display: flex;
   flex-direction: column;
-  background: #0a0e14;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--font-mono);
 }
 .run-trace-header {
   padding: 4px 10px;
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6e7681;
-  border-bottom: 1px solid #21262d;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 .run-trace-body {
   margin: 0;
@@ -43,20 +48,20 @@ const displayLines = computed(() => props.lines.slice(-100))
   overflow: auto;
   font-size: 11px;
   line-height: 1.5;
-  color: #c9d1d9;
+  color: var(--color-text);
   flex: 1;
 }
 .run-trace-line {
   display: block;
 }
-.run-trace-line--step_start { color: #7ee8fa; }
-.run-trace-line--tool_use { color: #ffa657; }
-.run-trace-line--tool_result { color: #8b949e; padding-left: 2ch; }
-.run-trace-line--text { color: #e6edf3; }
-.run-trace-line--error { color: #f85149; }
-.run-trace-line--step_done { color: #3fb950; }
+.run-trace-line--step_start { color: #1d4ed8; }
+.run-trace-line--tool_use { color: #c2410c; }
+.run-trace-line--tool_result { color: var(--color-text-muted); padding-left: 2ch; }
+.run-trace-line--text { color: var(--color-text); }
+.run-trace-line--error { color: #b91c1c; }
+.run-trace-line--step_done { color: #047857; }
 .run-trace-empty {
-  color: #484f58;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 </style>

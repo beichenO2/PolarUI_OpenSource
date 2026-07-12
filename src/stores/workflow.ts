@@ -5,6 +5,14 @@ import { hubApi } from '@/api/hub'
 import type { ExecutionState } from '@/engine/types'
 import { executeGraph, topologicalSort } from '@/engine/workflow-runner'
 import { persistRunTrace } from '@/engine/run-persistence'
+import { useRunsStore } from '@/stores/runs'
+import { registry } from '@/engine/registry'
+
+function nodeDisplayName(graph: Graph, nodeId: string): string {
+  const node = graph.nodes.find(n => n.id === nodeId)
+  if (!node) return nodeId
+  return registry.get(node.class_type)?.display_name ?? node.class_type
+}
 
 export const useWorkflowStore = defineStore('workflow', () => {
   const graph = ref<Graph>(new Graph('新工作流'))
@@ -55,6 +63,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
     execution.value = { status: 'running', progress: 0, streaming: {} }
     const apiFormat = graph.value.toApiFormat()
+    const runsStore = useRunsStore()
+    const workflowId = graph.value.id || graph.value.name
+    const activeRunId = runsStore.startRun(workflowId)
 
     try {
       const total = topologicalSort(graph.value).length
@@ -71,6 +82,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
               }
             },
             onNodeStart: ({ nodeId, classType }) => {
+              runsStore.onNodeStart(activeRunId, {
+                nodeId,
+                classType,
+                nodeName: nodeDisplayName(graph.value, nodeId),
+              })
               execution.value = {
                 ...execution.value,
                 status: 'running',
@@ -82,6 +98,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
               }
             },
             onNodeDone: ({ nodeId, classType, result, duration_ms }) => {
+              runsStore.onNodeDone(activeRunId, {
+                nodeId,
+                classType,
+                nodeName: nodeDisplayName(graph.value, nodeId),
+                result,
+                duration_ms,
+              })
               execution.value = {
                 ...execution.value,
                 node_states: {
@@ -97,6 +120,12 @@ export const useWorkflowStore = defineStore('workflow', () => {
               }
             },
             onNodeSkipped: ({ nodeId, classType, reason }) => {
+              runsStore.onNodeSkipped(activeRunId, {
+                nodeId,
+                classType,
+                nodeName: nodeDisplayName(graph.value, nodeId),
+                reason,
+              })
               execution.value = {
                 ...execution.value,
                 node_states: {
@@ -139,10 +168,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
         if (logPath) execution.value.last_log_path = logPath
       }
 
+      runsStore.finishRun(activeRunId, unhealthy_nodes.length ? 'error' : 'completed')
+
       if (await hubApi.checkHealth()) {
         await hubApi.submitWorkflow(apiFormat)
       }
     } catch (err) {
+      runsStore.finishRun(activeRunId, 'error')
       execution.value = {
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
@@ -165,13 +197,21 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   async function executeWithMessage(
     message: string,
-    opts: { conversation_id: string; user_id?: string; turn_index?: number },
+    opts: {
+      conversation_id: string
+      user_id?: string
+      turn_index?: number
+      scenario_id?: string
+      session_id?: string
+    },
   ): Promise<{ content: string | null; error?: string }> {
     if (!graph.value.nodes.length) return { content: null, error: 'empty graph' }
 
     execution.value = { status: 'running', progress: 0, streaming: {} }
     const runContext = {
       conversation_id: opts.conversation_id,
+      session_id: opts.session_id ?? opts.conversation_id,
+      scenario_id: opts.scenario_id,
       user_id: opts.user_id ?? 'chat-user',
       turn_index: opts.turn_index,
       user_message: message,

@@ -2,6 +2,17 @@ import type { NodeInstance, Link, NodeDef } from './types'
 import { applyWheelToViewport } from './canvas-viewport'
 import { registry } from './registry'
 import { buildNodeContentPreviewLines, maxContentPreviewLines } from './node-content-preview'
+import { nodeArchetype } from './node-archetype'
+import {
+  nodeShape,
+  isFnCollapsed,
+  keyParamLine,
+  traceNodeShapePath,
+  traceShapeDetail,
+  cylinderRy,
+  type NodeShapeKind,
+} from './node-shape'
+import { activeCanvasTheme, type CanvasTheme } from './canvas-theme'
 import { Graph } from './graph'
 import { validateGraphWiring } from './wire-integrity'
 import {
@@ -28,6 +39,7 @@ import {
   calcNodeHeight,
   linkAnchor,
   nodeDrawBounds,
+  normalizeNodeDimension,
   slotGraphY,
   isBackwardLink,
   isNoteCardNode,
@@ -37,7 +49,7 @@ import {
 } from './node-geometry'
 import { buildFallbackPath } from './wire-path'
 import { resolveCollisions } from './resolve-collisions'
-import { buildLinkColorMaps, linkBackwardColor, linkForwardColor, type LinkColorMaps } from './wire-colors'
+import { buildLinkColorMaps, linkBackwardColor, linkForwardColor, buildRoutingOffsetColorMap, type LinkColorMaps } from './wire-colors'
 import { hitTestPolyline } from './link-hit'
 import { routeAllLinks, routeSingleDrag, offsetParallelSegments } from './wire-router'
 import { nudgeParallelSegments } from './wire-nudge'
@@ -65,14 +77,22 @@ import {
 import type { SuggestedGroup } from './group-suggest'
 import { suggestionToGroup } from './group-suggest'
 import { shouldInvokeNodeDblClick } from './canvas-dblclick'
-import { linkHoverAlpha } from './link-hover'
+import { linkFocusAlpha } from './link-hover'
 import {
   formatLinkSlotLabel,
+  formatWireChipLabel,
   labelOffsetFromPath,
   linkLabelAnchor,
+  nudgeOverlappingWireChips,
+  pathNormalAtSegment,
+  polylineMidpoint,
+  polylineMidpointSegmentIndex,
   separateWireLabelPositions,
   shouldShowLinkSlotLabel,
+  WIRE_CHIP_ZOOM_THRESHOLD,
+  type WireChipRect,
 } from './link-slot-label'
+import { CANVAS_FONT_UI, CANVAS_FONT_MONO } from './canvas-fonts'
 
 export {
   SLOT_RADIUS,
@@ -89,29 +109,19 @@ export {
 /** Loop-channel margin for backward links (legacy export name). */
 export { WIRE_LOOP_MARGIN as WIRE_ROUTE_MARGIN } from './node-geometry'
 
-const COLORS = {
-  bg: '#ffffff',
-  grid: '#e2e8f0',
-  node: '#f8fafc',
-  nodeSelected: '#eff6ff',
-  nodeHeader: '#64748b',
-  nodeHeaderSelected: '#3b82f6',
-  headerText: '#ffffff',
-  headerTextMuted: '#e2e8f0',
-  border: '#64748b',
-  borderSelected: '#3b82f6',
-  text: '#1e293b',
-  textMuted: '#64748b',
-  slotInput: '#64748b',
-  slotOutput: '#22c55e',
-  slotOutputBorder: '#16a34a',
-  link: '#94a3b8',
-  linkActive: '#2563eb',
-  running: '#22c55e',
-  error: '#ef4444',
-  terminal: '#f0fdf4',
-  terminalBorder: '#4ade80',
+/**
+ * Canvas2D color tokens — theme-aware（light / hermes）。
+ * 每帧 render 前经 refreshCanvasTheme() 同步；SSOT 在 canvas-theme.ts。
+ */
+export { CANVAS_LIGHT as CANVAS_COLORS } from './canvas-theme'
+
+let COLORS: CanvasTheme = activeCanvasTheme()
+
+function refreshCanvasTheme(): void {
+  COLORS = activeCanvasTheme()
 }
+
+export { CANVAS_FONT_UI, CANVAS_FONT_MONO } from './canvas-fonts'
 
 export class GraphCanvas {
   private canvas: HTMLCanvasElement
@@ -142,6 +152,8 @@ export class GraphCanvas {
   /** §2 260531：悬停节点 id，关联边高亮 */
   private hoverNodeId: string | null = null
   private selectedNodeIds: Set<string> = new Set()
+  /** Run trace replay / scrubber highlight (green ring) */
+  private traceHighlightNodeIds: Set<string> = new Set()
   private viewGraphCache: ViewGraphResult | null = null
   private draggingGroupId: string | null = null
   private groupDragStart: Vec2 = { x: 0, y: 0 }
@@ -193,6 +205,7 @@ export class GraphCanvas {
       this.executionResults,
       this.crossingCache,
       this.routeCache,
+      this.graph.lgEdges,
     )
   }
 
@@ -337,16 +350,10 @@ export class GraphCanvas {
     this.linkColorMaps = buildLinkColorMaps(
       links, viewNodes, backLinks,
       this.executionResults, crossings, paths,
+      this.graph.lgEdges,
     )
 
-    const colorOf = new Map<string, string>()
-    for (const link of links) {
-      colorOf.set(link.id,
-        this.linkColorMaps.forwardByLink.get(link.id)
-        ?? this.linkColorMaps.backwardByLink.get(link.id)
-        ?? '',
-      )
-    }
+    const colorOf = buildRoutingOffsetColorMap(links, viewNodes, backLinks, crossings, paths)
     offsetParallelSegments(paths, colorOf)
     const nudged = nudgeParallelSegments(paths)
 
@@ -410,6 +417,11 @@ export class GraphCanvas {
     }
   }
 
+  /** Highlight nodes during run trace scrubber / replay (#059669 ring). */
+  setTraceHighlight(nodeIds: string[]): void {
+    this.traceHighlightNodeIds = new Set(nodeIds)
+  }
+
   getSelectedNode(): string | null {
     return this.selectedNode
   }
@@ -428,6 +440,46 @@ export class GraphCanvas {
   }
 
   /** Delete 键：优先删选中连线，否则删选中组件 */
+  /** Cmd/Ctrl+D — duplicate selected node(s), +24px offset, copy params, no links */
+  duplicateSelection(): boolean {
+    const ids = this.getSelectedNodeIds().filter(id => {
+      const n = this.graph.nodes.find(x => x.id === id)
+      return n && !isGroupBoxNode(n)
+    })
+    if (ids.length === 0) return false
+
+    const OFFSET = 24
+    const newIds: string[] = []
+
+    for (const id of ids) {
+      const source = this.graph.nodes.find(n => n.id === id)
+      if (!source) continue
+
+      const dup = this.graph.addNode(source.class_type, source.x + OFFSET, source.y + OFFSET)
+      if (!dup) continue
+
+      dup.params = structuredClone(source.params ?? {})
+      dup.width = source.width
+      dup.height = source.height
+      if (source.collapsed !== undefined) dup.collapsed = source.collapsed
+      if (source.class_type === 'NoteCard') applyNoteCardLayout(dup)
+
+      newIds.push(dup.id)
+    }
+
+    if (newIds.length === 0) return false
+
+    this.selectedNodeIds = new Set(newIds)
+    this.syncSelectionPrimary()
+    this.selectedLink = null
+    this.onLinkSelected?.(null)
+    this.onNodeSelected?.(this.selectedNode)
+    this.invalidateWiringCache()
+    this.recomputeRouting()
+    this.onWorkflowChanged?.()
+    return true
+  }
+
   deleteSelection(): boolean {
     if (this.selectedLink) {
       this.graph.removeLink(this.selectedLink)
@@ -462,6 +514,11 @@ export class GraphCanvas {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
+  /** Force one paint pass (e.g. after web fonts finish loading). */
+  requestRender(): void {
+    this.render()
+  }
+
   private startRenderLoop(): void {
     const loop = () => {
       this.render()
@@ -493,6 +550,12 @@ export class GraphCanvas {
   private onKeyDown(e: KeyboardEvent): void {
     const tag = (e.target as HTMLElement)?.tagName
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
+        if (this.duplicateSelection()) {
+          e.preventDefault()
+          return
+        }
+      }
       if (e.key === 'g' || e.key === 'G') {
         const title = nextGroupTitle(this.graph.groups)
         if (this.collapseSelectionAsGroup(title)) {
@@ -570,6 +633,35 @@ export class GraphCanvas {
     const zone = 10 / this.scale
     const bottom = node.y + node.height
     return gx >= node.x && gx <= node.x + node.width && gy >= bottom - zone && gy <= bottom + zone / 2
+  }
+
+  /** fn 盒判定（图坐标热区共用） */
+  private isFnNode(node: NodeInstance): boolean {
+    return nodeShape(node.class_type, registry.get(node.class_type)) === 'fn'
+  }
+
+  /** fn 盒右上角 ▸/▾ 切换热区（图坐标） */
+  private hitFnToggle(node: NodeInstance, gx: number, gy: number): boolean {
+    if (!this.isFnNode(node)) return false
+    const headerH = isFnCollapsed(node) ? node.height : HEADER_HEIGHT
+    return gx >= node.x + node.width - 26 && gx <= node.x + node.width
+      && gy >= node.y && gy <= node.y + headerH
+  }
+
+  /** fn 盒 header 区（双击切换收起/展开） */
+  private hitFnHeader(node: NodeInstance, gy: number): boolean {
+    if (!this.isFnNode(node)) return false
+    const headerH = isFnCollapsed(node) ? node.height : HEADER_HEIGHT
+    return gy >= node.y && gy <= node.y + headerH
+  }
+
+  /** 切换 fn 盒收起/展开 — 高度重算 + 连线重路由（可伸缩性） */
+  toggleFnCollapsed(node: NodeInstance): void {
+    node.collapsed = isFnCollapsed(node) ? false : true
+    normalizeNodeDimension(node)
+    this.invalidateViewGraph()
+    this.recomputeRouting()
+    this.onWorkflowChanged?.()
   }
 
   private setNoteCardHeightParam(node: NodeInstance, height: number): void {
@@ -737,6 +829,16 @@ export class GraphCanvas {
         this.selectedNode = hit.id
         this.noteCardResizing = { nodeId: hit.id, startHeight: hit.height, startMouseY: gp.y }
         this.onNodeSelected?.(hit.id)
+        this.canvas.focus()
+        return
+      }
+      if (this.hitFnToggle(hit, gp.x, gp.y)) {
+        this.selectedLink = null
+        this.onLinkSelected?.(null)
+        this.selectedNodeIds = new Set([hit.id])
+        this.selectedNode = hit.id
+        this.onNodeSelected?.(hit.id)
+        this.toggleFnCollapsed(hit)
         this.canvas.focus()
         return
       }
@@ -965,6 +1067,11 @@ export class GraphCanvas {
         if (gid) this.expandGroupById(gid)
         return
       }
+      // fn 盒 header 双击 = 收起/展开（body 双击仍走子图展开等原逻辑）
+      if (this.hitFnHeader(hit, gp.y)) {
+        this.toggleFnCollapsed(hit)
+        return
+      }
       // Generic node dblclick (e.g. SSoT project drill-down). When registered,
       // it owns the event so workflow inspect/expand stay unaffected.
       if (shouldInvokeNodeDblClick(hit) && this.onNodeDblClick) {
@@ -986,6 +1093,7 @@ export class GraphCanvas {
   }
 
   private render(): void {
+    refreshCanvasTheme()
     const w = this.canvas.width / (window.devicePixelRatio || 1)
     const h = this.canvas.height / (window.devicePixelRatio || 1)
     const ctx = this.ctx
@@ -1019,7 +1127,7 @@ export class GraphCanvas {
     ctx.fillStyle = '#e2e8f0'
     ctx.fillRect(barX, barY, barW, barH)
     const progress = total > 0 ? completed / total : 0
-    ctx.fillStyle = running > 0 ? COLORS.running : '#16a34a'
+    ctx.fillStyle = running > 0 ? COLORS.running : COLORS.valid
     ctx.fillRect(barX, barY, barW * progress, barH)
 
     ctx.font = '11px -apple-system, sans-serif'
@@ -1101,151 +1209,306 @@ export class GraphCanvas {
       this.drawNoteCard(node)
       return
     }
-
-    const ctx = this.ctx
     const def = registry.get(node.class_type)
     if (!def) return
 
+    const shape = nodeShape(node.class_type, def)
+    if (shape === 'fn') {
+      this.drawFnNode(node, def, openSlots, forceSelected)
+    } else {
+      this.drawSimpleNode(shape, node, def, openSlots, forceSelected)
+    }
+  }
+
+  private nodeVisualState(node: NodeInstance, forceSelected: boolean) {
+    const nodeState = this.nodeStates?.[node.id]
+    return {
+      isSelected: forceSelected || node.id === this.selectedNode || this.selectedNodeIds.has(node.id),
+      isRunning: node.id === this.runningNode,
+      isSkipped: nodeState?.status === 'skipped',
+      isCompleted: nodeState?.status === 'completed',
+      isError: nodeState?.status === 'error',
+      isReplayHighlight: this.traceHighlightNodeIds.has(node.id),
+    }
+  }
+
+  /** 经典流程图原子形状：轮廓 + 标题 + 至多一行关键参数。详情在右栏 inspector。 */
+  private drawSimpleNode(
+    shape: NodeShapeKind,
+    node: NodeInstance,
+    def: NodeDef,
+    openSlots: Set<string>,
+    forceSelected: boolean,
+  ): void {
+    const ctx = this.ctx
+    const s = this.scale
+    const sp = this.graphToScreen(node.x, node.y)
+    const sw = node.width * s
+    const sh = node.height * s
+    const st = this.nodeVisualState(node, forceSelected)
+    const archetype = nodeArchetype(node.class_type, def.category)
     const isOutputEnd = isOutputTerminalNode(node)
     const hasOutputResult = isOutputEnd && outputNodeHasResult(node.id, this.executionResults)
 
+    ctx.save()
+    if (st.isSkipped) ctx.globalAlpha = 0.4
+
+    // Body + soft shadow
+    ctx.save()
+    ctx.shadowColor = COLORS.shadow
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 1.5 * s
+    ctx.shadowBlur = 6 * s
+    ctx.fillStyle = hasOutputResult
+      ? COLORS.stateOutputDone
+      : st.isError
+        ? COLORS.stateError
+        : st.isCompleted
+          ? COLORS.stateCompleted
+          : st.isSkipped
+            ? COLORS.stateSkipped
+            : st.isSelected
+              ? COLORS.nodeSelected
+              : COLORS.surface
+    traceNodeShapePath(ctx, shape, sp.x, sp.y, sw, sh, s)
+    ctx.fill()
+    ctx.restore()
+
+    // Selection / running ring — 同形状 path 外圈粗描边
+    if (st.isSelected || st.isRunning || st.isReplayHighlight || st.isError || st.isCompleted) {
+      const glowColor = st.isRunning
+        ? COLORS.running
+        : st.isError
+          ? COLORS.error
+          : st.isCompleted || st.isReplayHighlight
+            ? COLORS.valid
+            : COLORS.primary
+      ctx.save()
+      ctx.strokeStyle = glowColor
+      ctx.lineWidth = 5 * s
+      ctx.globalAlpha = st.isRunning ? 0.4 + 0.4 * Math.sin(Date.now() / 400) : 0.25
+      traceNodeShapePath(ctx, shape, sp.x, sp.y, sw, sh, s)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // Outline — 原型色描边（形状即语义，颜色即原型）
+    ctx.strokeStyle = st.isRunning
+      ? COLORS.running
+      : st.isError
+        ? COLORS.error
+        : st.isReplayHighlight
+          ? COLORS.valid
+          : st.isSelected
+            ? COLORS.primary
+            : hasOutputResult
+              ? COLORS.valid
+              : archetype.color
+    ctx.lineWidth = (st.isSelected ? 2 : 1.5) * s
+    traceNodeShapePath(ctx, shape, sp.x, sp.y, sw, sh, s)
+    ctx.stroke()
+
+    // Shape detail (tool 双内竖线 / cylinder 顶弧)
+    ctx.save()
+    ctx.strokeStyle = archetype.color
+    ctx.globalAlpha = 0.55
+    ctx.lineWidth = 1.2 * s
+    if (traceShapeDetail(ctx, shape, sp.x, sp.y, sw, sh, s)) ctx.stroke()
+    ctx.restore()
+
+    // card 形状（LLM / SSoT）保留粗左色条签名
+    if (shape === 'card') {
+      ctx.save()
+      traceNodeShapePath(ctx, shape, sp.x, sp.y, sw, sh, s)
+      ctx.clip()
+      ctx.fillStyle = archetype.color
+      ctx.fillRect(sp.x, sp.y, 4 * s, sh)
+      ctx.restore()
+    }
+
+    // Title + optional key-param line（居中，measureText 截断）
+    const refFont = 16
+    const innerPad = shape === 'stadium' ? 64 : shape === 'hexagon' ? 48 : 40
+    const innerGraphW = node.width - innerPad
+    const centerYOffset = shape === 'cylinder' ? cylinderRy(sh, s) * 0.5 : 0
+    const param = keyParamLine(node, def)
+    const cx = sp.x + sw / 2
+    const cy = sp.y + sh / 2 + centerYOffset
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = COLORS.text
+    ctx.font = `bold ${refFont * s}px ${CANVAS_FONT_UI}`
+    const title = this.truncateGraphLines(this.getNodeTitle(node, def), innerGraphW, refFont, 'bold')
+    if (param) {
+      ctx.fillText(title, cx, cy - 10 * s)
+      ctx.font = `${12 * s}px ${CANVAS_FONT_UI}`
+      ctx.fillStyle = COLORS.textMuted
+      const paramLine = this.truncateGraphLines(param, innerGraphW, 12)
+      ctx.fillText(paramLine, cx, cy + 11 * s)
+    } else {
+      ctx.fillText(title, cx, cy)
+    }
+    ctx.textAlign = 'left'
+
+    // SSoT_Feature 状态点（右上）
+    if (node.class_type === 'SSoT_Feature') {
+      const status = String(node.params?.status || 'planned')
+      const testStatus = String(node.params?.test_status || 'pending')
+      let dotColor = '#d97706'
+      if (status === 'done' && testStatus === 'passed') dotColor = '#059669'
+      else if (status === 'done' && testStatus === 'failed') dotColor = '#dc2626'
+      else if (status === 'done') dotColor = '#65a30d'
+      else if (status === 'in_progress') dotColor = '#2563eb'
+      else if (status === 'blocked') dotColor = '#dc2626'
+      ctx.fillStyle = dotColor
+      ctx.beginPath()
+      ctx.arc(sp.x + sw - 14 * s, sp.y + 14 * s, 4 * s, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    this.drawNodeSlots(node, def, openSlots)
+    this.drawComponentRunBadge(sp, sw, 32 * s, node.id)
+    ctx.restore()
+  }
+
+  /** 函数盒 — 复杂组件统一形态：方卡片 + fn 徽标，可收起（签名行）/展开（含参数预览）。 */
+  private drawFnNode(
+    node: NodeInstance,
+    def: NodeDef,
+    openSlots: Set<string>,
+    forceSelected: boolean,
+  ): void {
+    const ctx = this.ctx
+    const s = this.scale
     const sp = this.graphToScreen(node.x, node.y)
-    const sw = node.width * this.scale
-    const sh = node.height * this.scale
-    const isSelected = forceSelected || node.id === this.selectedNode || this.selectedNodeIds.has(node.id)
-    const isRunning = node.id === this.runningNode
-    const nodeState = this.nodeStates?.[node.id]
-    const isSkipped = nodeState?.status === 'skipped'
-    const isCompleted = nodeState?.status === 'completed'
-    const isError = nodeState?.status === 'error'
-    const isReplayHighlight = false
+    const sw = node.width * s
+    const sh = node.height * s
+    const st = this.nodeVisualState(node, forceSelected)
+    const archetype = nodeArchetype(node.class_type, def.category)
+    const collapsed = isFnCollapsed(node)
+    const radius = 12 * s
+    const headerH = collapsed ? sh : HEADER_HEIGHT * s
 
     ctx.save()
+    if (st.isSkipped) ctx.globalAlpha = 0.4
 
-    if (isSkipped) ctx.globalAlpha = 0.4
-
-    // Body background (no shadow to avoid ghosting)
-    ctx.fillStyle = isOutputEnd
-      ? (hasOutputResult ? '#dcfce7' : '#f0fdf4')
-      : isSkipped
-        ? '#f1f5f9'
-        : isError
-          ? '#fef2f2'
-          : isCompleted
-            ? '#f0fdf4'
-            : (isSelected ? COLORS.nodeSelected : COLORS.node)
-    const radius = 8 * this.scale
+    // Body + shadow
+    ctx.save()
+    ctx.shadowColor = COLORS.shadow
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 2 * s
+    ctx.shadowBlur = 8 * s
+    ctx.fillStyle = st.isError
+      ? COLORS.stateError
+      : st.isCompleted
+        ? COLORS.stateCompleted
+        : st.isSkipped
+          ? COLORS.stateSkipped
+          : st.isSelected
+            ? COLORS.nodeSelected
+            : COLORS.surface
     this.roundRect(sp.x, sp.y, sw, sh, radius)
     ctx.fill()
+    ctx.restore()
 
-    // Selection/running/replay glow: outer stroke ring
-    if (isSelected || isRunning || isReplayHighlight || isError || isCompleted) {
-      const glowColor = isRunning ? COLORS.running : isError ? COLORS.error : isCompleted ? '#16a34a' : isReplayHighlight ? '#f59e0b' : COLORS.borderSelected
+    // Left accent bar
+    ctx.save()
+    this.roundRect(sp.x, sp.y, sw, sh, radius)
+    ctx.clip()
+    ctx.fillStyle = archetype.color
+    ctx.fillRect(sp.x, sp.y, 3 * s, sh)
+    ctx.restore()
+
+    // Ring
+    if (st.isSelected || st.isRunning || st.isReplayHighlight || st.isError || st.isCompleted) {
+      const glowColor = st.isRunning
+        ? COLORS.running
+        : st.isError
+          ? COLORS.error
+          : st.isCompleted || st.isReplayHighlight
+            ? COLORS.valid
+            : COLORS.primary
       ctx.save()
-      if (isRunning) {
-        const pulse = 0.4 + 0.4 * Math.sin(Date.now() / 400)
-        ctx.strokeStyle = glowColor
-        ctx.lineWidth = 3 * this.scale
-        ctx.globalAlpha = pulse
-        this.roundRect(sp.x - 2 * this.scale, sp.y - 2 * this.scale, sw + 4 * this.scale, sh + 4 * this.scale, radius + 2 * this.scale)
-        ctx.stroke()
-        ctx.globalAlpha = pulse * 0.4
-        ctx.lineWidth = 8 * this.scale
-        this.roundRect(sp.x - 5 * this.scale, sp.y - 5 * this.scale, sw + 10 * this.scale, sh + 10 * this.scale, radius + 5 * this.scale)
-        ctx.stroke()
-      } else {
-        ctx.strokeStyle = glowColor
-        ctx.lineWidth = isCompleted ? 2 * this.scale : 3 * this.scale
-        ctx.globalAlpha = isCompleted ? 0.8 : 0.6
-        this.roundRect(sp.x - 2 * this.scale, sp.y - 2 * this.scale, sw + 4 * this.scale, sh + 4 * this.scale, radius + 2 * this.scale)
-        ctx.stroke()
-        if (!isCompleted) {
-          ctx.globalAlpha = 0.25
-          ctx.lineWidth = 6 * this.scale
-          this.roundRect(sp.x - 4 * this.scale, sp.y - 4 * this.scale, sw + 8 * this.scale, sh + 8 * this.scale, radius + 4 * this.scale)
-          ctx.stroke()
-        }
-      }
+      ctx.strokeStyle = glowColor
+      ctx.lineWidth = st.isRunning ? 3 * s : 2 * s
+      ctx.globalAlpha = st.isRunning ? 0.4 + 0.4 * Math.sin(Date.now() / 400) : 0.25
+      this.roundRect(sp.x - 2 * s, sp.y - 2 * s, sw + 4 * s, sh + 4 * s, radius + 2 * s)
+      ctx.stroke()
       ctx.restore()
     }
 
     // Border
-    ctx.strokeStyle = isOutputEnd
-      ? (hasOutputResult ? '#16a34a' : '#4ade80')
-      : isRunning ? COLORS.running : isReplayHighlight ? '#f59e0b' : (isSelected ? COLORS.borderSelected : COLORS.border)
-    ctx.lineWidth = isSelected ? 2 : 1
+    ctx.strokeStyle = st.isRunning
+      ? COLORS.running
+      : st.isReplayHighlight
+        ? COLORS.valid
+        : st.isSelected
+          ? COLORS.primary
+          : COLORS.border
+    ctx.lineWidth = (st.isSelected ? 2 : 1) * s
     this.roundRect(sp.x, sp.y, sw, sh, radius)
     ctx.stroke()
-    ctx.setLineDash([])
 
-    // Header
-    ctx.fillStyle = isOutputEnd
-      ? (def.color || '#166534')
-      : (def.color || (isSelected ? COLORS.nodeHeaderSelected : COLORS.nodeHeader))
-    const headerH = HEADER_HEIGHT * this.scale
-    this.roundRectTop(sp.x, sp.y, sw, headerH, radius)
-    ctx.fill()
-
-    // Title — dynamic: show content value if available, fallback to display_name
-    ctx.fillStyle = COLORS.headerText
-    const refFont = 18
-    const titlePx = refFont * this.scale
-    const bodyPx = refFont * this.scale
-    const lineH = refFont * this.scale
-    const innerGraphW = node.width - 20
-    ctx.font = `bold ${titlePx}px "SimSun", "宋体", "Songti SC", sans-serif`
-    ctx.textBaseline = 'middle'
-    const title = this.truncateGraphLines(this.getNodeTitle(node, def), innerGraphW, refFont, 'bold')
-    ctx.fillText(title, sp.x + 10 * this.scale, sp.y + headerH / 2, sw - 20 * this.scale)
-
-    // Category badge — for SSoT_Feature, show status as colored dot instead
-    if (node.class_type === 'SSoT_Feature') {
-      const status = String(node.params?.status || 'planned')
-      const testStatus = String(node.params?.test_status || 'pending')
-      let dotColor: string
-      if (status === 'done' && testStatus === 'passed') {
-        dotColor = '#2ea043'
-      } else if (status === 'done' && testStatus === 'failed') {
-        dotColor = '#f85149'
-      } else if (status === 'done') {
-        dotColor = '#a3d977'
-      } else if (status === 'in_progress') {
-        dotColor = '#58a6ff'
-      } else if (status === 'blocked') {
-        dotColor = '#f85149'
-      } else {
-        dotColor = '#d29922'
-      }
-      ctx.fillStyle = dotColor
+    // Header separator（展开态）
+    if (!collapsed) {
+      ctx.strokeStyle = COLORS.border
+      ctx.lineWidth = 1 * s
       ctx.beginPath()
-      ctx.arc(sp.x + sw - 12 * this.scale, sp.y + headerH / 2, 4 * this.scale, 0, Math.PI * 2)
-      ctx.fill()
-    } else if (isOutputEnd) {
-      ctx.fillStyle = hasOutputResult ? '#bbf7d0' : 'rgba(255,255,255,0.35)'
-      ctx.font = `bold ${titlePx}px "SimSun", "宋体", "Songti SC", sans-serif`
-      ctx.textAlign = 'right'
-      ctx.fillText(hasOutputResult ? '已出结果' : '输出', sp.x + sw - 8 * this.scale, sp.y + headerH / 2)
-      ctx.textAlign = 'left'
-    } else if (
-      this.runningNode === node.id
-      || this.executionResults?.[node.id]
-    ) {
-      /* 运行状态徽章在 drawComponentRunBadge */
+      ctx.moveTo(sp.x, sp.y + headerH)
+      ctx.lineTo(sp.x + sw, sp.y + headerH)
+      ctx.stroke()
+    }
+
+    // fn 徽标（等宽字体，原型浅底深字）
+    const fnW = 22 * s
+    const fnH = 15 * s
+    const fnX = sp.x + 8 * s
+    const fnY = sp.y + headerH / 2 - fnH / 2
+    ctx.fillStyle = archetype.pillBg
+    this.roundRect(fnX, fnY, fnW, fnH, 4 * s)
+    ctx.fill()
+    ctx.fillStyle = archetype.pillText
+    ctx.font = `bold ${10 * s}px ${CANVAS_FONT_MONO}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('fn', fnX + fnW / 2, fnY + fnH / 2)
+    ctx.textAlign = 'left'
+
+    // Title
+    const refFont = 16
+    const titleGraphW = node.width - 36 - 110
+    ctx.fillStyle = COLORS.text
+    ctx.font = `bold ${refFont * s}px ${CANVAS_FONT_UI}`
+    ctx.textBaseline = 'middle'
+    const title = this.truncateGraphLines(this.getNodeTitle(node, def), titleGraphW, refFont, 'bold')
+    ctx.fillText(title, fnX + fnW + 6 * s, sp.y + headerH / 2)
+
+    // 收起/展开指示（右上角热区）
+    ctx.fillStyle = COLORS.textMuted
+    ctx.font = `${11 * s}px ${CANVAS_FONT_UI}`
+    ctx.textAlign = 'center'
+    ctx.fillText(collapsed ? '▸' : '▾', sp.x + sw - 13 * s, sp.y + headerH / 2)
+    ctx.textAlign = 'left'
+
+    // Archetype pill 或运行徽标（右端、指示符左侧）
+    const badgeRight = sw - 24 * s
+    if (this.runningNode === node.id || this.executionResults?.[node.id] || this.nodeStates?.[node.id]) {
+      this.drawComponentRunBadge(sp, badgeRight, headerH, node.id)
     } else {
-      ctx.fillStyle = COLORS.headerTextMuted
-      ctx.font = `bold ${titlePx}px "SimSun", "宋体", "Songti SC", sans-serif`
-      ctx.textAlign = 'right'
-      ctx.fillText(def.category.split('/').pop() || '', sp.x + sw - 8 * this.scale, sp.y + headerH / 2)
-      ctx.textAlign = 'left'
+      this.drawCategoryPill(
+        sp.x + badgeRight,
+        sp.y + headerH / 2,
+        archetype.label,
+        archetype.pillBg,
+        archetype.pillText,
+        10 * s,
+      )
     }
 
-    if (node.collapsed) {
-      ctx.restore()
-      return
-    }
-
-    // Content preview (show key params) — skip on compact Output end card
-    if (!isOutputEnd) {
+    // 展开态：参数预览
+    if (!collapsed) {
+      const innerGraphW = node.width - 20
       const contentLines = buildNodeContentPreviewLines(
         node,
         def,
@@ -1254,21 +1517,28 @@ export class GraphCanvas {
       )
       if (contentLines.length > 0) {
         ctx.fillStyle = COLORS.text
-        ctx.font = `bold ${bodyPx}px "SimSun", "宋体", "Songti SC", sans-serif`
+        ctx.font = `bold ${refFont * s}px ${CANVAS_FONT_UI}`
         ctx.textBaseline = 'top'
-        const contentY = sp.y + headerH + 6 * this.scale
+        const contentY = sp.y + headerH + 6 * s
         const maxLines = Math.min(contentLines.length, maxContentPreviewLines())
         for (let i = 0; i < maxLines; i++) {
-          ctx.fillText(contentLines[i], sp.x + 10 * this.scale, contentY + i * lineH)
+          ctx.fillText(contentLines[i], sp.x + 10 * s, contentY + i * refFont * s)
         }
       }
     }
 
-    const slotScreenY = (slot: number) => this.graphToScreen(0, slotGraphY(node, slot)).y
+    this.drawNodeSlots(node, def, openSlots)
+    ctx.restore()
+  }
 
-    // Input slots
+  /** 输入/输出 slot 圆点（锚点 y 来自 slotGraphY SSOT，side-aware） */
+  private drawNodeSlots(node: NodeInstance, def: NodeDef, openSlots: Set<string>): void {
+    const ctx = this.ctx
+    const sp = this.graphToScreen(node.x, node.y)
+    const sw = node.width * this.scale
+
     for (let i = 0; i < def.inputs.length; i++) {
-      const sy = slotScreenY(i)
+      const sy = this.graphToScreen(0, slotGraphY(node, i, 'in')).y
       const isOpen = openSlots.has(`${node.id}:input:${i}`)
       if (isOpen) {
         ctx.strokeStyle = COLORS.error
@@ -1281,12 +1551,10 @@ export class GraphCanvas {
       ctx.beginPath()
       ctx.arc(sp.x, sy, SLOT_RADIUS * this.scale, 0, Math.PI * 2)
       ctx.fill()
-
     }
 
-    // Output slots
     for (let i = 0; i < def.outputs.length; i++) {
-      const sy = slotScreenY(i)
+      const sy = this.graphToScreen(0, slotGraphY(node, i, 'out')).y
       const isOpen = openSlots.has(`${node.id}:output:${i}`)
       if (isOpen) {
         ctx.strokeStyle = COLORS.error
@@ -1303,10 +1571,6 @@ export class GraphCanvas {
       ctx.lineWidth = 1.5 * this.scale
       ctx.stroke()
     }
-
-    this.drawComponentRunBadge(sp, sw, headerH, node.id)
-
-    ctx.restore()
   }
 
   private drawComponentRunBadge(sp: Vec2, sw: number, headerH: number, componentId: string): void {
@@ -1316,7 +1580,7 @@ export class GraphCanvas {
     const ctx = this.ctx
     const x = sp.x + sw - 10 * this.scale
     const y = sp.y + headerH / 2
-    ctx.font = `bold ${18 * this.scale}px "SimSun", "宋体", "Songti SC", sans-serif`
+    ctx.font = `bold ${14 * this.scale}px ${CANVAS_FONT_UI}`
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
     if (ns?.status === 'running' || this.runningNode === componentId) {
@@ -1329,7 +1593,7 @@ export class GraphCanvas {
       ctx.fillStyle = '#94a3b8'
       ctx.fillText('⊘', x, y)
     } else if (ns?.status === 'completed' || r) {
-      ctx.fillStyle = '#16a34a'
+      ctx.fillStyle = COLORS.valid
       const dur = ns?.duration_ms ?? r?.duration_ms
       const badge = dur && dur > 100 ? `✓ ${(dur / 1000).toFixed(1)}s` : '✓'
       ctx.fillText(badge, x, y)
@@ -1358,7 +1622,7 @@ export class GraphCanvas {
     ctx.fill()
     ctx.globalAlpha = 1
 
-    ctx.strokeStyle = isSelected ? COLORS.borderSelected : '#4a5568'
+    ctx.strokeStyle = isSelected ? COLORS.primary : '#4a5568'
     ctx.lineWidth = isSelected ? 2 : 1
     ctx.setLineDash([4 * this.scale, 3 * this.scale])
     this.roundRect(sp.x, sp.y, sw, sh, radius)
@@ -1366,7 +1630,7 @@ export class GraphCanvas {
     ctx.setLineDash([])
 
     ctx.fillStyle = '#e2e8f0'
-    ctx.font = `bold ${11 * this.scale}px -apple-system, sans-serif`
+    ctx.font = `bold ${11 * this.scale}px ${CANVAS_FONT_UI}`
     ctx.textBaseline = 'top'
     ctx.fillText('📝 注释', sp.x + 8 * this.scale, sp.y + 6 * this.scale)
 
@@ -1375,7 +1639,7 @@ export class GraphCanvas {
     const preview = content.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').replace(/^[-*+]\s+/, '') || '（双击展开编辑内容）'
     ctx.fillStyle = '#cbd5e0'
     if (node.collapsed) {
-      ctx.font = `${bodySize * this.scale}px -apple-system, sans-serif`
+      ctx.font = `${bodySize * this.scale}px ${CANVAS_FONT_UI}`
       const line = preview.length > 48 ? preview.slice(0, 46) + '…' : preview
       ctx.fillText(line, sp.x + 8 * this.scale, sp.y + 24 * this.scale, sw - 16 * this.scale)
     } else {
@@ -1386,7 +1650,7 @@ export class GraphCanvas {
       for (const line of lines) {
         const metrics = noteCardLineMetrics(line, bodySize)
         const weight = line.heading || line.bold ? 'bold' : 'normal'
-        ctx.font = `${weight} ${metrics.fontSize * this.scale}px ${line.code ? 'monospace' : '-apple-system, sans-serif'}`
+        ctx.font = `${weight} ${metrics.fontSize * this.scale}px ${line.code ? CANVAS_FONT_MONO : CANVAS_FONT_UI}`
         ctx.fillStyle = line.heading ? '#f7fafc' : line.code ? '#a0aec0' : '#cbd5e0'
         const display = line.text.length > 56 ? line.text.slice(0, 54) + '…' : line.text
         ctx.fillText(display, sp.x + 8 * this.scale, y, sw - 16 * this.scale)
@@ -1477,18 +1741,20 @@ export class GraphCanvas {
             : linkForwardColor(link.id, this.linkColorMaps)
     const hovered = this.hoverNodeId != null
       && (link.from_node === this.hoverNodeId || link.to_node === this.hoverNodeId)
-    const backLinkExtraWidth = isBackward ? 0.8 : 0
-    const baseWidth =
-      (isActive ? 2.5 : hovered ? DEFAULT_LINK_LINE_WIDTH + 0.75 : DEFAULT_LINK_LINE_WIDTH + backLinkExtraWidth)
-      * this.scale
+    const lineWidth = (isLinkSelected ? 3.5 : hovered ? 3 : DEFAULT_LINK_LINE_WIDTH) * this.scale
 
-    if (isLinkSelected && screenPts.length >= 2) this.drawLinkHighlight(screenPts, baseWidth + 4)
+    if (isLinkSelected && screenPts.length >= 2) this.drawLinkHighlight(screenPts, lineWidth + 4)
     const baseAlpha = isActive ? 1 : 0.95
     ctx.strokeStyle = hovered && !isActive ? COLORS.linkActive : strokeColor
-    ctx.lineWidth = baseWidth
+    ctx.lineWidth = lineWidth
     ctx.lineCap = 'butt'
     ctx.lineJoin = 'miter'
-    ctx.globalAlpha = linkHoverAlpha(link, this.hoverNodeId, baseAlpha)
+    ctx.globalAlpha = linkFocusAlpha(link, {
+      hoverNodeId: this.hoverNodeId,
+      selectedNodeIds: this.selectedNodeIds,
+      selectedLinkId: this.selectedLink,
+      baseAlpha,
+    })
     if (dashed) ctx.setLineDash([8 * this.scale, 4 * this.scale])
 
     this.drawOrthogonalPath(screenPts)
@@ -1499,22 +1765,53 @@ export class GraphCanvas {
 
   /** 连线变量名 — 与组件相同：Canvas + graphToScreen + fontPx∝scale */
   private drawWireSlotLabels(): void {
-    if (!this.hoverNodeId && !this.selectedLink) return
+    const links = buildCanvasRoutingLinks(this.graph)
+    const showMidpointChips = this.scale >= WIRE_CHIP_ZOOM_THRESHOLD
+    if (!showMidpointChips && !this.hoverNodeId && !this.selectedLink) return
+
+    if (this.hoverNodeId || this.selectedLink) {
+      this.drawEmphasizedWireSlotLabels(links)
+    }
+    if (showMidpointChips) {
+      this.drawWireMidpointChips(links)
+    }
+  }
+
+  private linkStrokeColor(link: Link, backLinks: Set<string> | undefined): string {
+    const viewNodes = this.routingNodes()
+    const isActive = this.runningNode === link.from_node || this.runningNode === link.to_node
+    if (isActive) return COLORS.linkActive
+    const isBackward = isBackwardLink(link, viewNodes, backLinks)
+    return isBackward
+      ? linkBackwardColor(link.id, this.linkColorMaps)
+      : linkForwardColor(link.id, this.linkColorMaps)
+  }
+
+  private linkDimAlpha(link: Link, baseAlpha = 0.95): number {
+    return linkFocusAlpha(link, {
+      hoverNodeId: this.hoverNodeId,
+      selectedNodeIds: this.selectedNodeIds,
+      selectedLinkId: this.selectedLink,
+      baseAlpha,
+    })
+  }
+
+  /** Hover/selection: larger labels anchored near the focused component. */
+  private drawEmphasizedWireSlotLabels(links: Link[]): void {
     const ctx = this.ctx
     const fontPx = 12 * this.scale
     const pad = 4 * this.scale
     const edgeGap = 6
     const alongPx = 14 * this.scale
     const normalPx = 8 * this.scale
-    const font = `bold ${fontPx}px "SimSun", "宋体", "Songti SC", sans-serif`
-
-    const links = buildCanvasRoutingLinks(this.graph)
+    const font = `bold ${fontPx}px ${CANVAS_FONT_MONO}`
 
     const placements: Array<{
       linkId: string
       text: string
       place: ReturnType<typeof linkLabelAnchor>
       emphasized: boolean
+      alpha: number
     }> = []
 
     for (const link of links) {
@@ -1540,6 +1837,7 @@ export class GraphCanvas {
         text: formatLinkSlotLabel(link, this.graph.nodes),
         place,
         emphasized: link.id === this.selectedLink,
+        alpha: this.linkDimAlpha(link),
       })
     }
 
@@ -1555,24 +1853,100 @@ export class GraphCanvas {
 
     ctx.save()
     ctx.font = font
-    for (const { text, place, emphasized } of rows.map(r => r.p)) {
+    for (const { text, place, emphasized, alpha } of rows.map(r => r.p)) {
       const tw = ctx.measureText(text).width
       const th = fontPx * 1.25
       const w = tw + pad * 2
       const h = th + pad * 2
       const bx = place.align === 'left' ? place.x - w : place.x
       const by = place.y - h / 2
-      ctx.fillStyle = emphasized ? '#2563eb' : '#475569'
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = emphasized ? COLORS.wireLabelBgEmphasis : COLORS.wireLabelBg
       this.roundRect(bx, by, w, h, 3 * this.scale)
       ctx.fill()
-      ctx.strokeStyle = emphasized ? '#fff' : '#e2e8f0'
+      ctx.strokeStyle = emphasized ? COLORS.surface : COLORS.wireLabelBorder
       ctx.lineWidth = 1
       ctx.stroke()
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = emphasized ? COLORS.bg : COLORS.wireLabelText
       ctx.textBaseline = 'middle'
       ctx.textAlign = place.align === 'left' ? 'right' : 'left'
       const tx = place.align === 'left' ? place.x - pad : place.x + pad
       ctx.fillText(text, tx, place.y)
+    }
+    ctx.restore()
+  }
+
+  /** Zoom ≥ threshold: compact slot chips at each wire midpoint. */
+  private drawWireMidpointChips(links: Link[]): void {
+    const ctx = this.ctx
+    const backLinks = this.getBackLinks()
+    const fontPx = 10 * this.scale
+    const padX = 6 * this.scale
+    const padY = 3 * this.scale
+    const radius = 4 * this.scale
+    const font = `600 ${fontPx}px ${CANVAS_FONT_MONO}`
+
+    const chips: Array<{
+      linkId: string
+      text: string
+      rect: WireChipRect
+      normal: Vec2
+      fill: string
+      alpha: number
+    }> = []
+
+    ctx.save()
+    ctx.font = font
+    for (const link of links) {
+      const fromNode = this.graph.nodes.find(n => n.id === link.from_node)
+      const toNode = this.graph.nodes.find(n => n.id === link.to_node)
+      if (!fromNode || !toNode) continue
+      if (isNoteCardNode(fromNode) || isNoteCardNode(toNode)) continue
+
+      const graphPts = this.getRoutedPath(link)
+      const screenPts = graphPts.map(wp => this.graphToScreen(wp.x, wp.y))
+      if (screenPts.length < 2) continue
+
+      const text = formatWireChipLabel(link, this.graph.nodes)
+      const tw = ctx.measureText(text).width
+      const th = fontPx * 1.2
+      const w = tw + padX * 2
+      const h = th + padY * 2
+      const mid = polylineMidpoint(screenPts)
+      const segIndex = polylineMidpointSegmentIndex(screenPts)
+      const normal = pathNormalAtSegment(screenPts, segIndex)
+      const rect: WireChipRect = {
+        x: mid.x - w / 2,
+        y: mid.y - h / 2,
+        w,
+        h,
+      }
+      chips.push({
+        linkId: link.id,
+        text,
+        rect,
+        normal,
+        fill: this.linkStrokeColor(link, backLinks),
+        alpha: this.linkDimAlpha(link),
+      })
+    }
+
+    chips.sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x || a.linkId.localeCompare(b.linkId))
+    nudgeOverlappingWireChips(chips)
+
+    for (const chip of chips) {
+      const { rect, text, fill, alpha } = chip
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = fill
+      this.roundRect(rect.x, rect.y, rect.w, rect.h, radius)
+      ctx.fill()
+      ctx.strokeStyle = COLORS.surface
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.fillStyle = COLORS.bg
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText(text, rect.x + rect.w / 2, rect.y + rect.h / 2)
     }
     ctx.restore()
   }
@@ -1582,7 +1956,7 @@ export class GraphCanvas {
     if (screenPts.length < 2) return
     const ctx = this.ctx
     ctx.save()
-    ctx.strokeStyle = '#ffffff'
+    ctx.strokeStyle = COLORS.surface
     ctx.lineWidth = width
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -1687,7 +2061,7 @@ export class GraphCanvas {
     const first = lines[0]
     const ctx = this.ctx
     const prev = ctx.font
-    ctx.font = `${weight} ${refFontSize}px "SimSun", "宋体", "Songti SC", sans-serif`
+    ctx.font = `${weight} ${refFontSize}px ${CANVAS_FONT_UI}`
     const maxW = graphInnerWidth
     if (ctx.measureText(first).width <= maxW) {
       ctx.font = prev
@@ -1710,7 +2084,7 @@ export class GraphCanvas {
     if (maxW <= 0) return [text]
     const ctx = this.ctx
     const prev = ctx.font
-    ctx.font = `${weight} ${refFontSize}px "SimSun", "宋体", "Songti SC", sans-serif`
+    ctx.font = `${weight} ${refFontSize}px ${CANVAS_FONT_UI}`
     const result: string[] = []
     let remaining = text.trim()
     while (remaining.length > 0 && result.length < maxLines) {
@@ -1748,7 +2122,7 @@ export class GraphCanvas {
   ): string[] {
     const ctx = this.ctx
     const prev = ctx.font
-    ctx.font = `${weight} ${fontSizePx}px "SimSun", "宋体", "Songti SC", sans-serif`
+    ctx.font = `${weight} ${fontSizePx}px ${CANVAS_FONT_UI}`
     const result: string[] = []
     let line = ''
     for (const ch of text) {
@@ -1764,6 +2138,45 @@ export class GraphCanvas {
     if (line && result.length < 5) result.push(line)
     ctx.font = prev
     return result
+  }
+
+  /** 原型分类 pill — 浅底深字；超宽（极端 label）按 measureText 截断加省略号 */
+  private drawCategoryPill(
+    rightX: number,
+    centerY: number,
+    text: string,
+    bg: string,
+    fg: string,
+    fontSize: number,
+    maxTextW = 96 * this.scale,
+  ): void {
+    const ctx = this.ctx
+    const padX = 8 * this.scale
+    const padY = 2 * this.scale
+    ctx.font = `bold ${fontSize}px ${CANVAS_FONT_UI}`
+    let label = text
+    if (ctx.measureText(label).width > maxTextW) {
+      while (label.length > 1 && ctx.measureText(`${label}…`).width > maxTextW) {
+        label = label.slice(0, -1)
+      }
+      label = `${label}…`
+    }
+    const tw = ctx.measureText(label).width
+    const pw = tw + padX * 2
+    const ph = fontSize + padY * 2
+    const bx = rightX - pw
+    const by = centerY - ph / 2
+    const pillRadius = ph / 2
+
+    ctx.fillStyle = bg
+    this.roundRect(bx, by, pw, ph, pillRadius)
+    ctx.fill()
+
+    ctx.fillStyle = fg
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, rightX - padX, centerY)
+    ctx.textAlign = 'left'
   }
 
   private roundRect(x: number, y: number, w: number, h: number, r: number): void {

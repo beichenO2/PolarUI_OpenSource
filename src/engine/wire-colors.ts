@@ -1,9 +1,16 @@
-import type { Link, NodeInstance } from './types'
+import type { Link, LgEdge, NodeInstance } from './types'
 import type { ExecutionState } from './types'
-import { isBackwardLink } from './node-geometry'
-import { getLinkPayload, payloadFingerprint } from './link-payload'
+import { isBackwardLink, isOutputTerminalNode } from './node-geometry'
+import { isRoutingBranchNode } from './branch-outputs'
+import { registry } from './registry'
 import type { CrossingPoint } from './wire-crossings'
 import type { Vec2 } from './node-geometry'
+import { activeWireTheme } from './canvas-theme'
+
+/** light 主题基准值（测试断言依赖）；运行时取 activeWireTheme() 支持 hermes */
+export const SEMANTIC_OUTPUT_COLOR = '#059669'
+export const SEMANTIC_CONTROL_FLOW_COLOR = '#4F46E5'
+export const SEMANTIC_BACKWARD_BASE = '#dc2626'
 
 /**
  * Forward palette — 14 maximally separated hues at high saturation.
@@ -27,9 +34,56 @@ export const FORWARD_EDGE_PALETTE = [
   '#ffe119', // yellow
 ] as const
 
+/** Failure/feedback red family — lightness varies per parallel backward wire. */
 export const BACKWARD_EDGE_PALETTE = [
-  '#d97706', '#ea580c', '#c2410c', '#b45309', '#db2777', '#be123c', '#a16207', '#9a3412',
+  '#dc2626',
+  '#ef4444',
+  '#b91c1c',
+  '#f87171',
+  '#991b1b',
+  '#fca5a5',
+  '#7f1d1d',
+  '#fecaca',
 ] as const
+
+export interface SemanticWireGraphContext {
+  nodes: NodeInstance[]
+  backLinks?: Set<string>
+  lgEdges?: LgEdge[]
+}
+
+function isControlFlowSource(node: NodeInstance | undefined): boolean {
+  if (!node) return false
+  if (isRoutingBranchNode(node.class_type)) return true
+  const cat = registry.get(node.class_type)?.category?.toLowerCase() ?? ''
+  return cat.includes('switch') || cat.includes('branch') || cat.includes('condition')
+}
+
+function isLgConditionalEdge(link: Link, lgEdges?: LgEdge[]): boolean {
+  if (!lgEdges?.length) return false
+  return lgEdges.some(
+    e => e.kind === 'conditional' && e.from === link.from_node && e.to === link.to_node,
+  )
+}
+
+/**
+ * Semantic wire stroke override. `null` = fall through to proximity rainbow palette.
+ * Backward wires are colored separately via BACKWARD_EDGE_PALETTE.
+ */
+export function semanticWireColor(link: Link, graphContext: SemanticWireGraphContext): string | null {
+  const { nodes, backLinks, lgEdges } = graphContext
+  if (isBackwardLink(link, nodes, backLinks)) return null
+
+  const fromNode = nodes.find(n => n.id === link.from_node)
+  const toNode = nodes.find(n => n.id === link.to_node)
+  const theme = activeWireTheme()
+
+  if (isOutputTerminalNode(toNode)) return theme.semanticOutput
+  if (isControlFlowSource(fromNode) || isLgConditionalEdge(link, lgEdges)) {
+    return theme.semanticControl
+  }
+  return null
+}
 
 export const EDGE_PENDING_COLOR = '#94a3b8'
 
@@ -141,25 +195,72 @@ export function buildLinkColorMaps(
   results?: ExecutionState['results'],
   crossings?: CrossingPoint[],
   paths?: Map<string, Vec2[]>,
+  lgEdges?: LgEdge[],
+): LinkColorMaps {
+  return buildLinkColorMapsInternal(links, nodes, backLinks, crossings, paths, lgEdges, false)
+}
+
+/**
+ * Rainbow/backward palette for parallel-segment offsets only.
+ * Ignores semantic display colors so routing geometry stays stable.
+ */
+export function buildRoutingOffsetColorMap(
+  links: Link[],
+  nodes: NodeInstance[],
+  backLinks: Set<string> | undefined,
+  crossings?: CrossingPoint[],
+  paths?: Map<string, Vec2[]>,
+): Map<string, string> {
+  const maps = buildLinkColorMapsInternal(links, nodes, backLinks, crossings, paths, undefined, true)
+  const colorOf = new Map<string, string>()
+  for (const link of links) {
+    colorOf.set(
+      link.id,
+      maps.backwardByLink.get(link.id)
+        ?? maps.forwardByLink.get(link.id)
+        ?? FORWARD_EDGE_PALETTE[0],
+    )
+  }
+  return colorOf
+}
+
+function buildLinkColorMapsInternal(
+  links: Link[],
+  nodes: NodeInstance[],
+  backLinks: Set<string> | undefined,
+  crossings: CrossingPoint[] | undefined,
+  paths: Map<string, Vec2[]> | undefined,
+  lgEdges: LgEdge[] | undefined,
+  routingOnly: boolean,
 ): LinkColorMaps {
   const forwardByLink = new Map<string, string>()
   const backwardByLink = new Map<string, string>()
   const backwardLinks: Link[] = []
   const forwardIds: string[] = []
+  const graphContext: SemanticWireGraphContext = { nodes, backLinks, lgEdges }
 
   for (const link of links) {
     if (isBackwardLink(link, nodes, backLinks)) {
       backwardLinks.push(link)
     } else {
+      if (!routingOnly) {
+        const semantic = semanticWireColor(link, graphContext)
+        if (semantic) {
+          forwardByLink.set(link.id, semantic)
+          continue
+        }
+      }
       forwardIds.push(link.id)
     }
   }
 
+  const forwardPalette = activeWireTheme().forwardPalette
+  const backwardPalette = activeWireTheme().backwardPalette
   if (paths && paths.size > 0) {
     const colorOf = proximityAwareColoring(links, forwardIds, paths, crossings ?? [])
     for (const id of forwardIds) {
       const ci = colorOf.get(id) ?? 0
-      forwardByLink.set(id, FORWARD_EDGE_PALETTE[ci % FORWARD_EDGE_PALETTE.length])
+      forwardByLink.set(id, forwardPalette[ci % forwardPalette.length])
     }
   } else {
     const sourceColor = new Map<string, string>()
@@ -168,7 +269,7 @@ export function buildLinkColorMaps(
       if (isBackwardLink(link, nodes, backLinks)) continue
       const key = `${link.from_node}:${link.from_slot}`
       if (!sourceColor.has(key)) {
-        sourceColor.set(key, FORWARD_EDGE_PALETTE[sourceIdx++ % FORWARD_EDGE_PALETTE.length])
+        sourceColor.set(key, forwardPalette[sourceIdx++ % forwardPalette.length])
       }
       forwardByLink.set(link.id, sourceColor.get(key)!)
     }
@@ -176,16 +277,16 @@ export function buildLinkColorMaps(
 
   backwardLinks.sort((a, b) => a.from_node.localeCompare(b.from_node) || a.to_node.localeCompare(b.to_node) || a.id.localeCompare(b.id))
   backwardLinks.forEach((link, index) => {
-    backwardByLink.set(link.id, BACKWARD_EDGE_PALETTE[index % BACKWARD_EDGE_PALETTE.length])
+    backwardByLink.set(link.id, backwardPalette[index % backwardPalette.length])
   })
 
   return { forwardByLink, backwardByLink }
 }
 
 export function linkForwardColor(linkId: string, maps: LinkColorMaps): string {
-  return maps.forwardByLink.get(linkId) ?? FORWARD_EDGE_PALETTE[0]
+  return maps.forwardByLink.get(linkId) ?? activeWireTheme().forwardPalette[0]
 }
 
 export function linkBackwardColor(linkId: string, maps: LinkColorMaps): string {
-  return maps.backwardByLink.get(linkId) ?? BACKWARD_EDGE_PALETTE[0]
+  return maps.backwardByLink.get(linkId) ?? activeWireTheme().backwardPalette[0]
 }

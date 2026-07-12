@@ -1,0 +1,52 @@
+[
+  {
+    "class_type": "Output",
+    "category": "Output",
+    "display_name": "Output",
+    "description": "原子化元件：工作流终点。可多节点并联输出；画布上以紧凑卡片呈现（对齐 Dify End）。",
+    "color": "#166534",
+    "inputs": [
+      {
+        "name": "content",
+        "type": "any",
+        "description": "汇聚到终点的交付内容（任意类型）。"
+      }
+    ],
+    "outputs": [],
+    "params": {
+      "format": {
+        "type": "select",
+        "default": "auto",
+        "options": [
+          "auto",
+          "json",
+          "markdown",
+          "plain",
+          "yaml"
+        ],
+        "label": "输出格式"
+      },
+      "save_to": {
+        "type": "string",
+        "default": "",
+        "label": "保存路径（留空不保存）"
+      },
+      "output_description": {
+        "type": "text",
+        "default": "",
+        "label": "交付物说明（期望输出什么）"
+      },
+      "merge_strategy": {
+        "type": "select",
+        "default": "last",
+        "options": [
+          "concat",
+          "first",
+          "last",
+          "json_merge"
+        ],
+        "label": "多 Output 合并策略"
+      }
+    }
+  }
+]

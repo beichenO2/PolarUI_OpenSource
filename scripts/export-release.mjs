@@ -26,6 +26,7 @@ import { compileSiteConfig } from './compile-site-config.mjs';
 import { loadHttpWorkflowDeclarations, parseHttpWorkflowCliArgs } from './http-workflows.mjs';
 import { patchLibreChatHttpWorkflows } from './patch-librechat-http-workflows.mjs';
 import { verifyRelease } from './verify-release.mjs';
+import { verifyOrthogonality } from './verify-orthogonality.mjs';
 import { deployWebRelease } from './deploy-web-release.mjs';
 import { graphNodeTypes, resolveWorkflowGraphPath } from './graph-utils.mjs';
 
@@ -324,6 +325,13 @@ export async function exportRelease(opts) {
       return `${verification.checked} check(s)`;
     });
 
+    await runStep(log, 10.5, 'orthogonality', 'verifyOrthogonality', () => {
+      if (opts.skipVerify) return 'skipped';
+      const verification = verifyOrthogonality(stagingRoot);
+      if (!verification.ok) throw new Error(verification.errors.join('\n'));
+      return `${verification.checked} check(s)`;
+    });
+
     // ---- Promote: staging → final dir (atomic on same volume) ----
     if (existsSync(releaseRoot)) {
       // A concurrent export claimed the name after we resolved it.
@@ -331,7 +339,7 @@ export async function exportRelease(opts) {
     }
     renameSync(stagingRoot, releaseRoot);
     promoted = true;
-    log.record({ index: 10.5, id: 'promote', title: 'staging → release dir', status: 'ok', ms: 0, detail: releaseRoot });
+    log.record({ index: 11, id: 'promote', title: 'staging → release dir', status: 'ok', ms: 0, detail: releaseRoot });
 
     // ---- Deploy (Steps 11–12) — after promote so paths are final ----
     let deploy = null;

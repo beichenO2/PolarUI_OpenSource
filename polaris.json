@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-11T15:10:00+08:00"
+    "last_synced_at": "2026-07-13T02:07:27+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -161,24 +161,29 @@
         {
           "name": "Web 部署（Chat 壳）",
           "description": "PolarClaw /api/workflow/chat + /chat?workflow=xxx",
-          "status": "planned",
+          "status": "cancelled",
           "behavior": [
-            "浏览器 Chat UI 调 workflow",
-            "conversation_id 单层 key"
+            "2026-07-12 关闭：由 R4 export-release（ADR-008）取代；ADR-006 → superseded",
+            "PolarClaw /api/workflow/chat 已实现，保留为开发调试工具，不进 PolarUI 对外契约"
           ],
           "test_status": "not_tested",
-          "evidence": []
+          "evidence": [
+            "decisions/006-simplest-deploy-mvp.md（superseded 修订）",
+            "PolarClaw src/adapters/web/server.ts L902-972（API 已存在，dev-only）"
+          ]
         },
         {
           "name": "画布一键上线",
           "description": "PolarUI GUI → PUT /api/deployments → preflight → chat_url",
-          "status": "planned",
+          "status": "cancelled",
           "behavior": [
-            "GUI 部署按钮",
-            "preflight 失败展示错误"
+            "2026-07-12 关闭：与 ADR-010 纯粹化冲突（PolarUI 内不再集成 PolarClaw）",
+            "一键上线 = 画布「导出网站」→ POST /api/export-release（R4，已 done）"
           ],
           "test_status": "not_tested",
-          "evidence": []
+          "evidence": [
+            "decisions/010-single-engine-and-purity-refactor.md L11（对外只保留 LibreChat 一键导出）"
+          ]
         }
       ]
     },
@@ -415,25 +420,36 @@
         {
           "name": "QA 流水线（P0）",
           "description": "清 package.json 死脚本引用 + 引擎特征化 golden 测试 + npm run qa 聚合门禁",
-          "status": "in_progress",
+          "status": "done",
           "behavior": [
             "golden 覆盖：拓扑执行、_lg_edges 条件路由、Switch 分支、ToolCall ReAct 回环、RetryLoop、ForLoop、state 累积",
             "移除 11 个指向不存在脚本的 test:gate/e2e/agentic/cross/coverage/tools-system 命令",
             "npm run qa 单命令聚合现有绿测试 + 新 golden，退出码 0"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "scripts/run-qa.mjs 15 步聚合门禁（headless/overlay/toolcall/http-workflow/react/engine/deps/evolution/canvas/export/claude-code/evolve-demo×2）",
+            "tests/engine/: wf-topology, lg-conditional-routing, lg-stepping, lg-state-accumulation, retry-loop, for-loop, wf-branch-prune 等 golden",
+            "package.json 已无死脚本命令",
+            "2026-07-12: npm run qa 15/15 passed"
+          ]
         },
         {
           "name": "src 源码恢复重建（P1）",
           "description": "从 116523c 恢复 src/ 82 文件，回放 patch-*.mjs 语义进源码，重建 bundle",
-          "status": "planned",
+          "status": "done",
           "behavior": [
             "npm run build 可用，重建后 npm run qa 仍全绿",
-            "删除 post-build patch 机制"
+            "删除 post-build patch 机制：GUI overlay boot 迁入 src/main.ts，导出网站按钮迁入 src/components/ExportWebButton.vue",
+            "patch-gui-overlay-boot.mjs / patch-export-web-button.mjs 归档 ClawBin 后删除；dev/build 流水线不再打补丁"
           ],
-          "test_status": "not_tested",
-          "evidence": []
+          "test_status": "passed",
+          "evidence": [
+            "commit 7790c79（2026-07-10 恢复 src/ 82 文件）",
+            "archive: ~/Desktop/ClawBin/260712-polarui-postbuild-patch-removal/",
+            "lib/gui-overlay.test.mjs 改为断言无 patch 产物 + bundle 内注册",
+            "2026-07-12: npm run build（vue-tsc 0 错误）+ npm run qa 15/15（主 Agent 亲自复跑）"
+          ]
         },
         {
           "name": "LG/WF 单引擎合并（P2）",
@@ -492,7 +508,7 @@
             "不变量测试 tests/canvas/wire-routing.test.ts + npm run test:canvas（done）",
             "选中 N 节点折叠为带端口投影的父节点（done）",
             "自动分组建议 + 虚线预览采纳（done）",
-            "排线 waypoint 快照 + Playwright 截图基线（planned）"
+            "排线 waypoint 快照（golden JSON，进 QA 门）+ Playwright 截图基线（独立 npm run test:canvas-baseline，不进 QA）（done 2026-07-12）"
           ],
           "test_status": "passed",
           "evidence": [
@@ -500,8 +516,29 @@
             "tests/canvas/graph-groups.test.ts 15 pass",
             "tests/canvas/group-suggest.test.ts 3 pass",
             "tests/engine/graph-groups-execution.test.mjs",
-            "npm run qa 11/11（含 test:canvas + engine groups）",
+            "tests/canvas/wire-routing-snapshot.test.ts（3 fixture golden，UPDATE_GOLDEN=1 再生）",
+            "tests/e2e/canvas-baseline.spec.ts（Playwright toHaveScreenshot，1 pass）",
+            "npm run qa 15/15（含 waypoint 快照）",
             "commits: 2e771eb, 63943b5, (canvas integration)"
+          ]
+        },
+        {
+          "name": "画布 UI 升级（PolarFlow 设计语言）",
+          "description": "参照 PolarFlow editor 移植设计语言：design tokens、节点卡片、线标签 chip、语义化配色、Runs 面板 + Run 抽屉、壳层浅色重构、经典几何形状 + 函数盒",
+          "status": "done",
+          "behavior": [
+            "batch1：src/styles/design-tokens.css + CANVAS_COLORS 镜像；#f8fafc 点阵网格；节点卡片 12px 圆角/软阴影/左侧分类色条/分类 pill/紫色选中环；连线 2.5/3/3.5px 层级 + 非关联淡化 0.15；⌘D 复制 + 快捷键提示浮层",
+            "batch2：zoom>=0.7 中点线标签 chip（线色填充/白边/单遍避让/随淡化）；semanticWireColor（Output→绿、控制流→靛、回边→红系虚线、其余彩虹兜底）；路由偏移保持彩虹映射不动 golden",
+            "batch3：Pinia runs store（localStorage 上限 50）+ RunsPanel.vue（状态点/筛选/点击打开抽屉）+ RunDrawer.vue（底部抽屉、步骤时间线、点击高亮节点、500ms 回放）；执行流经 onNodeStart/Done 实时记录；canvas.setTraceHighlight 绿色描环",
+            "batch4：RightPanel.vue 右侧 Tab 化（属性 | Chat | 运行 合一，340px 可调宽，选中自动切属性，默认关闭不影响截图基线）",
+            "batch5：字体 宋体→Inter/JetBrains Mono（canvas-fonts.ts，document.fonts.ready 重绘）；壳层全重构（shell.css：48px 白顶栏三区 + validation pill + 更多下拉、240px 左栏、白底栏；App.vue ~950 行暗色样式清零，Health/SSoT/Chat/RunTrace 全浅色 token 化）；vite strictPort 5170",
+            "batch6：经典几何形状（node-shape.ts：胶囊=输入输出、六边形=路由、圆柱=记忆、签名卡=LLM、双边矩形=工具）；简单形状只画轮廓+标题+一行关键参数；复杂组件（Agentic/Evolve/SubAgent/params≥5/嵌套对象）= fn 函数盒，默认收起 48px，角标/双击伸缩实时重路由"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commits: 12884e1 (batch1), 9e630db (batch2), b5429b0 (字体), cd0b80b (壳层), 39dac57 (原型加宽), 4786846 (几何形状+fn盒)",
+            "npm run build vue-tsc 0 错误；npm run qa 16/16（4786846 时 export-release 因并发 agent 的 verify-orthogonality 在制品失败，与 UI 无关，其余 15 步 + 3 步单跑全绿）；test:canvas-baseline 1/1",
+            "Playwright 实浏览器截图验证（浅色壳层三 tab、几何形状画布、fn 盒展开）"
           ]
         }
       ]
@@ -565,13 +602,16 @@
           "status": "done",
           "behavior": [
             "http_workflows[].auth_token → Authorization: Bearer；headers 自定义头（不覆盖 Content-Type）",
-            "明文局域网仍为默认 Demo 模式；服务端校验由实现方自理"
+            "明文局域网仍为默认 Demo 模式",
+            "PolarFlow 服务端 POLARFLOW_AUTH_TOKEN 可选校验（/run、/api/chat、/api/runs 等）；未设置 = 无鉴权",
+            "当前 market-truth-cs Web 部署不启用鉴权（Demo 模式）"
           ],
           "test_status": "passed",
           "evidence": [
             "compile-site-config normalize 校验透传 + 单测 8/8",
             "_template/polar/lib/http-workflow.mjs 鉴权头 + 单测",
-            "WORKFLOW_RUN_CONTRACT.md 安全边界更新"
+            "WORKFLOW_RUN_CONTRACT.md 安全边界更新",
+            "PolarFlow src/server/auth.ts + tests/auth.test.ts（commit b917d72）"
           ]
         },
         {
@@ -601,6 +641,37 @@
             "_template/polar/lib/process-chat.mjs buildRunHistory 注入 history",
             "_template/polar/tests/unit/process-chat-history.test.mjs",
             "WORKFLOW_RUN_CONTRACT.md history 章节标注已实现"
+          ]
+        },
+        {
+          "name": "按用户开 workflow 权限（ADR-015）",
+          "description": "users.allowed_workflows 白名单；Admin 后台勾选；chat 执行前强制校验，/v1/models 尽力过滤；Admin=后台非用户，无豁免分支",
+          "status": "done",
+          "behavior": [
+            "null=不限制，白名单始终隐含站点默认 workflow",
+            "未授权 model 返回 200 友好拒绝文案，不进 workflow"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-11: _template polar/lib/workflow-acl.mjs + admin API/UI + process-chat 校验，单测 92 通过（新增 9）",
+            "market-truth-cs 线上验收：/v1/models 按用户过滤、未授权 chat 拒绝、Admin 面板可勾选"
+          ]
+        },
+        {
+          "name": "graph-cli 独立进程化（P3）",
+          "description": "lib/run-graph-server.mjs 常驻 POST /run 服务；graph 工作流可经 http_workflows[] 插拔，消除每消息 spawn 冷启动；spawn graph-cli 保留兜底",
+          "status": "done",
+          "behavior": [
+            "createRunGraphServer DI（runWorkflow/listWorkflowIds）供单测",
+            "POST /run 契约对齐 WORKFLOW_RUN_CONTRACT；错误一律 HTTP 200 + ok:false",
+            "GET /health 暴露 service + workflows 列表",
+            "npm run serve:run；POLARUI_RUN_PORT / POLARUI_RUN_DEFAULT_WORKFLOW 可配"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "lib/run-graph-server.test.mjs 6 pass",
+            "npm run qa 16/16",
+            "npm run serve:run + curl /health 冒烟"
           ]
         }
       ]
@@ -801,6 +872,82 @@
             "scripts/evolve-demo.mjs exit 0（主 Agent 亲自复跑）",
             "npm run qa 13/13（新增 evolve-demo 步）",
             "docs/specs/evolution/README.md 端到端演示小节"
+          ]
+        },
+        {
+          "name": "真实 claude-code 自进化演示（解除 D4 demo 约束）",
+          "description": "scripts/evolve-claude-demo.mjs：StemCell 在内存副本的 claude-code _lg_edges 上运行时插节点；PetriDish 以真实 claude-code 为 slave（slave_inline）三候选择优；mock LLM 全离线",
+          "status": "done",
+          "behavior": [
+            "StemCell：sc_demo 插入 4→5 链路，物化 StaticData 注解节点，finish mock 路径跑通完整 claude-code 输出",
+            "Petri：候选0 故意破坏（无 executor 节点）→ ok=false；候选1/2 注入 score 3/10 → 择优 score=10",
+            "applied=false；refined-claude.petri.json 落盘（gitignore）；claude-code.json 与 registry 零改动",
+            "ADR-014 D4「不回接 claude-code」约束以 2026-07-12 修正案解除（仅 demo 范围，人工门控不变）"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "decisions/014-evolution-rebuild.md 2026-07-12 修正案",
+            "npm run qa 15/15（新增 evolve-claude-demo 步；并发新增 http-workflow-graph 步）",
+            "docs/specs/evolution/README.md 双 demo 文档"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "need": "原语包 + 函数库重构：66 个 node-def 收敛为 6 类原语（输入/输出、LLM、路由、工具、记忆；判据=无法用其它原语子图表达），其余 def 函数化为带签名子图；视觉验收由 QA 流水线裁决，不由主观审美裁决",
+      "approach": "视觉门禁先行（双主题截图基线 + 编译检查入 npm run qa）→ node-defs 分层 primitives/+functions/ → fn_ref 数据模型 + 执行器调用帧（fn 递归 executeGraph，不分叉引擎）→ 逐批迁移 def；每批 npm run qa 全绿为门禁，截图基线更新是有意设计变更的唯一人工确认点",
+      "features": [
+        {
+          "name": "视觉验收入 QA 门禁（双主题截图基线）",
+          "description": "canvas-baseline.spec.ts 双主题化（hermes+light 各一张，此前仅 light）；npm run qa 追加 build（vue-tsc 编译门 + 刷新 dist）与 test:canvas-baseline 两步，16→18 步",
+          "status": "done",
+          "behavior": [
+            "hermes/light 两张 claude-code 画布截图基线，maxDiffPixelRatio 0.02",
+            "npm run qa 单命令即含编译检查 + 双主题视觉回归，任一红即整体红",
+            "基线仅在有意设计变更时以 --update-snapshots 人工确认更新"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 244f661（spec 双主题化 + hermes 基线 + run-qa 18 步 + e2e README 同步）；R11 登记 commit 4685aa4",
+            "2026-07-13: npm run qa 18/18 passed（末两步 build/vue-tsc 编译门 + test:canvas-baseline）",
+            "light 旧基线 git mv 复用（claude-code-canvas-light-darwin.png），改名后零像素 diff 通过 = 渲染零回归",
+            "hermes 基线新录（claude-code-canvas-hermes-darwin.png），主 Agent 目检双主题截图确认深 Teal/浅色渲染正常"
+          ]
+        },
+        {
+          "name": "node-defs 分层（primitives/ + functions/）",
+          "description": "node-defs 重组两层：primitives/ 6 包 11 def（input=PromptInput/StaticData、output=Output、llm=LLM/VLM、route=Switch/Condition、tool=MCPCall/CodeExec、memory=MemoryStore/MemorySearch，判据=无法用其它原语子图表达）+ functions/ 4 包 54 函数候选；annotation/evolve 原位；不改运行语义（category/palette/画布渲染零变化）",
+          "status": "done",
+          "behavior": [
+            "6 类原语单独成包；其余 def 落 functions/ 即函数候选标记",
+            "sync:node-defs 与 registry 兼容，npm run qa 全绿"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit d2cc20b（git rename 识别 4 pack → functions/；primitives/ 6 新包；sync-node-defs 子目录支持；SERVICES.md + node-inventory.md 同步）",
+            "重组脚本逐 def 深等价校验：68 defs 无重复无遗漏零内容漂移",
+            "2026-07-13: npm run qa 18/18 passed；sync-node-defs 12 packs + index；双主题截图基线 2 passed 零像素 diff（渲染零变化实证）",
+            "旧 4 pack + index 归档 ~/Desktop/ClawBin/260713-polarui-nodedefs-two-layer/（P10a/P13）",
+            "已知偶发：export-release 测试临时目录 rmdir ENOTEMPTY 竞态出现 1 次，隔离复跑 3/3 绿 + 全量 qa 复跑绿，与本批改动无关"
+          ]
+        },
+        {
+          "name": "fn_ref 数据模型 + 执行器调用帧",
+          "description": "node.fn_ref 指向 workflow JSON（_entry+Output 即签名）或 node.subgraph 内联；执行器把 fn 当调用帧递归 executeGraph；交互三级=单击选中/角标展开参数/双击下钻子图（复用 R6 Subgraph 栈）",
+          "status": "planned",
+          "behavior": [
+            "fn 节点执行 = 递归 executeGraph，不分叉引擎",
+            "双击下钻复用既有 Subgraph 栈交互"
+          ]
+        },
+        {
+          "name": "def 逐批函数化迁移",
+          "description": "ToolCall=LLM+工具定义、RetryLoop=路由+回边+计数、Agentic 范式=大组合等，逐批以函数子图替代专用 def",
+          "status": "planned",
+          "behavior": [
+            "每批迁移后 npm run qa 全绿 + 双主题基线不红（或有意更新）",
+            "迁移完成后 palette 仅剩 6 原语 + 函数库"
           ]
         }
       ]

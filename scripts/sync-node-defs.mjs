@@ -41,7 +41,10 @@ if (files) {
       console.error(`sync-node-defs: missing ${from} (listed in index.json)`);
       process.exit(1);
     }
-    cpSync(from, join(DEST, name));
+    const to = join(DEST, name);
+    // R11 两层结构（primitives/、functions/）：子目录条目先建父目录
+    mkdirSync(dirname(to), { recursive: true });
+    cpSync(from, to);
   }
   console.log(`sync-node-defs: ${SRC} → ${DEST} (${files.length} packs + index)`);
 } else {

@@ -18,6 +18,8 @@ import {
   type GroupPortProjection,
 } from './graph-groups'
 import type { SuggestedGroup } from './group-suggest'
+import { CANVAS_FONT_UI } from './canvas-fonts'
+import { activeCanvasThemeName } from './canvas-theme'
 
 export const GROUP_TITLE_BAR_H = 28
 
@@ -62,12 +64,24 @@ export interface GroupDrawColors {
   badge: string
 }
 
-const DEFAULT_COLORS: GroupDrawColors = {
+const LIGHT_GROUP_COLORS: GroupDrawColors = {
   bg: '#f1f5f9',
   border: '#64748b',
   header: '#475569',
   headerText: '#ffffff',
   badge: '#3b82f6',
+}
+
+const HERMES_GROUP_COLORS: GroupDrawColors = {
+  bg: 'rgba(255, 230, 203, 0.05)',
+  border: 'rgba(255, 230, 203, 0.35)',
+  header: 'rgba(255, 230, 203, 0.12)',
+  headerText: '#ffe6cb',
+  badge: '#60a5fa',
+}
+
+function groupColors(): GroupDrawColors {
+  return activeCanvasThemeName() === 'hermes' ? HERMES_GROUP_COLORS : LIGHT_GROUP_COLORS
 }
 
 export function drawExpandedGroupFrame(
@@ -80,7 +94,7 @@ export function drawExpandedGroupFrame(
   const sp = toScreen(frame.bounds.x, frame.bounds.y)
   const sw = frame.bounds.w * scale
   const sh = frame.bounds.h * scale
-  const color = frame.color ?? DEFAULT_COLORS.border
+  const color = frame.color ?? groupColors().border
 
   ctx.save()
   ctx.fillStyle = color
@@ -95,13 +109,13 @@ export function drawExpandedGroupFrame(
   ctx.setLineDash([])
 
   const titleH = GROUP_TITLE_BAR_H * scale
-  ctx.fillStyle = selected ? '#3b82f6' : DEFAULT_COLORS.header
+  ctx.fillStyle = selected ? '#3b82f6' : groupColors().header
   ctx.globalAlpha = 0.85
   ctx.fillRect(sp.x, sp.y, sw, titleH)
   ctx.globalAlpha = 1
 
-  ctx.fillStyle = DEFAULT_COLORS.headerText
-  ctx.font = `bold ${12 * scale}px -apple-system, sans-serif`
+  ctx.fillStyle = groupColors().headerText
+  ctx.font = `bold ${12 * scale}px ${CANVAS_FONT_UI}`
   ctx.textBaseline = 'middle'
   ctx.fillText(frame.title, sp.x + 8 * scale, sp.y + titleH / 2, sw - 16 * scale)
   ctx.restore()
@@ -120,12 +134,12 @@ export function drawGroupBoxNode(
   const sh = node.height * scale
   const title = String(node.params.title ?? 'Group')
   const memberCount = Number(node.params.member_count ?? 0)
-  const color = String(node.params.color ?? DEFAULT_COLORS.header)
+  const color = String(node.params.color ?? groupColors().header)
   const radius = 8 * scale
 
   ctx.save()
 
-  ctx.fillStyle = DEFAULT_COLORS.bg
+  ctx.fillStyle = groupColors().bg
   ctx.beginPath()
   roundRect(ctx, sp.x, sp.y, sw, sh, radius)
   ctx.fill()
@@ -139,7 +153,7 @@ export function drawGroupBoxNode(
     ctx.globalAlpha = 1
   }
 
-  ctx.strokeStyle = selected ? '#3b82f6' : DEFAULT_COLORS.border
+  ctx.strokeStyle = selected ? '#3b82f6' : groupColors().border
   ctx.lineWidth = selected ? 2 : 1
   roundRect(ctx, sp.x, sp.y, sw, sh, radius)
   ctx.stroke()
@@ -149,15 +163,15 @@ export function drawGroupBoxNode(
   roundRectTop(ctx, sp.x, sp.y, sw, headerH, radius)
   ctx.fill()
 
-  ctx.fillStyle = DEFAULT_COLORS.headerText
-  ctx.font = `bold ${14 * scale}px "SimSun", "宋体", sans-serif`
+  ctx.fillStyle = groupColors().headerText
+  ctx.font = `bold ${14 * scale}px ${CANVAS_FONT_UI}`
   ctx.textBaseline = 'middle'
   ctx.fillText(title, sp.x + 10 * scale, sp.y + headerH / 2, sw - 50 * scale)
 
   const badgeR = 10 * scale
   const badgeX = sp.x + sw - 14 * scale
   const badgeY = sp.y + headerH / 2
-  ctx.fillStyle = DEFAULT_COLORS.badge
+  ctx.fillStyle = groupColors().badge
   ctx.beginPath()
   ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
   ctx.fill()
@@ -171,7 +185,7 @@ export function drawGroupBoxNode(
   const outputCount = projection?.outputs.length ?? Number(node.params.output_port_count ?? 0)
   for (let i = 0; i < inputCount; i++) {
     const sy = toScreen(0, slotGraphY(node, i)).y
-    ctx.fillStyle = DEFAULT_COLORS.border
+    ctx.fillStyle = groupColors().border
     ctx.beginPath()
     ctx.arc(sp.x, sy, SLOT_RADIUS * scale, 0, Math.PI * 2)
     ctx.fill()

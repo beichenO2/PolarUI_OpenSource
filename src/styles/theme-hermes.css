@@ -1,0 +1,20 @@
+/**
+ * Hermes 主题 — NousResearch hermes-agent 视觉气质。
+ * 深 Teal 底 + 奶油 midground + 大写宽字距 display 排版 + 细半透明边框。
+ * token 覆盖 design-tokens.css 的 :root 变量；组件规则在 shell.css 的 hermes 段。
+ */
+
+[data-theme='hermes'] {
+  --color-bg: #041c1c;
+  --color-surface: #0e2423;
+  --color-border: rgba(255, 230, 203, 0.15);
+  --color-text: #ffe6cb;
+  --color-text-muted: rgba(255, 230, 203, 0.65);
+  --color-primary: #ffe6cb;
+  --color-primary-hover: #fff3e3;
+  --color-valid: #4ade80;
+  --color-error: #fb2c36;
+  --color-warning: #ffbd38;
+  --canvas-bg: #041c1c;
+  --canvas-grid: rgba(255, 230, 203, 0.06);
+}

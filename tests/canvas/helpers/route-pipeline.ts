@@ -6,7 +6,7 @@ import type { Vec2 } from '../../../src/engine/node-geometry'
 import { routeAllLinks, offsetParallelSegments } from '../../../src/engine/wire-router'
 import { nudgeParallelSegments } from '../../../src/engine/wire-nudge'
 import { detectCrossings } from '../../../src/engine/wire-crossings'
-import { buildLinkColorMaps } from '../../../src/engine/wire-colors'
+import { buildLinkColorMaps, buildRoutingOffsetColorMap } from '../../../src/engine/wire-colors'
 
 export interface RoutedGraph {
   paths: Map<string, Vec2[]>
@@ -21,16 +21,7 @@ export function routeGraphWires(
   const paths = routeAllLinks(nodes, links, backLinks)
   const crossings = detectCrossings(paths)
 
-  const colorOf = new Map<string, string>()
-  const colorMaps = buildLinkColorMaps(links, nodes, backLinks, undefined, crossings, paths)
-  for (const link of links) {
-    colorOf.set(
-      link.id,
-      colorMaps.forwardByLink.get(link.id)
-        ?? colorMaps.backwardByLink.get(link.id)
-        ?? '',
-    )
-  }
+  const colorOf = buildRoutingOffsetColorMap(links, nodes, backLinks, crossings, paths)
 
   offsetParallelSegments(paths, colorOf)
   const nudged = nudgeParallelSegments(paths)

@@ -71,45 +71,6 @@
     }
   },
   {
-    "class_type": "MemorySearch",
-    "category": "Memory",
-    "display_name": "记忆检索",
-    "description": "原子化元件：Block 细粒度语义检索（按 query 相关性 + top_k + 权重过滤）",
-    "color": "#2d6363",
-    "inputs": [
-      {
-        "name": "query",
-        "type": "string",
-        "description": "记忆检索 · 输入「query」（类型 string）"
-      },
-      {
-        "name": "user",
-        "type": "string",
-        "optional": true,
-        "description": "记忆检索 · 输入「user」（类型 string），可选"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "blocks",
-        "type": "object",
-        "description": "记忆检索 · 输出「blocks」（类型 object）"
-      }
-    ],
-    "params": {
-      "top_k": {
-        "type": "number",
-        "default": 5,
-        "label": "返回数量"
-      },
-      "api_base": {
-        "type": "text",
-        "default": "http://127.0.0.1:3100",
-        "label": "PolarMemory 地址"
-      }
-    }
-  },
-  {
     "class_type": "MemoryConvert",
     "category": "Memory",
     "display_name": "Wiki→Block转换",

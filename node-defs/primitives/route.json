@@ -1,0 +1,84 @@
+[
+  {
+    "class_type": "Condition",
+    "category": "Control",
+    "display_name": "条件分支",
+    "description": "原子化元件：输入数据 + 条件表达式 → 输出 true/false 分支路由。",
+    "color": "#5a3d0c",
+    "inputs": [
+      {
+        "name": "data",
+        "type": "any",
+        "optional": true,
+        "description": "通用数据载荷（对象/数组/标量）。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "true_branch",
+        "type": "any",
+        "optional": true,
+        "description": "条件分支 · 输出「true_branch」（类型 any），可选"
+      },
+      {
+        "name": "false_branch",
+        "type": "any",
+        "optional": true,
+        "description": "条件分支 · 输出「false_branch」（类型 any），可选"
+      }
+    ],
+    "params": {
+      "expression": {
+        "type": "text",
+        "default": "",
+        "label": "条件表达式 (JS)"
+      },
+      "branch_count": {
+        "type": "number",
+        "default": 2,
+        "label": "分支数（≥2，默认 2）"
+      }
+    }
+  },
+  {
+    "class_type": "Switch",
+    "category": "Control",
+    "display_name": "多路分支",
+    "description": "原子化元件：可变路数（默认 2 路 + default）；cases JSON 项数决定出口数，非固定 4 口。",
+    "color": "#5a4a2d",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "any",
+        "description": "待分支或判断的值。"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "case_0",
+        "type": "any",
+        "optional": true,
+        "description": "多路分支 · 输出「case_0」（类型 any），可选"
+      },
+      {
+        "name": "case_1",
+        "type": "any",
+        "optional": true,
+        "description": "多路分支 · 输出「case_1」（类型 any），可选"
+      },
+      {
+        "name": "default",
+        "type": "any",
+        "optional": true,
+        "description": "多路分支 · 输出「default」（类型 any），可选"
+      }
+    ],
+    "params": {
+      "cases": {
+        "type": "text",
+        "default": "[{\"label\":\"情况1\"},{\"label\":\"情况2\"}]",
+        "label": "Case 列表 (JSON，≥2 项)"
+      }
+    }
+  }
+]

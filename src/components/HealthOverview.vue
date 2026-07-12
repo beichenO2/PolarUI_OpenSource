@@ -225,7 +225,8 @@ defineExpose({ refresh })
   padding: 16px 20px;
   overflow-y: auto;
   height: 100%;
-  color: #c8d6e5;
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 .health-toolbar {
   display: flex;
@@ -236,19 +237,21 @@ defineExpose({ refresh })
 .health-title {
   font-size: 1.1rem;
   font-weight: 600;
+  color: var(--color-text);
 }
 .health-error {
-  color: #e74c3c;
+  color: var(--color-error);
   margin-bottom: 12px;
 }
 .health-section {
   margin-bottom: 24px;
 }
 .health-section h3 {
-  font-size: 0.85rem;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #7f8c9a;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
   margin-bottom: 10px;
 }
 .health-grid {
@@ -259,20 +262,20 @@ defineExpose({ refresh })
 .health-card {
   border-radius: 8px;
   padding: 12px;
-  border: 1px solid #2a3544;
-  background: #1a2332;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 .health-card--ok {
-  border-color: #2d8a63;
-  background: rgba(45, 138, 99, 0.12);
+  border-color: #a7f3d0;
+  background: #ecfdf5;
 }
 .health-card--warn {
-  border-color: #c9a227;
-  background: rgba(201, 162, 39, 0.12);
+  border-color: #fcd34d;
+  background: #fffbeb;
 }
 .health-card--bad {
-  border-color: #c0392b;
-  background: rgba(192, 57, 43, 0.12);
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 .health-card-name {
   font-weight: 600;
@@ -280,7 +283,7 @@ defineExpose({ refresh })
 }
 .health-card-status {
   font-size: 0.8rem;
-  opacity: 0.85;
+  color: var(--color-text-muted);
 }
 .health-alerts {
   list-style: none;
@@ -291,26 +294,43 @@ defineExpose({ refresh })
   padding: 8px 12px;
   margin-bottom: 6px;
   border-radius: 6px;
-  background: #1a2332;
-  border-left: 3px solid #3498db;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid #3b82f6;
   font-size: 0.9rem;
 }
 .health-alerts .alert-critical {
-  border-left-color: #e74c3c;
+  border-left-color: var(--color-error);
+  background: #fef2f2;
 }
 .health-alerts .alert-warning {
-  border-left-color: #f39c12;
+  border-left-color: #d97706;
+  background: #fffbeb;
 }
 .health-empty {
-  color: #7f8c9a;
+  color: var(--color-text-muted);
   font-size: 0.9rem;
 }
 .health-meta {
-  color: #7f8c9a;
+  color: var(--color-text-muted);
   font-size: 0.8rem;
   margin: -6px 0 10px;
 }
 .health-arch-section {
   min-height: 480px;
+}
+.health-runs {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.health-runs li {
+  padding: 4px 0;
+  color: var(--color-text-muted);
+}
+.health-run-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 </style>

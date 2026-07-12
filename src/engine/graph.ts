@@ -1,6 +1,6 @@
 import type { NodeInstance, Link, Workflow, StateMachineConfig, LgEdge, WorkflowGroupMeta } from './types'
 import { registry } from './registry'
-import { calcNodeHeight, NODE_DEFAULT_WIDTH, normalizeOutputTerminalSize, normalizeAllOutputTerminals } from './node-geometry'
+import { nodeHeightFor, NODE_DEFAULT_WIDTH, normalizeOutputTerminalSize, normalizeAllOutputTerminals } from './node-geometry'
 import { applyNoteCardLayout } from './note-card-layout'
 import { defaultRoleDeclaration } from './role-prompt'
 
@@ -53,7 +53,7 @@ export class Graph {
       x,
       y,
       width: NODE_DEFAULT_WIDTH,
-      height: calcNodeHeight(def.inputs.length, def.outputs.length),
+      height: nodeHeightFor(classType, def),
       params: defaults,
     }
     if (classType === 'NoteCard') {

@@ -102,7 +102,7 @@ async function sendMessage() {
         :disabled="sending"
         @keydown.enter.exact.prevent="sendMessage"
       />
-      <button class="btn btn-run btn-sm" :disabled="sending || !input.trim()" @click="sendMessage">
+      <button class="btn btn-primary btn-sm" :disabled="sending || !input.trim()" @click="sendMessage">
         发送
       </button>
     </div>
@@ -116,14 +116,12 @@ async function sendMessage() {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #0d1117;
-  border-left: 1px solid #30363d;
-  min-width: 320px;
-  max-width: 420px;
+  min-height: 0;
+  background: var(--color-surface);
 }
 .chat-sidebar-header {
   padding: 10px 12px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -131,29 +129,29 @@ async function sendMessage() {
 .chat-sidebar-title {
   font-size: 13px;
   font-weight: 600;
-  color: #e6edf3;
+  color: var(--color-text);
 }
 .chat-sidebar-wf {
   font-size: 11px;
-  color: #8b949e;
-  truncate: ellipsis;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
 }
 .chat-run-progress {
   padding: 6px 12px;
   font-size: 11px;
-  color: #7ee8fa;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-bottom: 1px solid var(--color-border);
 }
 .chat-stream-preview {
   padding: 6px 12px;
   font-size: 11px;
-  color: #c9d1d9;
+  color: var(--color-text-muted);
   max-height: 80px;
   overflow: auto;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid var(--color-border);
 }
 .chat-messages {
   flex: 1;
@@ -173,14 +171,15 @@ async function sendMessage() {
 }
 .chat-msg--user {
   align-self: flex-end;
-  background: #1f4a7a;
-  color: #e6edf3;
+  background: #e2e8f0;
+  color: #1e293b;
   max-width: 92%;
 }
 .chat-msg--assistant {
   align-self: flex-start;
-  background: #21262d;
-  color: #c9d1d9;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   max-width: 92%;
 }
 .chat-msg--pending {
@@ -189,7 +188,7 @@ async function sendMessage() {
 }
 .chat-composer {
   padding: 8px 10px;
-  border-top: 1px solid #30363d;
+  border-top: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -200,14 +199,19 @@ async function sendMessage() {
   min-height: 48px;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #30363d;
-  background: #161b22;
-  color: #e6edf3;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text);
   font-size: 12px;
   font-family: inherit;
 }
+.chat-composer textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
 .chat-terminal {
   max-height: 180px;
-  border-top: 1px solid #30363d;
+  margin: 0 10px 10px;
 }
 </style>

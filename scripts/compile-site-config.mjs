@@ -105,7 +105,13 @@ export function compileSiteConfig(p) {
   const config = {
     release_id: releaseId,
     workflow_id: workflowId,
-    polarui_root: polaruiRoot,
+    engine: 'polarflow',
+    polarflow: {
+      api_url_env: 'WORKFLOW_ENGINE_URL',
+      default_api_url: 'http://127.0.0.1:8065',
+      flow_path: `${workflowId}/flow.json`,
+      host_api_url: 'http://127.0.0.1:8065',
+    },
     preferred_api_port: 3920,
     preferred_lc_port: 3080,
     port: null,
