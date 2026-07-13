@@ -1,0 +1,74 @@
+{
+  "id": "wf_fn_regex_match",
+  "name": "fn-regex-match",
+  "nodes": [
+    {
+      "id": "p1",
+      "class_type": "PromptInput",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "prompt_text": "{text}"
+      }
+    },
+    {
+      "id": "p2",
+      "class_type": "PromptInput",
+      "x": 0,
+      "y": 120,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "prompt_text": "{pattern}"
+      }
+    },
+    {
+      "id": "v1",
+      "class_type": "Validator",
+      "x": 240,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "verify_mode": "step",
+        "flags": "i"
+      }
+    },
+    {
+      "id": "o1",
+      "class_type": "Output",
+      "x": 480,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    }
+  ],
+  "links": [
+    {
+      "id": "l1",
+      "from_node": "p1",
+      "from_slot": 0,
+      "to_node": "v1",
+      "to_slot": 0
+    },
+    {
+      "id": "l2",
+      "from_node": "p2",
+      "from_slot": 0,
+      "to_node": "v1",
+      "to_slot": 1
+    },
+    {
+      "id": "l3",
+      "from_node": "v1",
+      "from_slot": 0,
+      "to_node": "o1",
+      "to_slot": 0
+    }
+  ],
+  "created_at": 0,
+  "updated_at": 0
+}

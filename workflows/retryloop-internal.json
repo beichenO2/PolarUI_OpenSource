@@ -1,0 +1,65 @@
+{
+  "id": "wf_retryloop_internal",
+  "name": "retryloop-internal",
+  "nodes": [
+    {
+      "id": "note1",
+      "class_type": "NoteCard",
+      "x": 0,
+      "y": -180,
+      "width": 460,
+      "height": 80,
+      "params": {
+        "content": "RetryLoop 计数由 runner 注入 _attempt、多轮重跑在图外层（topology 多轮 / stepwise 边路由）；此图仅示意判定分叉",
+        "expanded_width": 460
+      }
+    },
+    {
+      "id": "c1",
+      "class_type": "Condition",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "operator": "truthy"
+      }
+    },
+    {
+      "id": "o1",
+      "class_type": "Output",
+      "x": 320,
+      "y": -60,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    },
+    {
+      "id": "o2",
+      "class_type": "Output",
+      "x": 320,
+      "y": 80,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    }
+  ],
+  "links": [
+    {
+      "id": "lk1",
+      "from_node": "c1",
+      "from_slot": 0,
+      "to_node": "o1",
+      "to_slot": 0
+    },
+    {
+      "id": "lk2",
+      "from_node": "c1",
+      "from_slot": 1,
+      "to_node": "o2",
+      "to_slot": 0
+    }
+  ],
+  "created_at": 0,
+  "updated_at": 0
+}

@@ -149,6 +149,7 @@ export async function executeStateMachine(
     role: opts.role ?? resolved.role,
     runContext: opts.runContext,
     onStreamChunk: opts.onStreamChunk,
+    fnDepth: opts.fnDepth ?? 0,
     runTrace: {
       run_id: runId,
       workflow_id: graph.name,

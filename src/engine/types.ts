@@ -25,6 +25,12 @@ export interface NodeDef {
   expandable?: boolean
   /** workflows/{name}.json，不含扩展名 */
   internal_workflow?: string
+  /**
+   * R11 函数库：def 级函数引用（workflows/{ref}.json 或 custom/*）。
+   * 该类型全部实例默认作为函数调用帧执行（递归 executeGraph，不分叉引擎）；
+   * 实例级 node.fn_ref / node.subgraph 优先于本字段。
+   */
+  fn_ref?: string
 }
 
 export interface ParamDef {
@@ -43,6 +49,14 @@ export interface NodeInstance {
   height: number
   params: Record<string, unknown>
   collapsed?: boolean
+  /**
+   * R11 函数节点：引用 workflows/{ref}.json（或 custom/*）为带签名子图。
+   * 签名 = 子图 _entry/PromptInput（入参占位）+ Output（返回值）。
+   * 执行时作为调用帧递归 executeGraph；优先级最高（其次 subgraph，再次 def.fn_ref）。
+   */
+  fn_ref?: string
+  /** R11 函数节点：内联带签名子图（fn_ref 缺省时生效；执行前深拷贝，绝不回写） */
+  subgraph?: Workflow
 }
 
 export interface Link {

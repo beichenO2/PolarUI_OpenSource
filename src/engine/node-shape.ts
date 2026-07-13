@@ -30,6 +30,8 @@ export function isComplexNodeDef(classType: string, def: NodeDef | null | undefi
   if (classType.startsWith('SSoT_')) return false
   if (classType === 'SubAgent') return true
   if (!def) return false
+  // R11: def 级函数引用节点天然是函数盒（紧凑收起 + fn 徽标 + 双击下钻）
+  if (typeof def.fn_ref === 'string' && def.fn_ref.trim()) return true
   const topCategory = def.category.split('/')[0]
   if (topCategory === 'Agentic' || topCategory === 'Evolve') return true
   if (def.expandable === true) return true
@@ -170,7 +172,8 @@ export function traceNodeShapePath(
       return
     }
     case 'fn': {
-      roundRectPath(ctx, x, y, w, h, 12 * scale)
+      // 有棱有角的直角块——区别于原语系的圆角/胶囊/六边形族
+      ctx.rect(x, y, w, h)
       return
     }
   }

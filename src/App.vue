@@ -708,7 +708,7 @@ import {
   writeLastSession,
   type LayoutScope,
 } from './engine/layout-memory'
-import type { NodeDef, NodeInstance } from './engine/types'
+import type { NodeDef, NodeInstance, Workflow } from './engine/types'
 import { defaultRoleDeclaration } from './engine/role-prompt'
 import HealthOverview from './components/HealthOverview.vue'
 import { startCheckupDaemon } from './engine/checkup-runner'
@@ -942,7 +942,9 @@ async function toggleCategory(name: string) {
 }
 
 function isExpandableNode(nodeDef: NodeDef): boolean {
+  // R11: def 级 fn_ref 的函数节点同样可从 palette ⤢ 直接展开函数体子图
   return nodeDef.expandable === true || nodeDef.params?.expandable?.default === true
+    || Boolean(nodeDef.fn_ref?.trim())
 }
 
 async function mountSubGraphCanvas(graph: Graph, layoutScope: LayoutScope) {
@@ -958,8 +960,8 @@ async function mountSubGraphCanvas(graph: Graph, layoutScope: LayoutScope) {
       selectedLinkId.value = id
       if (id) selectedNodeId.value = null
     }
-    subGraphCanvas.onExpandNode = (_nodeId, classType) => {
-      void expandNodeToSubgraph(classType, true)
+    subGraphCanvas.onExpandNode = (nodeId, classType) => {
+      void expandNodeToSubgraph(classType, true, nodeId)
     }
     subGraphCanvas.onWorkflowChanged = () => {
       scheduleLayoutSave(graph, layoutScope)
@@ -976,9 +978,42 @@ async function pushSubgraphFrame(frame: SubgraphFrame) {
   await mountSubGraphCanvas(frame.graph, frame.layoutScope)
 }
 
-async function expandNodeToSubgraph(classType: string, nested = false) {
+async function expandNodeToSubgraph(classType: string, nested = false, nodeId?: string) {
   const def = registry.get(classType)
   if (!def) return
+
+  // R11 函数节点三级交互之下钻：实例 fn_ref > 实例内联 subgraph > def.fn_ref，复用 Subgraph 栈
+  const hostGraph = nested
+    ? subgraphStack.value[subgraphStack.value.length - 1]?.graph
+    : workflowStore.graph
+  const inst = nodeId && hostGraph ? hostGraph.nodes.find(n => n.id === nodeId) : undefined
+  if (inst?.subgraph && !inst.fn_ref?.trim()) {
+    const subGraph = Graph.fromWorkflow(JSON.parse(JSON.stringify(inst.subgraph)) as Workflow)
+    await pushSubgraphFrame({
+      name: `${def.display_name} — fn 内联子图`,
+      graph: subGraph,
+      classType,
+      sourceNodeId: inst.id,
+      layoutScope: { kind: 'graph', graphId: subGraph.id, name: subGraph.name },
+    })
+    return
+  }
+  const fnRef = inst?.fn_ref?.trim() || def.fn_ref?.trim()
+  if (fnRef) {
+    const subGraph = await loadWorkflowByRef(fnRef)
+    if (subGraph) {
+      await pushSubgraphFrame({
+        name: `${def.display_name} — fn ${fnRef}`,
+        graph: subGraph,
+        classType,
+        sourceNodeId: inst?.id,
+        layoutScope: fnRef.startsWith('custom/')
+          ? { kind: 'custom', id: fnRef.replace(/^custom\//, '') }
+          : { kind: 'workflow-ref', ref: fnRef },
+      })
+      return
+    }
+  }
 
   if (classType === 'PetriDish') {
     const inst = workflowStore.graph.nodes.find(n => n.class_type === 'PetriDish')
@@ -2015,8 +2050,8 @@ onMounted(() => {
         scheduleLayoutSave(workflowStore.graph!, mainLayoutScope.value)
       }
     }
-    graphCanvas.onExpandNode = (_nodeId, classType) => {
-      expandNodeToSubgraph(classType)
+    graphCanvas.onExpandNode = (nodeId, classType) => {
+      void expandNodeToSubgraph(classType, false, nodeId)
     }
     graphCanvas.onOutputPreview = openOutputPip
     syncCanvasNodeDblClick()

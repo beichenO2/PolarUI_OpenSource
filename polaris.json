@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-13T02:07:27+08:00"
+    "last_synced_at": "2026-07-13T08:44:01+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -934,20 +934,39 @@
         },
         {
           "name": "fn_ref 数据模型 + 执行器调用帧",
-          "description": "node.fn_ref 指向 workflow JSON（_entry+Output 即签名）或 node.subgraph 内联；执行器把 fn 当调用帧递归 executeGraph；交互三级=单击选中/角标展开参数/双击下钻子图（复用 R6 Subgraph 栈）",
-          "status": "planned",
+          "description": "NodeInstance.fn_ref（workflows/*.json 或 custom/*）+ NodeInstance.subgraph 内联 + NodeDef.fn_ref（def 级默认，批4 迁移面）；优先级 实例 fn_ref > 实例 subgraph > def.fn_ref；executeNode 查注册表前先走 fn-frame 调用帧：装载/深拷贝子图 → 递归 executeGraph（fnDepth 护栏 ≤8 防自引用）→ 子图 Output/merged_output 按 def 输出槽名映射回 fn 节点；API 格式序列化 round-trip；三级交互双击下钻复用 Subgraph 栈",
+          "status": "done",
           "behavior": [
-            "fn 节点执行 = 递归 executeGraph，不分叉引擎",
-            "双击下钻复用既有 Subgraph 栈交互"
+            "fn 节点执行 = 递归 executeGraph，不分叉引擎（拓扑/步进/状态机子图均可为函数体）",
+            "双击下钻复用既有 Subgraph 栈交互",
+            "深度护栏：fnDepth 超 8 报错拒执行；内联子图执行前深拷贝绝不回写",
+            "步进父图下 fn 返回对象自动挂 state 槽参与 lgAccumulatedState 合并"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "commit 55d9acf（fn-frame.ts + executeNode 挂接 + 三 runner fnDepth + graph/loader round-trip + canvas/App.vue 下钻 + 13 文件）",
+            "tests/engine/fn-frame.test.ts 8/8：内联执行/深拷贝不回写/入参注入/fn_ref 磁盘引用优先/def.fn_ref 回退/递归深度护栏/非 fn 零扰动/API round-trip",
+            "2026-07-13: npm run qa 19/19 passed（新增 test:fn-frame 步）；vue-tsc 0 错",
+            "双主题截图基线 2 passed 零像素 diff（claude-code 无 fn 实例 → 渲染零回归实证）"
           ]
         },
         {
           "name": "def 逐批函数化迁移",
           "description": "ToolCall=LLM+工具定义、RetryLoop=路由+回边+计数、Agentic 范式=大组合等，逐批以函数子图替代专用 def",
-          "status": "planned",
+          "status": "in-progress",
           "behavior": [
             "每批迁移后 npm run qa 全绿 + 双主题基线不红（或有意更新）",
             "迁移完成后 palette 仅剩 6 原语 + 函数库"
+          ],
+          "evidence": [
+            "2026-07-13 试点批（2 def）：SchemaExtract → workflows/fn-schema-extract.json（PromptInput→JsonParse→Output）；LogicChainDecompose → workflows/fn-logic-chain-decompose.json（PromptInput→TextTransform(split,pattern)→Output）；def.fn_ref 生效、TS executor 已删",
+            "TextTransform split 增强：pattern 非空时作分隔符正则，空维持 \\r?\\n（向后兼容用例钉死）；CodeExec 因需 Hub :8040 真子进程执行被否决为函数体原料（headless QA 不可用）",
+            "契约修正：fn 帧按 def 槽名映射输出（parsed/sub_goals），旧 executor 漂移键（extracted/steps）废弃；LogicChainDecompose 长文本 .{1,120} 分块 fallback 随迁移移除（新契约=单元素数组，测试注释注明）",
+            "tests/engine/fn-def-pilot.test.ts 6 用例：真实磁盘 node-defs + workflows/ 加载（不走假 FS，端到端验证 loadWorkflowFromDisk 搜索根）；并入 QA 第12步 test:fn-frame（19 步不变）",
+            "2026-07-13: npm run qa 19/19 passed；sync-workflows 4 文件（fn-*.json 入 dist/workflows/，registry.json 仍 1 条不污染 UI 列表）；双主题截图基线 2 passed 零 diff（两 def 不在 claude-code 基线内）",
+            "2026-07-13 验收追加（523ee7e）：删漂移死槽位（SchemaExtract schema/valid/errors+strict、LogicChainDecompose dependencies+granularity/model，全库 grep 无连线引用）；修画布真 bug——refreshWireRouting 不失效 viewGraphCache 致 palette 拖放节点画得出但点不中（Function.bind 劫持探针实证），补 invalidateViewGraph；isExpandableNode 纳入 def.fn_ref；浏览器实测双击下钻双 fn 节点均开子图（面包屑「结构化提取 — fn fn-schema-extract」/「逻辑链分解 — fn fn-logic-chain-decompose」，截图 polarui-b4-fn-drill-*.png）；复跑 qa 19/19 绿、双主题基线零 diff",
+            "2026-07-13 第三批（1187b52）：fn 盒视觉身份独立——收起态窄 190px（FN_COLLAPSED_WIDTH，普通节点 260）+ 直角块轮廓（区别原语系圆角/胶囊/六边形）；ToolCall/RetryLoop 按侦察结论走 internal_workflow 下钻（toolcall-internal/retryloop-internal 示意子图 + NoteCard 说明 ADR-003 边界）而非 fn_ref——fn_ref 会劫持执行绕过 headless mock 且 fn 帧拓扑执行无法表达 ReAct 回环/_attempt 多轮，TS executor 保留并有用例钉死 fn_ref undefined；canvas 双击下钻条件纳入 def.internal_workflow；waypoints-hermes golden 因 fn 盒宽度变更重录（有意设计变更）；claude-code 双主题截图基线在 2% 阈值内通过未重录；claude-code mock e2e 全绿证明执行链路零回归；qa 19/19；浏览器实测 ToolCall 双击开「工具调用 — 内部结构」（截图 polarui-b4-toolcall-drill.png、polarui-b4-fnbox-final.png）",
+            "2026-07-13 第二批（a51f9ae）：RegexMatch → workflows/fn-regex-match.json（PromptInput({text})+PromptInput({pattern})→Validator(step,flags=i)→Output），TS executor 已删，死槽 captures/full_match+死参 flags 一并清理，空 pattern 语义改为非空判定并写入 description；Delay 修契约不函数化（子图无延时原语）：读 seconds（兼容 delay_ms）、slot0 改 pass 透传 trigger；Merge 修死选项 merge_object→first_non_null（evolution spec 实际在用）；嵌套二级下钻浏览器实测通过（子图内 fn 节点双击 → 面包屑两级「结构化提取 › 逻辑链分解」+ 上一层按钮，截图 polarui-b4-fn-nested.png）；画布 view-cache 回归单测 canvas-view-cache.test.ts（fake canvas + Proxy ctx，钉死 push 不 refresh 点不中 / refresh 后命中）并入 QA test:canvas 步；qa 19/19 绿、双主题基线零 diff"
           ]
         }
       ]

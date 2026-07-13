@@ -1,0 +1,56 @@
+{
+  "id": "wf_fn_logic_chain_decompose",
+  "name": "fn-logic-chain-decompose",
+  "nodes": [
+    {
+      "id": "p1",
+      "class_type": "PromptInput",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "prompt_text": "{complex_goal}"
+      }
+    },
+    {
+      "id": "t1",
+      "class_type": "TextTransform",
+      "x": 240,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "operation": "split",
+        "pattern": "[。；;\\n]"
+      }
+    },
+    {
+      "id": "o1",
+      "class_type": "Output",
+      "x": 480,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    }
+  ],
+  "links": [
+    {
+      "id": "l1",
+      "from_node": "p1",
+      "from_slot": 0,
+      "to_node": "t1",
+      "to_slot": 0
+    },
+    {
+      "id": "l2",
+      "from_node": "t1",
+      "from_slot": 0,
+      "to_node": "o1",
+      "to_slot": 0
+    }
+  ],
+  "created_at": 0,
+  "updated_at": 0
+}

@@ -21,6 +21,8 @@ export interface ExecuteGraphOptions {
   runContext?: import('./executor').RunContext
   /** 注入 PromptInput / WorkingMemory / StaticData 占位符 */
   externalInputs?: Record<string, unknown>
+  /** R11 fn 调用帧深度（fn-frame 递归 executeGraph 时 +1；根图缺省 0） */
+  fnDepth?: number
 }
 
 export interface ExecuteGraphResult {
@@ -393,6 +395,7 @@ export async function executeGraph(
     role: opts.role ?? resolved.role,
     runContext: opts.runContext,
     onStreamChunk: opts.onStreamChunk,
+    fnDepth: opts.fnDepth ?? 0,
     runTrace: {
       run_id: runId,
       workflow_id: graph.name,

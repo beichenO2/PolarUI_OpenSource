@@ -123,7 +123,7 @@ export class Graph {
   }
 
   toApiFormat(): Record<string, unknown> {
-    const result: Record<string, { class_type: string; inputs: Record<string, unknown> }> = {}
+    const result: Record<string, { class_type: string; inputs: Record<string, unknown>; fn_ref?: string; subgraph?: Workflow }> = {}
 
     for (const node of this.nodes) {
       const { _inputBindings, ...cleanParams } = (node.params ?? {}) as Record<string, unknown> & { _inputBindings?: Record<string, unknown> }
@@ -145,6 +145,9 @@ export class Graph {
       }
 
       result[node.id] = { class_type: node.class_type, inputs }
+      // R11 函数节点字段随 API 格式 round-trip
+      if (node.fn_ref) result[node.id].fn_ref = node.fn_ref
+      if (node.subgraph) result[node.id].subgraph = node.subgraph
     }
 
     const out: Record<string, unknown> = { _name: this.name, ...result }

@@ -23,9 +23,10 @@ export const OUTPUT_CARD_WIDTH = 220
 /** 简单几何形状（流程图原子）：slot 垂直均分，高度只依赖 slot 数（确定性） */
 export const SIMPLE_SLOT_SPACING = 26
 export const SIMPLE_NODE_MIN_H = 72
-/** fn 盒收起态（可伸缩函数的"签名行"） */
+/** fn 盒收起态（可伸缩函数的"签名行"）——宽度也窄于普通节点以示区分 */
 export const FN_COLLAPSED_SLOT_SPACING = 18
 export const FN_COLLAPSED_MIN_H = 48
+export const FN_COLLAPSED_WIDTH = 190
 
 export function simpleShapeHeight(maxSlots: number): number {
   return Math.max(SIMPLE_NODE_MIN_H, maxSlots * SIMPLE_SLOT_SPACING + 24)
@@ -93,7 +94,8 @@ export function normalizeNodeDimension(node: NodeInstance): void {
   }
   const def = registry.get(node.class_type)
   if (!def) return
-  node.width = NODE_DEFAULT_WIDTH
+  const isCollapsedFn = nodeShape(node.class_type, def) === 'fn' && node.collapsed !== false
+  node.width = isCollapsedFn ? FN_COLLAPSED_WIDTH : NODE_DEFAULT_WIDTH
   node.height = nodeHeightFor(node.class_type, def, node.collapsed)
 }
 

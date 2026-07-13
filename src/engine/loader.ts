@@ -283,6 +283,16 @@ function fromApiFormat(
       if (Object.keys(inputBindings).length > 0) {
         added.params._inputBindings = inputBindings
       }
+      // R11 函数节点字段（fn_ref / 内联 subgraph）从 API 格式恢复
+      const fnRef = (nodeData as { fn_ref?: unknown }).fn_ref
+      if (typeof fnRef === 'string' && fnRef.trim()) added.fn_ref = fnRef.trim()
+      const inlineSub = (nodeData as { subgraph?: unknown }).subgraph
+      if (
+        inlineSub && typeof inlineSub === 'object' &&
+        Array.isArray((inlineSub as Workflow).nodes) && Array.isArray((inlineSub as Workflow).links)
+      ) {
+        added.subgraph = inlineSub as Workflow
+      }
     } else {
       skippedTypes.add(nodeData.class_type)
     }

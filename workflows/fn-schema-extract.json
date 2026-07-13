@@ -1,0 +1,55 @@
+{
+  "id": "wf_fn_schema_extract",
+  "name": "fn-schema-extract",
+  "nodes": [
+    {
+      "id": "p1",
+      "class_type": "PromptInput",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "prompt_text": "{text}"
+      }
+    },
+    {
+      "id": "j1",
+      "class_type": "JsonParse",
+      "x": 240,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "path": ""
+      }
+    },
+    {
+      "id": "o1",
+      "class_type": "Output",
+      "x": 480,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    }
+  ],
+  "links": [
+    {
+      "id": "l1",
+      "from_node": "p1",
+      "from_slot": 0,
+      "to_node": "j1",
+      "to_slot": 0
+    },
+    {
+      "id": "l2",
+      "from_node": "j1",
+      "from_slot": 0,
+      "to_node": "o1",
+      "to_slot": 0
+    }
+  ],
+  "created_at": 0,
+  "updated_at": 0
+}

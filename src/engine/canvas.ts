@@ -314,6 +314,9 @@ export class GraphCanvas {
   }
 
   refreshWireRouting(): void {
+    // 外部（palette 拖放等）改图后必须失效视图缓存，否则 getNodeAt 用旧
+    // 空视图命中失败——新节点画得出来但点不中（R11 批4实测修复）。
+    this.invalidateViewGraph()
     this.recomputeRouting()
   }
 
@@ -1067,8 +1070,15 @@ export class GraphCanvas {
         if (gid) this.expandGroupById(gid)
         return
       }
-      // fn 盒 header 双击 = 收起/展开（body 双击仍走子图展开等原逻辑）
-      if (this.hitFnHeader(hit, gp.y)) {
+      // R11: 有内部结构可看的函数节点（实例 fn_ref / 内联 subgraph / def.fn_ref /
+      // def.internal_workflow）双击任意处直接下钻内部线路图——与普通模块交互一致；
+      // 收起/展开走右上角 ▸/▾ 热区（mousedown）。
+      const hitDef = registry.get(hit.class_type)
+      const hitIsFnTarget = Boolean(
+        hit.fn_ref || hit.subgraph || hitDef?.fn_ref || hitDef?.internal_workflow,
+      )
+      // 无内部结构的 fn 盒（Agentic 合成范式等）：header 双击仍是收起/展开
+      if (!hitIsFnTarget && this.hitFnHeader(hit, gp.y)) {
         this.toggleFnCollapsed(hit)
         return
       }
@@ -1086,7 +1096,9 @@ export class GraphCanvas {
         return
       }
       const def = registry.get(hit.class_type)
-      if (def?.expandable === true || def?.params?.expandable?.default === true) {
+      // R11 fn 函数节点（实例 fn_ref / 内联 subgraph / def.fn_ref）与 expandable 同走下钻
+      const isFnNode = Boolean(hit.fn_ref || hit.subgraph || def?.fn_ref)
+      if (isFnNode || def?.expandable === true || def?.params?.expandable?.default === true) {
         this.onExpandNode?.(hit.id, hit.class_type)
       }
     }

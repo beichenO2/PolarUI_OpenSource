@@ -1,0 +1,86 @@
+{
+  "id": "wf_toolcall_internal",
+  "name": "toolcall-internal",
+  "nodes": [
+    {
+      "id": "note1",
+      "class_type": "NoteCard",
+      "x": 0,
+      "y": -160,
+      "width": 420,
+      "height": 80,
+      "params": {
+        "content": "ADR-003：ToolCall 只产出 tool_calls 意图；工具执行走父图 Switch→明面工具节点，ReAct 回环在父图边上",
+        "expanded_width": 420
+      }
+    },
+    {
+      "id": "p1",
+      "class_type": "PromptInput",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "prompt_text": "{prompt}"
+      }
+    },
+    {
+      "id": "s1",
+      "class_type": "StaticData",
+      "x": 0,
+      "y": 160,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "value": "{tool_definitions}",
+        "type": "json"
+      }
+    },
+    {
+      "id": "l1",
+      "class_type": "LLM",
+      "x": 300,
+      "y": 60,
+      "width": 200,
+      "height": 100,
+      "params": {
+        "model": "GLM-5.1"
+      }
+    },
+    {
+      "id": "o1",
+      "class_type": "Output",
+      "x": 620,
+      "y": 60,
+      "width": 200,
+      "height": 100,
+      "params": {}
+    }
+  ],
+  "links": [
+    {
+      "id": "lk1",
+      "from_node": "p1",
+      "from_slot": 0,
+      "to_node": "l1",
+      "to_slot": 0
+    },
+    {
+      "id": "lk2",
+      "from_node": "s1",
+      "from_slot": 0,
+      "to_node": "l1",
+      "to_slot": 1
+    },
+    {
+      "id": "lk3",
+      "from_node": "l1",
+      "from_slot": 0,
+      "to_node": "o1",
+      "to_slot": 0
+    }
+  ],
+  "created_at": 0,
+  "updated_at": 0
+}

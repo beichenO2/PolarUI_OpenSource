@@ -25,7 +25,7 @@
       "class_type": "PromptInject",
       "x": 400,
       "y": 80,
-      "width": 260,
+      "width": 190,
       "height": 52,
       "params": {
         "role": "You are Claude Code, an interactive CLI tool for software engineering.",
@@ -128,8 +128,8 @@
       "class_type": "ToolCall",
       "x": 1600,
       "y": 220,
-      "width": 260,
-      "height": 76,
+      "width": 190,
+      "height": 52,
       "params": {
         "model": "GLM-5.1",
         "tool_list": "[]"
@@ -267,8 +267,8 @@
       "class_type": "RetryLoop",
       "x": 1300,
       "y": 220,
-      "width": 260,
-      "height": 154,
+      "width": 190,
+      "height": 106,
       "params": {
         "max_retries": 7
       }
@@ -323,8 +323,8 @@
       "class_type": "RetryLoop",
       "x": 1300,
       "y": 80,
-      "width": 260,
-      "height": 154,
+      "width": 190,
+      "height": 106,
       "params": {
         "max_retries": 7
       }
@@ -351,8 +351,8 @@
       "class_type": "RetryLoop",
       "x": 1300,
       "y": 360,
-      "width": 260,
-      "height": 154,
+      "width": 190,
+      "height": 106,
       "params": {
         "max_retries": 7
       }
@@ -362,7 +362,7 @@
       "class_type": "SubAgent",
       "x": 1900,
       "y": 1480,
-      "width": 260,
+      "width": 190,
       "height": 52,
       "params": {
         "model": "GLM-5.1",
@@ -645,8 +645,8 @@
       "to_slot": 1
     }
   ],
-  "created_at": 1783879471174,
-  "updated_at": 1783879473482,
+  "created_at": 1783924198950,
+  "updated_at": 1783924211210,
   "_entry": "1",
   "_lg_edges": [
     {

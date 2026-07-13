@@ -1,6 +1,8 @@
 [
   {
     "class_type": "ToolCall",
+    "internal_workflow": "toolcall-internal",
+    "expandable": true,
     "category": "LLM",
     "display_name": "工具调用",
     "description": "复合组件：tool list + LLM function calling → tool_calls。执行走 Switch→明面工具节点（ADR-003）。",
@@ -50,6 +52,7 @@
   },
   {
     "class_type": "SchemaExtract",
+    "fn_ref": "fn-schema-extract",
     "category": "LLM",
     "display_name": "结构化提取",
     "description": "原子化元件：给定 LLM 原始文本 + JSON Schema → 解析出符合 Schema 的对象。纯解析，不调用 LLM。",
@@ -59,11 +62,6 @@
         "name": "text",
         "type": "string",
         "description": "待处理的文本输入。"
-      },
-      {
-        "name": "schema",
-        "type": "object",
-        "description": "JSON Schema，用于结构化解析。"
       }
     ],
     "outputs": [
@@ -71,27 +69,9 @@
         "name": "parsed",
         "type": "object",
         "description": "结构化提取 · 输出「parsed」（类型 object）"
-      },
-      {
-        "name": "valid",
-        "type": "boolean",
-        "optional": true,
-        "description": "图/配置是否通过完备性检验。"
-      },
-      {
-        "name": "errors",
-        "type": "object",
-        "optional": true,
-        "description": "结构化提取 · 输出「errors」（类型 object），可选"
       }
     ],
-    "params": {
-      "strict": {
-        "type": "boolean",
-        "default": true,
-        "label": "严格模式"
-      }
-    }
+    "params": {}
   },
   {
     "class_type": "HumanApproval",
@@ -149,9 +129,10 @@
   },
   {
     "class_type": "RegexMatch",
+    "fn_ref": "fn-regex-match",
     "category": "Control",
     "display_name": "正则匹配",
-    "description": "原子化元件：输入文本 + 正则表达式 → 输出匹配结果与捕获组。",
+    "description": "原子化元件：输入文本 + 正则表达式 → 输出匹配结果与捕获组。空 pattern 时输出非空判定（passed 语义，自 R11 函数化起）。",
     "color": "#5a4a0c",
     "inputs": [
       {
@@ -165,18 +146,6 @@
         "name": "matched",
         "type": "boolean",
         "description": "正则匹配 · 输出「matched」（类型 boolean）"
-      },
-      {
-        "name": "captures",
-        "type": "object",
-        "optional": true,
-        "description": "正则匹配 · 输出「captures」（类型 object），可选"
-      },
-      {
-        "name": "full_match",
-        "type": "string",
-        "optional": true,
-        "description": "正则匹配 · 输出「full_match」（类型 string），可选"
       }
     ],
     "params": {
@@ -184,11 +153,6 @@
         "type": "text",
         "default": "",
         "label": "正则表达式"
-      },
-      "flags": {
-        "type": "string",
-        "default": "g",
-        "label": "标志 (g/i/m)"
       }
     }
   },
@@ -293,6 +257,8 @@
   },
   {
     "class_type": "RetryLoop",
+    "internal_workflow": "retryloop-internal",
+    "expandable": true,
     "category": "Control",
     "display_name": "重试循环",
     "description": "【Agent 默认推荐】外环：最多 7 轮「刷新上下文后从用户需求(SSOT)重新验收」。轮内：有错则改、改完再查直至本轮自认无问题。retry_hint 仅用于轮内修正，不是把错误贴进下一轮 prompt。",
@@ -696,7 +662,7 @@
         "default": "concat",
         "options": [
           "concat",
-          "merge_object",
+          "first_non_null",
           "array"
         ],
         "label": "合并策略"
@@ -984,6 +950,7 @@
   },
   {
     "class_type": "LogicChainDecompose",
+    "fn_ref": "fn-logic-chain-decompose",
     "category": "Transform",
     "display_name": "逻辑链分解",
     "description": "原子化元件：输入复杂目标 → 分解 → 输出子目标列表 + 依赖关系。",
@@ -1005,35 +972,9 @@
         "name": "sub_goals",
         "type": "object",
         "description": "逻辑链分解 · 输出「sub_goals」（类型 object）"
-      },
-      {
-        "name": "dependencies",
-        "type": "object",
-        "description": "逻辑链分解 · 输出「dependencies」（类型 object）"
       }
     ],
-    "params": {
-      "granularity": {
-        "type": "select",
-        "default": "medium",
-        "options": [
-          "coarse",
-          "medium",
-          "fine"
-        ],
-        "label": "分解粒度"
-      },
-      "model": {
-        "type": "select",
-        "default": "GLM-5.1",
-        "options": [
-          "GLM-5.1",
-          "MiniMax-2.7-HighSpeed",
-          "qwen-plus"
-        ],
-        "label": "推理模型"
-      }
-    }
+    "params": {}
   },
   {
     "class_type": "ReflectiveContext",
