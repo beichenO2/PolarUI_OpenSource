@@ -1,0 +1,53 @@
+services:
+  web:
+    image: ${POLAR_NATIVE_IMAGE:-polar-native-web:local}
+    build: .
+    environment:
+      PORT: "3920"
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-polar}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-polar}"
+      AUTH_PEPPER: ${AUTH_PEPPER:?Set AUTH_PEPPER to at least 32 random characters}
+      PUBLIC_APP_ORIGIN: ${PUBLIC_APP_ORIGIN:?Set PUBLIC_APP_ORIGIN}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:?Set SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
+      SMTP_SECURE: ${SMTP_SECURE:?Set SMTP_SECURE}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      WORKFLOW_ENDPOINT_OVERRIDE: ${WORKFLOW_ENDPOINT_OVERRIDE:-}
+      WORKFLOW_TIMEOUT_MS: ${WORKFLOW_TIMEOUT_MS:-60000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${POLAR_WEB_BIND:-127.0.0.1}:${POLAR_WEB_PORT:-3920}:3920"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-polar}
+      POSTGRES_USER: ${POSTGRES_USER:-polar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - polar_postgres_data:/var/lib/postgresql/data
+
+  mailpit:
+    image: ghcr.io/axllent/mailpit:v1.27
+    profiles:
+      - qa
+    expose:
+      - "1025"
+      - "8025"
+
+volumes:
+  polar_postgres_data:

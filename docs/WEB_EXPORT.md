@@ -63,6 +63,77 @@ node scripts/export-release.mjs --workflow taoci-outreach --compile-only \
 
 **Agent 职责**：调用 CLI、读 JSON 结果、报告路径。**禁止**在 `~/Desktop/Web_related/` 手写 `.tsx` / `.mjs` 建站。
 
+## Native workflow web template — Phase 2 identity
+
+The native template remains opt-in. Phase 2 adds native PostgreSQL identity persistence: public users register with email, a mandatory username, and password; Mailpit or the configured SMTP service delivers a six-digit verification code; login accepts either email or username. Trusted operators can create an already verified user through the administrator CLI. Context, Route, Stage, Thread, and Checkpoint persistence remain Phase 3 work.
+
+```bash
+node scripts/export-release.mjs \
+  --workflow claude-code \
+  --template-flavor native \
+  --compile-only \
+  --skip-preflight
+```
+
+A native release contains one `polar-web` application and no LibreChat runtime. Phase 2 identity is complete, but native must remain opt-in until the Phase 3–5 workflow persistence, migration, and cutover gates are complete.
+
+The exported `site.config.json` records non-secret identity metadata under `web.identity`. Credentials never enter that file or the release tree.
+
+### Bundled PostgreSQL deployment (default)
+
+Set production secrets in the operator environment. PostgreSQL is reachable only on the Compose network; only the Web port is published. Migrations run during API startup and the named volume survives Web container replacement.
+
+```bash
+export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+export AUTH_PEPPER="$(openssl rand -hex 32)"
+export PUBLIC_APP_ORIGIN="https://workflow.example.com"
+export COOKIE_SECURE=true
+export SMTP_HOST="smtp.example.com"
+export SMTP_PORT=587
+export SMTP_FROM="Polar Workflow <no-reply@example.com>"
+export SMTP_SECURE=false
+
+node scripts/export-release.mjs \
+  --workflow claude-code \
+  --template-flavor native \
+  --database-mode bundled
+```
+
+### External PostgreSQL deployment
+
+External mode starts only the Web container and requires an operator-supplied `DATABASE_URL`. Deployment writes a mode-specific `0600` env file under `~/.config/polarui/release-env/`, outside the immutable release directory; commands reference that file instead of embedding secrets.
+
+```bash
+export DATABASE_URL="postgresql://user:password@db.example.com:5432/polar"
+export AUTH_PEPPER="$(openssl rand -hex 32)"
+export PUBLIC_APP_ORIGIN="https://workflow.example.com"
+export COOKIE_SECURE=true
+export SMTP_HOST="smtp.example.com"
+export SMTP_PORT=587
+export SMTP_FROM="Polar Workflow <no-reply@example.com>"
+export SMTP_SECURE=false
+
+node scripts/export-release.mjs \
+  --workflow claude-code \
+  --template-flavor native \
+  --database-mode external
+```
+
+### Mailpit QA and administrator account
+
+The template Compose file keeps Mailpit behind the `qa` profile. The production release gate builds a fresh native export, verifies registration before and after email confirmation, checks email and username login, session revocation and restart persistence, administrator CLI creation, external-database readiness, and the 390-pixel layout.
+
+```bash
+npm run qa:native-identity
+
+# Inside a running release container; --verified must be explicit.
+npm run user:create --workspace @polar/native-web-api -- \
+  --email admin@example.com \
+  --username admin \
+  --password 'replace-this-password' \
+  --verified
+```
+
 ### 2.3 P2a：`http_workflows` 配置直出（ADR-012）
 
 导出时把外置 HTTP `/run` 服务写进发行版，无需手改 `site.config.json` / `librechat.yaml`。

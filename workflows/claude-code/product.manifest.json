@@ -1,0 +1,44 @@
+{
+  "contract_version": "1.0",
+  "product": {
+    "id": "claude-code",
+    "name": "Claude Code Workspace",
+    "context_label": "项目",
+    "route_label": "路线"
+  },
+  "workflow": {
+    "id": "claude-code",
+    "endpoint": "http://127.0.0.1:8065/run/claude-code/flow.json"
+  },
+  "stages": [
+    {
+      "key": "discover",
+      "label": "明确项目",
+      "component_key": "generic_chat",
+      "internal_states": ["start"],
+      "actions": [
+        { "key": "adopt_thread", "label": "采纳到当前路线" },
+        { "key": "advance", "label": "推进阶段" }
+      ]
+    },
+    {
+      "key": "work",
+      "label": "推进实现",
+      "component_key": "document_workspace",
+      "internal_states": ["running"],
+      "actions": [
+        { "key": "adopt_thread", "label": "采纳到当前路线" },
+        { "key": "advance", "label": "推进阶段" }
+      ]
+    },
+    {
+      "key": "review",
+      "label": "复核交付",
+      "component_key": "structured_form",
+      "internal_states": ["done"],
+      "actions": [
+        { "key": "adopt_thread", "label": "采纳到当前路线" }
+      ]
+    }
+  ]
+}

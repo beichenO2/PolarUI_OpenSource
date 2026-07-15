@@ -9,15 +9,24 @@ import { existsSync, readFileSync, rmSync, mkdirSync, readdirSync, writeFileSync
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { exportRelease, resolveReleaseId } from './export-release.mjs';
+import { exportRelease, parseArgs as parseExportArgs, resolveReleaseId } from './export-release.mjs';
 import { verifyRelease } from './verify-release.mjs';
 import { verifyOrthogonality } from './verify-orthogonality.mjs';
 import { graphNodeTypes } from './graph-utils.mjs';
+import { buildNativeDeploymentPlan } from './deploy-web-release.mjs';
 
 const WEB_ROOT = join(process.env.HOME ?? '~', 'Desktop/Web_related');
 const TEST_PREFIX = `test-export-${randomUUID().slice(0, 8)}`;
 const TEST_ROOT = join(WEB_ROOT, TEST_PREFIX);
 const WORKFLOW_ID = 'claude-code';
+
+test('native export CLI accepts an explicit external database mode', () => {
+  const args = parseExportArgs([
+    'node', 'scripts/export-release.mjs', '--workflow', WORKFLOW_ID,
+    '--template-flavor', 'native', '--database-mode', 'external',
+  ]);
+  assert.equal(args.databaseMode, 'external');
+});
 
 before(() => {
   mkdirSync(TEST_ROOT, { recursive: true });
@@ -309,4 +318,105 @@ test('P2a export merges --http-workflow into site.config + librechat.yaml', asyn
   assert.match(lc, /p2a-demo-http/);
   assert.match(lc, /P2a Demo/);
   rmSync(r.release_path, { recursive: true, force: true });
+});
+
+test('native export contains polar-web and excludes LibreChat runtime', async () => {
+  const r = await exportRelease({
+    workflow: WORKFLOW_ID,
+    webRoot: TEST_ROOT,
+    templateFlavor: 'native',
+    skipPreflight: true,
+    compileOnly: true,
+    silent: true,
+  });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.equal(r.manifest.template_flavor, 'native');
+  assert.ok(existsSync(join(r.release_path, 'product.manifest.json')));
+  assert.ok(existsSync(join(r.release_path, 'Dockerfile')));
+  assert.ok(existsSync(join(r.release_path, 'db/migrations/0001_identity.sql')));
+  assert.ok(existsSync(join(r.release_path, 'compose.yml')));
+  assert.ok(existsSync(join(r.release_path, 'compose.external-db.yml')));
+  const config = JSON.parse(readFileSync(join(r.release_path, 'site.config.json'), 'utf8'));
+  assert.equal(config.web.identity.provider, 'native-postgresql');
+  assert.equal(config.web.database_mode, 'bundled');
+  assert.equal(existsSync(join(r.release_path, 'librechat.yaml')), false);
+  assert.equal(existsSync(join(r.release_path, 'upstream/librechat')), false);
+  rmSync(r.release_path, { recursive: true, force: true });
+});
+
+test('native external compile-only export records external database mode', async () => {
+  const r = await exportRelease({
+    workflow: WORKFLOW_ID,
+    webRoot: TEST_ROOT,
+    templateFlavor: 'native',
+    databaseMode: 'external',
+    skipPreflight: true,
+    compileOnly: true,
+    silent: true,
+  });
+  assert.ok(r.ok, JSON.stringify(r));
+  const config = JSON.parse(readFileSync(join(r.release_path, 'site.config.json'), 'utf8'));
+  assert.equal(config.web.database_mode, 'external');
+  rmSync(r.release_path, { recursive: true, force: true });
+});
+
+test('native deployment defaults to bundled compose and keeps database volumes', () => {
+  const plan = buildNativeDeploymentPlan({
+    databaseMode: 'bundled',
+    releaseRoot: '/tmp/native-release',
+    releaseId: 'demo',
+    webPort: 4012,
+    environment: {
+      POSTGRES_PASSWORD: 'database-secret',
+      AUTH_PEPPER: 'x'.repeat(32),
+      PUBLIC_APP_ORIGIN: 'https://workflow.example.test',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_PORT: '587',
+      SMTP_FROM: 'Workflow <noreply@example.test>',
+      SMTP_SECURE: 'false',
+    },
+  });
+  assert.match(plan.command, /docker compose/);
+  assert.match(plan.command, /compose\.yml/);
+  assert.match(plan.command, /up --build web/);
+  assert.doesNotMatch(plan.cleanupCommand, /\s-v(?:\s|$)/);
+  assert.equal(plan.databaseMode, 'bundled');
+});
+
+test('external native deployment requires DATABASE_URL and runs only web', () => {
+  assert.throws(() => buildNativeDeploymentPlan({
+    databaseMode: 'external',
+    releaseRoot: '/tmp/native-release',
+    releaseId: 'demo',
+    webPort: 4012,
+    environment: {
+      AUTH_PEPPER: 'x'.repeat(32),
+      PUBLIC_APP_ORIGIN: 'https://workflow.example.test',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_PORT: '587',
+      SMTP_FROM: 'Workflow <noreply@example.test>',
+      SMTP_SECURE: 'false',
+    },
+  }), /DATABASE_URL/);
+
+  const plan = buildNativeDeploymentPlan({
+    databaseMode: 'external',
+    releaseRoot: '/tmp/native-release',
+    releaseId: 'demo',
+    webPort: 4012,
+    environment: {
+      DATABASE_URL: 'postgresql://db.example.test/workflow',
+      AUTH_PEPPER: 'x'.repeat(32),
+      PUBLIC_APP_ORIGIN: 'https://workflow.example.test',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_PORT: '587',
+      SMTP_FROM: 'Workflow <noreply@example.test>',
+      SMTP_SECURE: 'false',
+    },
+  });
+  assert.match(plan.command, /docker run/);
+  assert.match(plan.command, /--env-file/);
+  assert.doesNotMatch(plan.command, /postgresql:\/\/db\.example\.test/);
+  assert.doesNotMatch(plan.command, /docker compose/);
+  assert.equal(plan.databaseMode, 'external');
 });

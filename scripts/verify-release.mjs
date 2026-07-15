@@ -20,6 +20,24 @@ const REQUIRED = [
   'EXPORT.log',
 ];
 
+const NATIVE_REQUIRED = [
+  'product.manifest.json',
+  'Dockerfile',
+  '.env.example',
+  'compose.yml',
+  'compose.external-db.yml',
+  'db/migrations/0001_identity.sql',
+  'db/migrations/0002_workflow_domain.sql',
+  'db/migrations/0003_workflow_commands.sql',
+  'apps/api/src/domain/service.ts',
+  'apps/api/src/commands/bridge.ts',
+  'apps/api/src/commands/service.ts',
+  'apps/api/src/routes/domain.ts',
+  'apps/api/src/routes/commands.ts',
+  'apps/web/src/commands/api.ts',
+];
+const NATIVE_FORBIDDEN = ['librechat.yaml', 'upstream/librechat', 'scripts/build-librechat.mjs'];
+
 const JSON_FILES = [
   'site.manifest.json',
   'site.config.json',
@@ -27,6 +45,85 @@ const JSON_FILES = [
   'config/memory-schema.json',
   'config/required-executors.json',
 ];
+
+function composeServiceBlock(source, service) {
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === `  ${service}:`);
+  if (start < 0) return '';
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index++) {
+    if (/^  [A-Za-z0-9_-]+:\s*$/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join('\n');
+}
+
+function isPlaceholderSecret(value) {
+  const normalized = value.trim().replace(/^['"]|['"]$/g, '');
+  return normalized === ''
+    || normalized.startsWith('${')
+    || /change-me|replace-with|example|placeholder|generate|<.*>/i.test(normalized);
+}
+
+function verifyComposeSecretReferences(source, label, errors) {
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(/^\s*(DATABASE_URL|AUTH_PEPPER|POSTGRES_PASSWORD|SMTP_PASSWORD)\s*:\s*(.*)$/);
+    if (!match) continue;
+    const value = match[2].trim();
+    if (!value.includes('${') && !isPlaceholderSecret(value)) {
+      errors.push(`embedded usable ${match[1]} in ${label} compose`);
+    }
+  }
+}
+
+function verifyNativeIdentity(releaseRoot, errors) {
+  const bundledPath = join(releaseRoot, 'compose.yml');
+  const externalPath = join(releaseRoot, 'compose.external-db.yml');
+  const envPath = join(releaseRoot, '.env.example');
+
+  if (existsSync(bundledPath)) {
+    const compose = readFileSync(bundledPath, 'utf8');
+    verifyComposeSecretReferences(compose, 'bundled', errors);
+    const postgres = composeServiceBlock(compose, 'postgres');
+    if (!composeServiceBlock(compose, 'web')) errors.push('native compose missing web service');
+    if (!postgres) errors.push('native compose missing postgres service');
+    if (/^\s+ports:\s*$/m.test(postgres)) {
+      errors.push('native compose must not publish a PostgreSQL port');
+    }
+    for (const name of ['DATABASE_URL', 'AUTH_PEPPER', 'PUBLIC_APP_ORIGIN', 'SMTP_HOST']) {
+      if (!compose.includes(name)) errors.push(`native compose missing auth configuration: ${name}`);
+    }
+    if (/mongo(db)?\s*:/i.test(compose) || /image:\s*[^\n]*mongo/i.test(compose)) {
+      errors.push('forbidden MongoDB runtime in native compose');
+    }
+  }
+
+  if (existsSync(externalPath)) {
+    const compose = readFileSync(externalPath, 'utf8');
+    verifyComposeSecretReferences(compose, 'external database', errors);
+    if (!composeServiceBlock(compose, 'web')) errors.push('external database compose missing web service');
+    if (composeServiceBlock(compose, 'postgres')) errors.push('external database compose must not define postgres');
+    for (const name of ['DATABASE_URL', 'AUTH_PEPPER', 'PUBLIC_APP_ORIGIN', 'SMTP_HOST']) {
+      if (!compose.includes(name)) errors.push(`external database compose missing required configuration: ${name}`);
+    }
+  }
+
+  if (existsSync(envPath)) {
+    for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const match = line.match(/^\s*(AUTH_PEPPER|SMTP_PASSWORD|POSTGRES_PASSWORD)\s*=\s*(.*)$/);
+      if (match && !isPlaceholderSecret(match[2])) {
+        errors.push(`embedded usable identity secret in .env.example: ${match[1]}`);
+      }
+    }
+  }
+
+  const packagePath = join(releaseRoot, 'package.json');
+  if (existsSync(packagePath) && /librechat|mongodb|mongoose/i.test(readFileSync(packagePath, 'utf8'))) {
+    errors.push('forbidden LibreChat or MongoDB dependency in native package');
+  }
+}
 
 /**
  * @param {string} releaseRoot
@@ -36,9 +133,31 @@ export function verifyRelease(releaseRoot) {
   const errors = [];
   let checked = 0;
 
-  for (const rel of REQUIRED) {
+  let templateFlavor = 'legacy';
+  const manifestPath = join(releaseRoot, 'site.manifest.json');
+  if (existsSync(manifestPath)) {
+    try {
+      templateFlavor = JSON.parse(readFileSync(manifestPath, 'utf8')).template_flavor ?? 'legacy';
+    } catch {
+      // The normal JSON validation below reports the malformed manifest.
+    }
+  }
+
+  const required = templateFlavor === 'native'
+    ? [...REQUIRED, ...NATIVE_REQUIRED]
+    : REQUIRED;
+
+  for (const rel of required) {
     checked++;
     if (!existsSync(join(releaseRoot, rel))) errors.push(`missing: ${rel}`);
+  }
+
+  if (templateFlavor === 'native') {
+    for (const rel of NATIVE_FORBIDDEN) {
+      checked++;
+      if (existsSync(join(releaseRoot, rel))) errors.push(`forbidden in native release: ${rel}`);
+    }
+    verifyNativeIdentity(releaseRoot, errors);
   }
 
   const parsed = {};

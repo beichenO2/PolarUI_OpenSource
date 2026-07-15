@@ -82,7 +82,13 @@ export function compileSiteConfig(p) {
     requiredExecutors,
     polaruiRoot,
     httpWorkflows,
+    templateFlavor = 'legacy',
+    databaseMode = 'bundled',
   } = p;
+
+  if (templateFlavor === 'native' && !['bundled', 'external'].includes(databaseMode)) {
+    throw new Error(`unsupported native database mode: ${databaseMode}`);
+  }
 
   const snapshotPath = join(releaseRoot, workflowSnapshotRel);
   const snapshotRaw = readFileSync(snapshotPath, 'utf8');
@@ -100,26 +106,49 @@ export function compileSiteConfig(p) {
     workflow_checksum: checksum,
     memory_schema: memorySchemaRel,
     web_root: releaseRoot,
+    template_flavor: templateFlavor,
   };
 
-  const config = {
+  const common = {
     release_id: releaseId,
     workflow_id: workflowId,
+    template_flavor: templateFlavor,
     engine: 'polarflow',
     polarflow: {
       api_url_env: 'WORKFLOW_ENGINE_URL',
       default_api_url: 'http://127.0.0.1:8065',
       flow_path: `${workflowId}/flow.json`,
-      host_api_url: 'http://127.0.0.1:8065',
     },
-    preferred_api_port: 3920,
-    preferred_lc_port: 3080,
     port: null,
-    librechat_port: null,
     registry: registry ?? {},
     required_executors: requiredExecutors ?? [],
     memory_schema: memorySchemaRel,
   };
+
+  const config = templateFlavor === 'native'
+    ? {
+        ...common,
+        preferred_web_port: 3920,
+        web: {
+          template_flavor: 'native',
+          database_mode: databaseMode,
+          identity: {
+            provider: 'native-postgresql',
+            email_verification: 'six-digit-code',
+            login_identifiers: ['email', 'username'],
+          },
+        },
+      }
+    : {
+        ...common,
+        polarflow: {
+          ...common.polarflow,
+          host_api_url: 'http://127.0.0.1:8065',
+        },
+        preferred_api_port: 3920,
+        preferred_lc_port: 3080,
+        librechat_port: null,
+      };
 
   const normalized = normalizeHttpWorkflows(httpWorkflows);
   if (normalized.length > 0) {

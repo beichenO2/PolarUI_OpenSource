@@ -1,0 +1,24 @@
+{
+  "name": "@polar/native-web-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @polar/native-web-product-sdk && npm run build -w @polar/native-web-web && npm run build -w @polar/native-web-api",
+    "start": "npm run start -w @polar/native-web-api",
+    "test": "npm run test -ws --if-present",
+    "test:identity": "npm run test --workspace @polar/native-web-api",
+    "qa:identity": "npm run integration-test --workspace @polar/native-web-api",
+    "test:unit": "npm run test -ws --if-present",
+    "dev:web": "npm run dev -w @polar/native-web-web",
+    "dev:api": "npm run dev -w @polar/native-web-api",
+    "user:create": "npm run user:create --workspace @polar/native-web-api --"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

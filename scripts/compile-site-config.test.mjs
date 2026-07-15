@@ -125,3 +125,36 @@ describe('compileSiteConfig http_workflows', () => {
     }
   });
 });
+
+test('native config exposes one web port and no librechat port', () => {
+  const opts = baseOpts({
+    templateFlavor: 'native',
+  });
+  try {
+    const result = compileSiteConfig(opts);
+    assert.equal(result.manifest.template_flavor, 'native');
+    assert.equal(result.config.preferred_web_port, 3920);
+    assert.equal('preferred_lc_port' in result.config, false);
+    assert.deepEqual(result.config.web, {
+      template_flavor: 'native',
+      database_mode: 'bundled',
+      identity: {
+        provider: 'native-postgresql',
+        email_verification: 'six-digit-code',
+        login_identifiers: ['email', 'username'],
+      },
+    });
+  } finally {
+    opts._cleanup();
+  }
+});
+
+test('native config records an explicit external database mode', () => {
+  const opts = baseOpts({ templateFlavor: 'native', databaseMode: 'external' });
+  try {
+    const result = compileSiteConfig(opts);
+    assert.equal(result.config.web.database_mode, 'external');
+  } finally {
+    opts._cleanup();
+  }
+});

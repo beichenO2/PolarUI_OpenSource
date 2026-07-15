@@ -29,16 +29,17 @@ import { verifyRelease } from './verify-release.mjs';
 import { verifyOrthogonality } from './verify-orthogonality.mjs';
 import { deployWebRelease } from './deploy-web-release.mjs';
 import { graphNodeTypes, resolveWorkflowGraphPath } from './graph-utils.mjs';
+import { resolveTemplateSource } from './native-template.mjs';
+import { compileProductManifest } from './compile-product-manifest.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POLARUI_ROOT = join(__dirname, '..');
 const WEB_ROOT = process.env.POLAR_WEB_ROOT ?? join(process.env.HOME ?? '~', 'Desktop/Web_related');
-const TEMPLATE_DIR = join(WEB_ROOT, '_template');
 const STAGING_PREFIX = '.staging-';
 
 const COMPILE_STEPS = ['graph', 'registry', 'memory-schema', 'prompts', 'executors', 'config', 'patch', 'verify', 'ports', 'deploy'];
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = {
     workflow: '',
     fromRelease: '',
@@ -46,6 +47,8 @@ function parseArgs(argv) {
     skipPreflight: false,
     json: false,
     exportEntry: 'cli',
+    templateFlavor: 'legacy',
+    databaseMode: undefined,
     httpWorkflows: parseHttpWorkflowCliArgs(argv),
   };
   for (let i = 2; i < argv.length; i++) {
@@ -56,6 +59,8 @@ function parseArgs(argv) {
     else if (a === '--skip-preflight') out.skipPreflight = true;
     else if (a === '--json') out.json = true;
     else if (a === '--export-entry') out.exportEntry = argv[++i];
+    else if (a === '--template-flavor') out.templateFlavor = argv[++i];
+    else if (a === '--database-mode') out.databaseMode = argv[++i];
     else if (a === '--http-workflow') i++; // consumed by parseHttpWorkflowCliArgs
   }
   return out;
@@ -138,7 +143,12 @@ async function runStep(log, index, id, title, fn) {
 export async function exportRelease(opts) {
   const workflowId = opts.workflow;
   const webRoot = opts.webRoot ?? WEB_ROOT;
-  const templateDir = opts.templateDir ?? TEMPLATE_DIR;
+  const templateFlavor = opts.templateFlavor ?? 'legacy';
+  const templateDir = opts.templateDir ?? resolveTemplateSource({
+    flavor: templateFlavor,
+    polaruiRoot: POLARUI_ROOT,
+    webRoot: opts.templateWebRoot ?? WEB_ROOT,
+  });
   const exportEntry = opts.exportEntry ?? 'cli';
 
   const emit = (result) => {
@@ -285,6 +295,8 @@ export async function exportRelease(opts) {
         requiredExecutors: executors,
         polaruiRoot: POLARUI_ROOT,
         httpWorkflows,
+        templateFlavor,
+        databaseMode: opts.databaseMode,
       });
       manifest = compiled.manifest;
       // web_root must point at the final location, not the staging dir.
@@ -296,28 +308,43 @@ export async function exportRelease(opts) {
         : 'site.manifest.json + site.config.json';
     });
 
-    await runStep(log, 9, 'patch', 'patchLibreChat (polar/injected + http modelSpecs)', () => {
-      mkdirSync(join(stagingRoot, 'polar/injected'), { recursive: true });
-      writeFileSync(
-        join(stagingRoot, 'polar/injected/release.json'),
-        JSON.stringify({ release_id: releaseId, workflow_id: workflowId }, null, 2),
-      );
-      const readmePath = join(stagingRoot, 'README.md');
-      if (existsSync(readmePath)) {
-        const readme = readFileSync(readmePath, 'utf8');
-        if (!readme.includes(releaseId)) {
-          writeFileSync(readmePath, readme + `\n\n## Release\n\n- **release_id**: \`${releaseId}\`\n`);
+    if (templateFlavor === 'native') {
+      await runStep(log, 8.5, 'product-manifest', 'compileProductManifest', async () => {
+        const productManifest = await compileProductManifest({ workflowDir, workflowId, releaseId });
+        writeFileSync(
+          join(stagingRoot, 'product.manifest.json'),
+          JSON.stringify(productManifest, null, 2),
+        );
+        return 'product.manifest.json';
+      });
+    }
+
+    if (templateFlavor === 'legacy') {
+      await runStep(log, 9, 'patch', 'patchLibreChat (polar/injected + http modelSpecs)', () => {
+        mkdirSync(join(stagingRoot, 'polar/injected'), { recursive: true });
+        writeFileSync(
+          join(stagingRoot, 'polar/injected/release.json'),
+          JSON.stringify({ release_id: releaseId, workflow_id: workflowId }, null, 2),
+        );
+        const readmePath = join(stagingRoot, 'README.md');
+        if (existsSync(readmePath)) {
+          const readme = readFileSync(readmePath, 'utf8');
+          if (!readme.includes(releaseId)) {
+            writeFileSync(readmePath, `${readme}\n\n## Release\n\n- **release_id**: \`${releaseId}\`\n`);
+          }
         }
-      }
-      let patchDetail = 'polar/injected/release.json';
-      const lcYamlPath = join(stagingRoot, 'librechat.yaml');
-      if (httpWorkflows.length > 0 && existsSync(lcYamlPath)) {
-        const patched = patchLibreChatHttpWorkflows(readFileSync(lcYamlPath, 'utf8'), httpWorkflows);
-        writeFileSync(lcYamlPath, patched.yaml);
-        patchDetail += ` + modelSpecs(+${patched.added})`;
-      }
-      return patchDetail;
-    });
+        let patchDetail = 'polar/injected/release.json';
+        const lcYamlPath = join(stagingRoot, 'librechat.yaml');
+        if (httpWorkflows.length > 0 && existsSync(lcYamlPath)) {
+          const patched = patchLibreChatHttpWorkflows(readFileSync(lcYamlPath, 'utf8'), httpWorkflows);
+          writeFileSync(lcYamlPath, patched.yaml);
+          patchDetail += ` + modelSpecs(+${patched.added})`;
+        }
+        return patchDetail;
+      });
+    } else {
+      log.record({ index: 9, id: 'patch', title: 'legacy patch', status: 'skip', ms: 0, detail: 'native template' });
+    }
 
     await runStep(log, 10, 'verify', 'verifyRelease', () => {
       const verification = verifyRelease(stagingRoot);
@@ -351,8 +378,11 @@ export async function exportRelease(opts) {
             releaseId,
             polaruiRoot: POLARUI_ROOT,
             startLibreChat: opts.startLibreChat !== false,
+            databaseMode: opts.databaseMode,
           });
-          return `api=${deploy.api_port} lc=${deploy.librechat_port ?? 'n/a'} service=${deploy.service_id}`;
+          return templateFlavor === 'native'
+            ? `web=${deploy.web_port} service=${deploy.service_id}`
+            : `api=${deploy.api_port} lc=${deploy.librechat_port ?? 'n/a'} service=${deploy.service_id}`;
         });
       } catch (e) {
         // Release is compiled and valid — keep it, report deploy failure.
@@ -377,6 +407,7 @@ export async function exportRelease(opts) {
       manifest,
       compile_steps: COMPILE_STEPS,
       deploy,
+      template_flavor: templateFlavor,
     });
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
@@ -394,7 +425,7 @@ if (isMain) {
   const args = parseArgs(process.argv);
   if (!args.workflow) {
     console.error(
-      'Usage: node scripts/export-release.mjs --workflow <id> [--from-release x] [--compile-only] [--skip-preflight] [--json] [--http-workflow \'<json>\']…',
+      'Usage: node scripts/export-release.mjs --workflow <id> [--from-release x] [--template-flavor native|legacy] [--database-mode bundled|external] [--compile-only] [--skip-preflight] [--json] [--http-workflow \'<json>\']…',
     );
     process.exit(1);
   }
