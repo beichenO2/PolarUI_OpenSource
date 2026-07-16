@@ -1,0 +1,240 @@
+<style>
+  :root {
+    --wf-ink: #17211d;
+    --wf-muted: #65716b;
+    --wf-line: #d9dfda;
+    --wf-paper: #fbfcfa;
+    --wf-green: #124d3d;
+    --wf-green-soft: #e8f1ed;
+    --wf-coral: #b94d32;
+    --wf-blue: #356a88;
+  }
+  .board { color: var(--wf-ink); }
+  .board * { box-sizing: border-box; }
+  .decision-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 26px; }
+  .decision-strip span { border: 1px solid var(--wf-line); border-radius: 4px; background: var(--wf-paper); padding: 7px 10px; color: var(--wf-muted); font-size: 12px; }
+  .decision-strip b { color: var(--wf-ink); font-weight: 650; }
+  .flow { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 12px; align-items: stretch; margin: 12px 0 28px; }
+  .flow-arrow { display: grid; place-items: center; color: var(--wf-green); font-size: 24px; }
+  .panel { border: 1px solid var(--wf-line); border-radius: 6px; background: #fff; overflow: hidden; }
+  .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--wf-line); background: #f5f7f4; font-size: 12px; font-weight: 700; }
+  .panel-title em { color: var(--wf-muted); font-size: 11px; font-style: normal; font-weight: 500; }
+  .workspace { display: grid; grid-template-columns: 156px minmax(260px, 1fr) 42px; min-height: 390px; }
+  .route-rail { border-right: 1px solid var(--wf-line); background: #f7f8f6; padding: 12px 10px; }
+  .eyebrow { margin: 0 0 8px; color: var(--wf-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .route { margin-bottom: 6px; border: 1px solid transparent; border-radius: 4px; padding: 9px; font-size: 11px; line-height: 1.35; }
+  .route.active { border-color: #9eb9ae; background: #fff; }
+  .route strong { display: block; font-size: 12px; }
+  .route small { display: block; margin-top: 4px; color: var(--wf-muted); }
+  .route .origin { color: var(--wf-blue); }
+  .archive-link { margin-top: 14px; border-top: 1px solid var(--wf-line); padding: 11px 8px 0; color: var(--wf-muted); font-size: 11px; }
+  .stage-main { padding: 14px 16px 18px; }
+  .stage-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 15px; }
+  .stage-tab { border: 1px solid var(--wf-line); border-radius: 4px; padding: 7px 5px; color: var(--wf-muted); text-align: center; font-size: 10px; }
+  .stage-tab.active { border-color: var(--wf-green); background: var(--wf-green-soft); color: var(--wf-green); font-weight: 700; }
+  .source-line { margin-bottom: 12px; border-left: 3px solid var(--wf-blue); padding: 7px 9px; background: #eef4f7; color: #375569; font-size: 10px; }
+  .stage-main h4 { margin: 0 0 4px; font-size: 19px; letter-spacing: 0; }
+  .stage-main > p { margin: 0 0 13px; color: var(--wf-muted); font-size: 11px; }
+  .work-object { border: 1px solid var(--wf-line); border-radius: 5px; padding: 13px; background: var(--wf-paper); }
+  .work-object label { display: block; margin-bottom: 6px; color: var(--wf-muted); font-size: 10px; font-weight: 700; }
+  .doc-line { height: 7px; margin: 7px 0; background: #dce2dd; }
+  .doc-line.short { width: 64%; }
+  .artifact-zone { margin-top: 13px; border-top: 1px solid var(--wf-line); padding-top: 11px; }
+  .artifact { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; border: 1px solid #b9cdc4; border-radius: 4px; padding: 8px; background: var(--wf-green-soft); font-size: 10px; }
+  .primary-action { display: inline-block; margin-top: 12px; border-radius: 4px; background: var(--wf-green); padding: 8px 12px; color: white; font-size: 10px; font-weight: 700; }
+  .thread-trigger { display: flex; flex-direction: column; align-items: center; gap: 7px; border-left: 1px solid var(--wf-line); background: #f7f8f6; padding-top: 15px; color: var(--wf-green); font-size: 10px; font-weight: 700; writing-mode: vertical-rl; }
+  .thread-trigger i { width: 8px; height: 8px; border-radius: 50%; background: var(--wf-coral); }
+  .drawer-view { display: grid; grid-template-columns: minmax(280px, 1fr) 220px; min-height: 390px; }
+  .drawer-stage { position: relative; padding: 15px; background: #f7f8f6; }
+  .drawer-stage::after { content: ''; position: absolute; inset: 0; background: rgba(248,250,247,.5); }
+  .drawer { position: relative; z-index: 1; border-left: 1px solid var(--wf-line); background: white; }
+  .thread-tabs { display: flex; gap: 5px; padding: 10px; border-bottom: 1px solid var(--wf-line); overflow: hidden; }
+  .thread-tabs span { flex: 0 0 auto; border: 1px solid var(--wf-line); border-radius: 4px; padding: 5px 7px; color: var(--wf-muted); font-size: 9px; }
+  .thread-tabs span.active { border-color: var(--wf-green); color: var(--wf-green); }
+  .messages { padding: 11px; }
+  .bubble { margin-bottom: 9px; border-left: 2px solid #93afa3; padding: 8px; background: #f2f5f2; font-size: 9px; line-height: 1.45; }
+  .bubble.user { border-left-color: #d3917f; background: #fbf1ed; }
+  .attachment { margin: 10px 0; border: 1px dashed #bfcbc5; padding: 8px; color: var(--wf-muted); font-size: 9px; }
+  .composer { margin: 10px; border: 1px solid var(--wf-line); border-radius: 4px; padding: 9px; color: var(--wf-muted); font-size: 9px; }
+  .composer .draft { display: block; margin-top: 15px; color: var(--wf-coral); }
+  .archive { display: grid; grid-template-columns: 160px 1fr; min-height: 265px; }
+  .archive-list { border-right: 1px solid var(--wf-line); background: #f7f8f6; padding: 11px; }
+  .version { margin-bottom: 6px; border: 1px solid var(--wf-line); border-radius: 4px; padding: 8px; font-size: 10px; }
+  .version.active { border-color: var(--wf-green); background: white; }
+  .snapshot { padding: 15px; }
+  .snapshot-banner { border: 1px solid #d9c6ad; border-radius: 4px; padding: 9px; background: #fbf6ee; color: #785d38; font-size: 10px; }
+  .snapshot-body { margin-top: 11px; border: 1px solid var(--wf-line); padding: 12px; color: var(--wf-muted); font-size: 10px; }
+  .new-route { display: inline-block; margin-top: 11px; border: 1px solid var(--wf-green); border-radius: 4px; padding: 8px 10px; color: var(--wf-green); font-size: 10px; font-weight: 700; }
+  .mobile-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0 26px; }
+  .phone { min-height: 250px; border: 2px solid #35423c; border-radius: 8px; background: white; overflow: hidden; }
+  .phone-head { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid var(--wf-line); font-size: 8px; font-weight: 700; }
+  .phone-body { padding: 9px; }
+  .phone-label { margin-bottom: 7px; color: var(--wf-muted); font-size: 8px; font-weight: 700; }
+  .phone-block { margin-bottom: 7px; border: 1px solid var(--wf-line); border-radius: 3px; padding: 8px; font-size: 8px; }
+  .phone-block.active { border-color: var(--wf-green); background: var(--wf-green-soft); }
+  .phone-sheet { min-height: 210px; padding: 9px; background: white; }
+  .phone-sheet .bubble { font-size: 8px; }
+  .phone-caption { margin-top: 7px; color: var(--wf-muted); text-align: center; font-size: 10px; }
+  .matrix { width: 100%; margin: 12px 0 26px; border-collapse: collapse; font-size: 11px; }
+  .matrix th, .matrix td { border: 1px solid var(--wf-line); padding: 9px; text-align: left; }
+  .matrix th { background: #f5f7f4; }
+  .yes { color: var(--wf-green); font-weight: 700; }
+  .no { color: #9aa39e; }
+  @media (max-width: 780px) {
+    .flow { grid-template-columns: 1fr; }
+    .flow-arrow { transform: rotate(90deg); min-height: 30px; }
+    .workspace { grid-template-columns: 98px minmax(190px, 1fr) 32px; }
+    .route-rail { padding: 9px 6px; }
+    .drawer-view { grid-template-columns: 1fr; }
+    .drawer-stage { display: none; }
+    .drawer { border-left: 0; }
+    .mobile-row { grid-template-columns: 1fr; }
+    .phone { max-width: 280px; width: 100%; margin: 0 auto; }
+    .matrix { display: block; overflow-x: auto; white-space: nowrap; }
+  }
+</style>
+
+<div class="board">
+  <p class="label">POLARUI / ZERO-COMPAT INFORMATION ARCHITECTURE</p>
+  <h2>工作对象在中央，讨论、版本与成果各归其位</h2>
+  <p class="subtitle">主线和派生路线完全同级；系统根据当前位置决定界面，不设置“模式切换器”。</p>
+
+  <div class="decision-strip">
+    <span><b>路线</b> 独立工作区</span>
+    <span><b>阶段</b> 当前任务</span>
+    <span><b>讨论</b> 按需抽屉</span>
+    <span><b>版本</b> 只读归档</span>
+    <span><b>附件</b> 留在讨论</span>
+    <span><b>成果</b> 进入阶段</span>
+  </div>
+
+  <div class="section">
+    <p class="label">01 / 当前路线</p>
+    <div class="flow">
+      <div class="panel">
+        <div class="panel-title"><span>原路线</span><em>当前工作区</em></div>
+        <div class="workspace">
+          <aside class="route-rail">
+            <p class="eyebrow">路线</p>
+            <div class="route active"><strong>发布准备</strong><small>当前路线</small></div>
+            <div class="route"><strong>精简方案</strong><small class="origin">来源：版本 03</small></div>
+            <div class="route"><strong>企业版本</strong><small class="origin">来源：版本 02</small></div>
+            <div class="archive-link">版本归档  ›</div>
+          </aside>
+          <main class="stage-main">
+            <div class="stage-tabs"><div class="stage-tab">明确项目</div><div class="stage-tab active">推进实现</div><div class="stage-tab">复核交付</div></div>
+            <h4>推进实现</h4>
+            <p>当前阶段的工作对象始终占据视觉中心。</p>
+            <div class="work-object">
+              <label>交付文档</label>
+              <div class="doc-line"></div><div class="doc-line"></div><div class="doc-line short"></div>
+              <div class="artifact-zone"><label>成果 2</label><div class="artifact"><span>发行说明 v2</span><b>已采纳</b></div></div>
+            </div>
+            <span class="primary-action">推进阶段</span>
+          </main>
+          <aside class="thread-trigger"><i></i>讨论 2</aside>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="panel">
+        <div class="panel-title"><span>派生路线</span><em>与原路线同级</em></div>
+        <div class="workspace">
+          <aside class="route-rail">
+            <p class="eyebrow">路线</p>
+            <div class="route"><strong>发布准备</strong><small>原路线</small></div>
+            <div class="route active"><strong>精简方案</strong><small class="origin">来源：版本 03</small></div>
+            <div class="route"><strong>企业版本</strong><small class="origin">来源：版本 02</small></div>
+            <div class="archive-link">版本归档  ›</div>
+          </aside>
+          <main class="stage-main">
+            <div class="stage-tabs"><div class="stage-tab">明确项目</div><div class="stage-tab active">推进实现</div><div class="stage-tab">复核交付</div></div>
+            <div class="source-line">派生自“发布准备” · 版本 03　查看来源 ›</div>
+            <h4>推进实现</h4>
+            <p>工作能力、阶段结构和原路线完全一致。</p>
+            <div class="work-object">
+              <label>交付文档</label>
+              <div class="doc-line"></div><div class="doc-line short"></div><div class="doc-line"></div>
+              <div class="artifact-zone"><label>成果 1</label><div class="artifact"><span>精简发行说明</span><b>已采纳</b></div></div>
+            </div>
+            <span class="primary-action">推进阶段</span>
+          </main>
+          <aside class="thread-trigger"><i></i>讨论 1</aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="label">02 / 讨论按需展开</p>
+    <div class="panel">
+      <div class="panel-title"><span>右侧讨论抽屉</span><em>不会挤进阶段任务流</em></div>
+      <div class="drawer-view">
+        <div class="drawer-stage">
+          <div class="stage-tabs"><div class="stage-tab">明确项目</div><div class="stage-tab active">推进实现</div><div class="stage-tab">复核交付</div></div>
+          <div class="work-object"><label>阶段工作对象保持原位</label><div class="doc-line"></div><div class="doc-line short"></div></div>
+        </div>
+        <aside class="drawer">
+          <div class="thread-tabs"><span class="active">实现讨论</span><span>风险复核</span><span>＋</span></div>
+          <div class="messages">
+            <div class="bubble user">把超时策略调整到生产基线。</div>
+            <div class="bubble">Workflow 已返回变更建议，可采纳为阶段成果。</div>
+            <div class="attachment">附件 · timeout-notes.md<br>只属于“实现讨论”</div>
+          </div>
+          <div class="composer">继续讨论…<span class="draft">未发送 · 已在本机保存</span></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="label">03 / 版本只进入归档</p>
+    <div class="panel">
+      <div class="panel-title"><span>版本归档</span><em>没有“历史模式”</em></div>
+      <div class="archive">
+        <aside class="archive-list">
+          <p class="eyebrow">发布准备</p>
+          <div class="version">版本 04<br><small>阶段推进</small></div>
+          <div class="version active">版本 03<br><small>采纳成果</small></div>
+          <div class="version">版本 02<br><small>阶段推进</small></div>
+        </aside>
+        <main class="snapshot">
+          <div class="snapshot-banner">只读版本 · 2026-07-17 10:32 · 来源路线“发布准备”</div>
+          <div class="snapshot-body"><b>推进实现 / 版本 03</b><br><br>这里仅呈现当时的阶段状态、成果清单和来源信息。没有输入框、讨论控件或阶段操作。</div>
+          <span class="new-route">基于此版本新建路线</span>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="label">04 / 移动端是单层任务流</p>
+    <div class="mobile-row">
+      <div><div class="phone"><div class="phone-head"><span>精简方案</span><span>☰</span></div><div class="phone-body"><div class="phone-label">路线 / 阶段</div><div class="phone-block active">推进实现<br><small>当前工作对象</small></div><div class="phone-block">交付文档<br><br>内容编辑区</div><div class="phone-block">成果 1</div><div class="phone-block">讨论 1　›</div></div></div><div class="phone-caption">工作区：只看当前任务</div></div>
+      <div><div class="phone"><div class="phone-head"><span>实现讨论</span><span>关闭</span></div><div class="phone-sheet"><div class="thread-tabs"><span class="active">实现讨论</span><span>风险复核</span></div><div class="bubble user">调整超时策略。</div><div class="bubble">已生成建议。</div><div class="attachment">附件 · notes.md</div><div class="composer">继续讨论…</div></div></div><div class="phone-caption">讨论：全屏覆盖层</div></div>
+      <div><div class="phone"><div class="phone-head"><span>版本 03</span><span>关闭</span></div><div class="phone-body"><div class="phone-block active">只读版本</div><div class="phone-block">阶段状态快照<br><br>成果清单</div><div class="phone-block">基于此版本新建路线</div></div></div><div class="phone-caption">归档：纯查看与派生</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="label">模块可见性</p>
+    <table class="matrix">
+      <thead><tr><th>位置</th><th>阶段工作对象</th><th>讨论</th><th>附件</th><th>成果</th><th>编辑/推进</th></tr></thead>
+      <tbody>
+        <tr><td>原路线</td><td class="yes">显示</td><td>抽屉</td><td>对应讨论</td><td class="yes">显示</td><td class="yes">允许</td></tr>
+        <tr><td>派生路线</td><td class="yes">显示</td><td>抽屉</td><td>对应讨论</td><td class="yes">显示</td><td class="yes">允许</td></tr>
+        <tr><td>归档版本</td><td>只读快照</td><td class="no">隐藏</td><td class="no">仅清单</td><td>只读清单</td><td class="no">禁止</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>这套分层是否就是你要的方向？</h3>
+  <p class="subtitle">选择认可，或告诉我哪一层还需要调整。</p>
+  <div class="options">
+    <div class="option" data-choice="approve-layering" onclick="toggleSelect(this)">
+      <div class="letter">A</div><div class="content"><h3>认可这套分层</h3><p>进入正式设计说明，不保留旧界面兼容逻辑。</p></div>
+    </div>
+    <div class="option" data-choice="revise-layering" onclick="toggleSelect(this)">
+      <div class="letter">B</div><div class="content"><h3>还需要调整</h3><p>在终端说明需要修改的模块或状态。</p></div>
+    </div>
+  </div>
+</div>

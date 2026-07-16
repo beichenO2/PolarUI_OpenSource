@@ -8,9 +8,15 @@ import type { NativeWebConfig } from './config.js';
 import type { DomainService } from './domain/service.js';
 import type { CommandRepository } from './commands/repository.js';
 import type { CommandService } from './commands/service.js';
+import type { AssetService } from './assets/service.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCommandRoutes } from './routes/commands.js';
 import { registerDomainRoutes } from './routes/domain.js';
+import { registerAssetRoutes } from './routes/assets.js';
+import type { MemoryRepository } from './memory/repository.js';
+import { registerMemoryRoutes } from './routes/memory.js';
+import type { ArchiveRepository } from './archive/repository.js';
+import { registerArchiveRoutes } from './routes/archive.js';
 
 export function buildApp(options: {
   manifest: unknown;
@@ -20,10 +26,14 @@ export function buildApp(options: {
   domainService?: DomainService;
   commandService?: CommandService;
   commandRepository?: CommandRepository;
+  assetService?: AssetService;
+  memoryRepository?: MemoryRepository;
+  archiveRepository?: ArchiveRepository;
   readiness?: { check(): Promise<boolean> };
 }) {
   const manifest: ProductManifest = parseProductManifest(options.manifest);
-  const app = Fastify({ logger: false, trustProxy: options.config?.trustProxy ?? false });
+  const app = Fastify({ logger: false, trustProxy: options.config?.trustProxy ?? false, bodyLimit: 26 * 1024 * 1024 });
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
 
   app.setErrorHandler((error, request, reply) => {
     const statusCode = error && typeof error === 'object' && 'statusCode' in error
@@ -90,6 +100,27 @@ export function buildApp(options: {
         authService: options.authService,
         commandService: options.commandService,
         commandRepository: options.commandRepository,
+      });
+    }
+    if (options.assetService) {
+      app.register(registerAssetRoutes, {
+        config: options.config,
+        authService: options.authService,
+        assetService: options.assetService,
+      });
+    }
+    if (options.memoryRepository) {
+      app.register(registerMemoryRoutes, {
+        config: options.config,
+        authService: options.authService,
+        memoryRepository: options.memoryRepository,
+      });
+    }
+    if (options.archiveRepository) {
+      app.register(registerArchiveRoutes, {
+        config: options.config,
+        authService: options.authService,
+        archiveRepository: options.archiveRepository,
       });
     }
   }

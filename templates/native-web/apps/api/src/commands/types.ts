@@ -134,11 +134,7 @@ export interface FinalizeActionIds {
   userMessageId: string;
   assistantMessageId: string;
   checkpointId: string;
-  headCheckpointIdAtClaim: string | null;
-  derivedRouteId?: string;
-  derivedThreadId?: string;
-  derivedRouteName?: string;
-  derivedThreadTitle?: string;
+  headCheckpointIdAtClaim: string;
 }
 
 export interface CommandCommitResult {

@@ -243,6 +243,100 @@ diagnostics
 
 PolarFlow 不直接连接产品数据库。内部 workflow 状态通过 manifest 映射为稳定产品 Stage；内部节点调整不得改变产品 URL 和历史记录语义。
 
+### 11.1 最终领域结构
+
+```mermaid
+flowchart TB
+  U["User<br/>身份、权限、跨情境偏好"]
+  C["Context<br/>一个具体业务情境或项目"]
+  R["Route<br/>不可变的执行路线"]
+  S["Stage<br/>稳定的产品阶段"]
+  T["Thread<br/>同阶段中的并行问题分支"]
+  K["Checkpoint<br/>不可变的状态快照"]
+  R2["Derived Route<br/>从历史检查点派生的新路线"]
+
+  U --> C --> R --> S --> T --> K
+  K -->|"从此检查点创建新路线"| R2
+```
+
+这个层级中“浏览”和“执行”是两件事。用户可以自由查看任意 Stage 和 Checkpoint，但浏览不移动 execution cursor。Cursor 只能由 Workflow command 按合法状态迁移向前推进。同一 Stage 可创建多个 Thread，用于并行讨论不同问题；从历史 Checkpoint 修改共享状态时，系统不覆盖原路线，而是创建 Derived Route。
+
+### 11.2 Workflow 如何套入通用模板
+
+```mermaid
+flowchart LR
+  W["具体 Workflow<br/>节点图与内部状态"]
+  M["Workflow Manifest<br/>阶段、动作、组件、Artifact 契约"]
+  B["Workflow Bridge<br/>状态读取、命令转换、输出规范化"]
+  D["Native Domain / API<br/>Context、Route、Stage、Thread、Checkpoint"]
+  SC["固定 Stage Components<br/>chat / form / cards / document"]
+  UI["通用 Web Shell<br/>导航、会话、附件、记忆、归档"]
+
+  W --> M
+  W --> B
+  M --> D
+  B --> D
+  M --> SC
+  D --> UI
+  SC --> UI
+```
+
+模板不解析、也不递归渲染 Workflow 内部节点图。具体 Workflow 只通过两个稳定注入点进入模板：
+
+1. **Manifest 是静态产品契约**：定义产品名称、Stage 投影、合法动作、固定组件 key 和 Artifact 类型。同一模板换上不同 Manifest，就得到不同的单 Workflow 产品。
+2. **Workflow Bridge 是动态执行契约**：将通用 Command Envelope 转换为具体 Workflow 输入，再把返回值规范化为 `reply_events`、`stage_signal`、`artifact_proposals`、`memory_proposals` 和 `workflow_cursor`。
+3. **Native Domain 是最终裁决者**：校验用户所有权、execution cursor、阶段迁移、并发版本和提案权限；Workflow 不能直接写产品数据库。
+4. **Web Shell 只渲染有限组件集**：`generic_chat`、`structured_form`、`card_selection`、`document_workspace`。这保证 Workflow 可替换，但产品层级、URL、历史语义和页面布局始终稳定。
+
+因此，“自由”被放在 Workflow 的执行逻辑和数据 IO 中，“稳定”被放在 Web 产品模型与固定组件中。这避免了无限递归 UI，也避免了每换一个 Workflow 就重写认证、会话、附件、记忆和归档能力。
+
+### 11.3 命令执行与原子持久化
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Web as Web Shell
+  participant API as Native API
+  participant Bridge as Workflow Bridge
+  participant Workflow as Concrete Workflow
+  participant Store as PostgreSQL / Object Store
+
+  User->>Web: 发消息或提交阶段表单
+  Web->>API: Command + route/stage/thread/checkpoint
+  API->>API: 校验所有权、版本与执行游标
+  API->>Bridge: 标准 Command Envelope
+  Bridge->>Workflow: Workflow-specific input
+  Workflow-->>Bridge: output / deltas / proposals
+  Bridge-->>API: canonical result
+  API->>Store: 原子追加消息、Checkpoint、Artifact/Memory proposal
+  API-->>Web: 返回更新后的 Route/Stage/Thread 视图
+```
+
+一次 Workflow 运行只产生“候选结果”。只有当 Bridge schema 校验、领域不变量校验和乐观并发校验全部通过后，API 才会在一个事务中追加消息、事件和 Checkpoint。任一环失败都不会留下“消息已显示但状态没推进”的半成品。
+
+### 11.4 最终注入与发行契约
+
+具体 Workflow 的源码目录必须同时包含可执行图和静态产品契约：
+
+```text
+workflows/<workflow-id>/
+├── <workflow-id>.json       # PolarUI headless runtime 可实际执行的图
+└── product.manifest.json    # 产品投影，不包含页面结构 DSL
+```
+
+四层契约固定如下：
+
+| 层 | 输入 | 输出与责任 |
+| --- | --- | --- |
+| Source Manifest | `contract_version`、产品词汇、`workflow.id`、运行 endpoint、Stage、action、固定 `component_key` | Workflow 作者声明的静态产品投影；导出器不得臆造 Stage、action 或 endpoint |
+| Release Compiler | Workflow 图、Source Manifest、release id | 冻结 `workflow/snapshot.json`、`product.manifest.json`、`site.manifest.json`、`site.config.json`、memory schema、executor 清单与校验和；只允许将 `product.id` 改为 release id |
+| Workflow Bridge | Native Command Envelope 与五层只读快照 | 发送 workflow-specific HTTP input；规范化 reply、Stage signal、Artifact/Memory proposal、interrupt 与 cursor；非法/超时结果 fail closed |
+| Native Domain/API | Bridge 候选结果、当前 execution cursor 与 checkpoint version | 裁决权限、幂等、并发、合法前进与原子持久化；Workflow 无产品数据库写权限 |
+
+运行 endpoint 是 Source Manifest 的发行契约，编译时保持不变；容器网络需要改写地址时，只能通过部署环境 `WORKFLOW_ENDPOINT_OVERRIDE` 覆盖，不得改写冻结的 Manifest。发行版中的 `workflow/snapshot.json` 必须与 `site.manifest.json.workflow_checksum` 一致，并可由声明的 executor 集合在受管 Workflow Runtime 中执行。
+
+Bridge 的规范 Command Envelope 固定包含 `contract_version`、`command_id`、用户/Context/Route/Stage/Thread 标识、命令类型、期望 checkpoint version、历史与五层 memory snapshot。规范结果固定包含 `reply_events`（当前 HTTP v1 以单一 `reply` 兼容）、`stage_signal(s)`、`artifact_proposals`、`memory_proposals`、`interrupt`、`workflow_cursor` 与 `diagnostics`。兼容字段只能在 Bridge 内转换，不能泄漏到 Native Domain。
+
 ## 12. 并发、幂等与错误处理
 
 - 每个命令使用唯一 `command_id`，重试不得重复写入消息或 Checkpoint。

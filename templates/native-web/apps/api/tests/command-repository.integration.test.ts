@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createCommandRepository } from '../src/commands/repository.js';
+import { createAssetRepository } from '../src/assets/repository.js';
 import { createPool } from '../src/db/pool.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createDomainRepository } from '../src/domain/repository.js';
@@ -17,12 +18,10 @@ const ids = {
   otherUser: '10000000-0000-4000-8000-000000000002',
   context: '20000000-0000-4000-8000-000000000001',
   route: '30000000-0000-4000-8000-000000000001',
-  derivedRoute: '30000000-0000-4000-8000-000000000002',
   checkpoint: '40000000-0000-4000-8000-000000000001',
   nextCheckpoint: '40000000-0000-4000-8000-000000000002',
-  derivedCheckpoint: '40000000-0000-4000-8000-000000000003',
+  conflictCheckpoint: '40000000-0000-4000-8000-000000000003',
   thread: '50000000-0000-4000-8000-000000000001',
-  derivedThread: '50000000-0000-4000-8000-000000000002',
   command: '60000000-0000-4000-8000-000000000001',
   nextCommand: '60000000-0000-4000-8000-000000000002',
   thirdCommand: '60000000-0000-4000-8000-000000000003',
@@ -46,6 +45,7 @@ integrationDescribe('workflow command repository', () => {
   const pool = createPool(url.toString());
   const domain = createDomainRepository(pool);
   const repository = createCommandRepository(pool);
+  const assets = createAssetRepository(pool);
   const now = new Date('2026-07-16T08:00:00.000Z');
 
   beforeAll(async () => {
@@ -298,6 +298,16 @@ integrationDescribe('workflow command repository', () => {
 
   it('finalizes a head action with messages, one checkpoint, and forward projections', async () => {
     await claimMessage({ kind: 'named_action', actionKey: 'advance', inputHash: 'action-hash' });
+    const objectId = '90000000-0000-4000-8000-000000000001';
+    const artifactId = '90000000-0000-4000-8000-000000000002';
+    await pool.query(
+      "INSERT INTO asset_objects (id, user_id, storage_key, sha256, byte_size, media_type, status, created_at) VALUES ($1, $2, 'objects/result', $3, 6, 'text/plain', 'ready', $4)",
+      [objectId, ids.user, 'a'.repeat(64), now],
+    );
+    await pool.query(
+      "INSERT INTO workflow_artifacts (id, user_id, object_id, command_id, context_id, route_id, thread_id, stage_key, filename, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'discover', 'result.txt', 'ready', $8)",
+      [artifactId, ids.user, objectId, ids.command, ids.context, ids.route, ids.thread, now],
+    );
     const committed = await repository.finalizeAction(ids.command, {
       reply: 'Discovery is complete; decision work can begin.',
       stageSignals: [
@@ -328,7 +338,39 @@ integrationDescribe('workflow command repository', () => {
       command: { id: ids.command, kind: 'named_action', action_key: 'advance' },
       adopted_thread_id: ids.thread,
       result_message_ids: [ids.userMessage, ids.assistantMessage],
+      artifacts: [{
+        id: artifactId,
+        stage_key: 'discover',
+        filename: 'result.txt',
+        media_type: 'text/plain',
+        byte_size: 6,
+        sha256: 'a'.repeat(64),
+      }],
     });
+    await expect(assets.listStageArtifacts(ids.user, ids.route, 'discover')).resolves.toEqual([
+      expect.objectContaining({ id: artifactId, filename: 'result.txt' }),
+    ]);
+    const continuedRouteId = '30000000-0000-4000-8000-000000000009';
+    await domain.branchRoute({
+      userId: ids.user,
+      contextId: ids.context,
+      sourceCheckpointId: ids.nextCheckpoint,
+      routeId: continuedRouteId,
+      routeName: 'Continued route',
+      checkpointId: '40000000-0000-4000-8000-000000000009',
+      now: new Date(now.getTime() + 2000),
+    });
+    await expect(assets.listStageArtifacts(ids.user, continuedRouteId, 'discover')).resolves.toEqual([
+      expect.objectContaining({ id: artifactId, filename: 'result.txt' }),
+    ]);
+    expect((await pool.query('SELECT scope, proposal_key, proposal_value, status FROM memory_proposals WHERE command_id = $1', [ids.command])).rows)
+      .toEqual([{ scope: 'context', proposal_key: 'proposal_1', proposal_value: 'Evidence complete', status: 'pending' }]);
+    const proposalId = (await pool.query('SELECT id FROM memory_proposals WHERE command_id = $1', [ids.command])).rows[0].id;
+    await pool.query("UPDATE memory_proposals SET status='adopted', decided_at=now() WHERE id=$1", [proposalId]);
+    await expect(pool.query("UPDATE memory_proposals SET status='rejected', decided_at=now() WHERE id=$1", [proposalId]))
+      .rejects.toMatchObject({ code: '55000' });
+    await expect(pool.query('DELETE FROM memory_proposals WHERE id=$1', [proposalId]))
+      .rejects.toMatchObject({ code: '55000' });
     expect((await pool.query(
       'SELECT stage_key, status, internal_state FROM route_stage_projections WHERE route_id = $1 ORDER BY position',
       [ids.route],
@@ -336,63 +378,6 @@ integrationDescribe('workflow command repository', () => {
       { stage_key: 'discover', status: 'completed', internal_state: 'done' },
       { stage_key: 'decide', status: 'active', internal_state: 'compare' },
     ]);
-  });
-
-  it('derives a route and thread for a historical action while preserving the source workspace', async () => {
-    await claimMessage({ kind: 'named_action', actionKey: 'adopt_thread', inputHash: 'head-action' });
-    await repository.finalizeAction(ids.command, {
-      reply: 'Current route checkpoint.',
-      stageSignals: [],
-      memoryProposals: [],
-      adoptedThreadId: ids.thread,
-    }, {
-      userMessageId: ids.userMessage,
-      assistantMessageId: ids.assistantMessage,
-      checkpointId: ids.nextCheckpoint,
-      headCheckpointIdAtClaim: ids.checkpoint,
-    }, new Date(now.getTime() + 1000));
-
-    const historicalCommand = await repository.claimCommand(claimInput({
-      commandId: ids.nextCommand,
-      kind: 'named_action',
-      actionKey: 'adopt_thread',
-      content: 'Try another interpretation.',
-      inputHash: 'historical-action',
-      now: new Date(now.getTime() + 2000),
-      leaseExpiresAt: new Date(now.getTime() + 32_000),
-    }));
-    expect(historicalCommand.kind).toBe('claimed');
-    if (historicalCommand.kind !== 'claimed') throw new Error('expected historical claim');
-    expect(historicalCommand.execution.baseIsHead).toBe(false);
-
-    const committed = await repository.finalizeAction(ids.nextCommand, {
-      reply: 'Alternative interpretation preserved.',
-      stageSignals: [],
-      memoryProposals: [],
-      adoptedThreadId: ids.thread,
-    }, {
-      userMessageId: ids.nextUserMessage,
-      assistantMessageId: ids.nextAssistantMessage,
-      checkpointId: ids.derivedCheckpoint,
-      headCheckpointIdAtClaim: null,
-      derivedRouteId: ids.derivedRoute,
-      derivedThreadId: ids.derivedThread,
-      derivedRouteName: 'Alternative interpretation',
-      derivedThreadTitle: 'Evidence thread (branch)',
-    }, new Date(now.getTime() + 3000));
-    expect(committed).toMatchObject({
-      routeId: ids.derivedRoute,
-      threadId: ids.derivedThread,
-      checkpointId: ids.derivedCheckpoint,
-    });
-    expect((await pool.query('SELECT origin_checkpoint_id, head_checkpoint_id FROM workflow_routes WHERE id = $1', [ids.route])).rows[0])
-      .toEqual({ origin_checkpoint_id: null, head_checkpoint_id: ids.nextCheckpoint });
-    expect((await pool.query('SELECT origin_checkpoint_id, head_checkpoint_id FROM workflow_routes WHERE id = $1', [ids.derivedRoute])).rows[0])
-      .toEqual({ origin_checkpoint_id: ids.checkpoint, head_checkpoint_id: ids.derivedCheckpoint });
-    expect((await pool.query('SELECT origin_thread_id, route_id FROM workflow_threads WHERE id = $1', [ids.derivedThread])).rows[0])
-      .toEqual({ origin_thread_id: ids.thread, route_id: ids.derivedRoute });
-    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_messages WHERE thread_id = $1', [ids.thread])).rows[0].count).toBe(2);
-    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_messages WHERE thread_id = $1', [ids.derivedThread])).rows[0].count).toBe(2);
   });
 
   it('turns a guarded head change into a conflict without domain writes', async () => {
@@ -412,7 +397,7 @@ integrationDescribe('workflow command repository', () => {
     }, {
       userMessageId: ids.userMessage,
       assistantMessageId: ids.assistantMessage,
-      checkpointId: ids.derivedCheckpoint,
+      checkpointId: ids.conflictCheckpoint,
       headCheckpointIdAtClaim: ids.checkpoint,
     }, new Date(now.getTime() + 1000));
     expect(result).toMatchObject({ status: 'conflict', errorCode: 'CHECKPOINT_VERSION_CONFLICT' });

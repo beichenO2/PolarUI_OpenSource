@@ -1,0 +1,10 @@
+{
+  "id": "native-web-qa",
+  "name": "Native Workflow Web Release QA",
+  "description": "Real headless graph fixture for native Web export and production-container acceptance.",
+  "category": "qa-fixture",
+  "nodeCount": 2,
+  "file": "native-web-qa.json",
+  "registeredAt": "2026-07-16T00:00:00.000Z",
+  "updatedAt": "2026-07-16T00:00:00.000Z"
+}

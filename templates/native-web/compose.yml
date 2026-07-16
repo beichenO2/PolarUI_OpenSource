@@ -18,6 +18,10 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       WORKFLOW_ENDPOINT_OVERRIDE: ${WORKFLOW_ENDPOINT_OVERRIDE:-}
       WORKFLOW_TIMEOUT_MS: ${WORKFLOW_TIMEOUT_MS:-60000}
+      OBJECT_STORE_DIRECTORY: /data/objects
+      WORKFLOW_ARTIFACT_ROOT: ${WORKFLOW_ARTIFACT_ROOT:-}
+    volumes:
+      - polar_object_data:/data/objects
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,3 +55,4 @@ services:
 
 volumes:
   polar_postgres_data:
+  polar_object_data:

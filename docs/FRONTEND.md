@@ -9,10 +9,10 @@
 ```bash
 cd ~/Polarisor/PolarUI
 npm run build    # 首次或改 src/ 后：源码 → dist/assets/
-npm run dev -- --port 5170
+curl -fsS -X POST http://127.0.0.1:11055/api/services/polarui/restart
 ```
 
-`npm run dev` 会同步 `node-defs/` 到 `dist/`、刷新 GUI overlay / 导出按钮脚本，再启动 Vite。
+`npm run build` 是一次性命令；长期 GUI preview 仅由 PolarProcess 启动，端口仅由 PolarPort 分配。需要独立的 Vite dev middleware 时，先用新的 service ID 完成 PolarPort/PolarProcess onboarding，不得从 shell 直接留下 listener。
 
 打开 **http://127.0.0.1:5170/**
 
@@ -73,9 +73,9 @@ node scripts/export-release.mjs --workflow taoci-outreach --skip-preflight --com
 
 | 报错 | 原因 | 处理 |
 |------|------|------|
-| `Failed to resolve import "./taoci-graph/register.mjs"` | `dist/overlay/gui-overlay.mjs` 仍是旧版（含 Node import） | 跑 `npm run build` 或 `npm run dev`（已内置 overlay 刷新） |
-| `loadProjectSsot ... Unexpected token '<'` | `/api/polaris` 返回了 HTML | 用 `npm run dev`（含 vite.config.mjs），勿裸起静态服 |
-| CORS `:11055/api/services` | bundle 直连 PolarProcess | 用 `npm run dev`（vite proxy 已配置） |
+| `Failed to resolve import "./taoci-graph/register.mjs"` | `dist/overlay/gui-overlay.mjs` 仍是旧版（含 Node import） | 运行一次 `npm run build`，再通过 `polarui` 精确 restart |
+| `loadProjectSsot ... Unexpected token '<'` | 当前 preview 不提供所需 dev middleware | 为 dev middleware 单独完成受管服务 onboarding，勿裸起静态服务 |
+| CORS `:11055/api/services` | bundle 直连 PolarProcess | 检查当前受管服务模式与 Vite proxy 配置 |
 | Hub 8040 连不上 | PolarCopilot 未启动 | SSoT 仍可从本地 polaris.json 读；Hub 功能需另启 |
 
 ---

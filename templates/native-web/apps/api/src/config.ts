@@ -29,6 +29,11 @@ const environmentSchema = z.object({
     z.url('WORKFLOW_ENDPOINT_OVERRIDE must be a valid URL').optional(),
   ),
   WORKFLOW_TIMEOUT_MS: positiveIntegerString.default(60_000),
+  OBJECT_STORE_DIRECTORY: z.string().min(1).default('./data/objects'),
+  WORKFLOW_ARTIFACT_ROOT: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().min(1).optional(),
+  ),
 }).strict().superRefine((value, context) => {
   const origin = new URL(value.PUBLIC_APP_ORIGIN);
   const normalizedInput = value.PUBLIC_APP_ORIGIN.replace(/\/$/, '');
@@ -116,6 +121,8 @@ export function loadConfig(environment: Record<string, string | undefined> = pro
     verificationTtlSeconds: parsed.VERIFICATION_TTL_SECONDS,
     workflowEndpointOverride: parsed.WORKFLOW_ENDPOINT_OVERRIDE ?? null,
     workflowTimeoutMs: parsed.WORKFLOW_TIMEOUT_MS,
+    objectStoreDirectory: parsed.OBJECT_STORE_DIRECTORY,
+    workflowArtifactRoot: parsed.WORKFLOW_ARTIFACT_ROOT ?? null,
     rateLimits: {
       registration: { max: 5, timeWindowMs: 15 * 60 * 1_000 },
       login: { max: 10, timeWindowMs: 15 * 60 * 1_000 },

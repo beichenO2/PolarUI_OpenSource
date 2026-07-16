@@ -1,0 +1,18 @@
+[
+  {
+    "class_type": "NativeWebQaFixture",
+    "category": "Internal/QA",
+    "display_name": "Native Web QA Fixture",
+    "description": "Deterministic contract fixture executed by the real headless graph engine.",
+    "palette_hidden": true,
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "payload",
+        "type": "string",
+        "description": "Canonical Workflow Result Envelope JSON"
+      }
+    ],
+    "params": {}
+  }
+]

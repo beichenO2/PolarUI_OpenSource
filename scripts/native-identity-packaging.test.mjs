@@ -100,7 +100,7 @@ test('production image includes migrations and compiled API/Web runtimes', async
   assert.match(await readTemplateFile('apps/web/src/commands/api.ts'), /streamCommandEvents/);
 });
 
-test('README documents the durable Phase 4 command contract and Phase 5 boundary', async () => {
+test('README documents the durable Phase 4 command contract and Phase 5 cutover', async () => {
   const readme = await readTemplateFile('README.md');
 
   assert.match(readme, /POST \/api\/threads\/:threadId\/commands[\s\S]*returns `202`/);
@@ -115,5 +115,7 @@ test('README documents the durable Phase 4 command contract and Phase 5 boundary
   assert.match(readme, /never automatically retries an upstream timeout/);
   assert.match(readme, /resume_interrupt/);
   assert.match(readme, /private PolarFlow cursor stays in PostgreSQL/);
-  assert.match(readme, /Phase 5 remains unstarted/);
+  assert.match(readme, /Phase 5 is complete/);
+  assert.match(readme, /import:librechat/);
+  assert.match(readme, /OBJECT_STORE_DIRECTORY/);
 });

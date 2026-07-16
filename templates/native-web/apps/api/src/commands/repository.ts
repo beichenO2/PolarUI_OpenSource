@@ -1,6 +1,8 @@
 import type { DatabaseClient, DatabasePool } from '../db/pool.js';
+import { randomUUID } from 'node:crypto';
 import { withTransaction } from '../db/pool.js';
 import type {
+  CheckpointArtifact,
   CheckpointReason,
   CheckpointSnapshot,
   RouteStageStatus,
@@ -372,6 +374,63 @@ function snapshotStages(stages: StageProjection[]) {
   }));
 }
 
+async function listAdoptedArtifacts(
+  client: DatabaseClient,
+  contextId: string,
+  routeId: string,
+  threadId: string,
+): Promise<CheckpointArtifact[]> {
+  const result = await client.query<{
+    id: string;
+    stage_key: string;
+    filename: string;
+    media_type: string;
+    byte_size: string | number;
+    sha256: string;
+    created_at: Date;
+  }>(
+    'SELECT a.id, a.stage_key, a.filename, o.media_type, o.byte_size, o.sha256, a.created_at ' +
+    'FROM workflow_artifacts a JOIN asset_objects o ON o.id = a.object_id ' +
+    "WHERE a.context_id = $1 AND a.route_id = $2 AND a.thread_id = $3 AND a.status = 'ready' " +
+    'ORDER BY a.created_at, a.id',
+    [contextId, routeId, threadId],
+  );
+  return result.rows.map((artifact) => ({
+    id: artifact.id,
+    stage_key: artifact.stage_key,
+    filename: artifact.filename,
+    media_type: artifact.media_type,
+    byte_size: Number(artifact.byte_size),
+    sha256: artifact.sha256,
+    created_at: artifact.created_at.toISOString(),
+  }));
+}
+
+async function insertMemoryProposals(
+  client: DatabaseClient,
+  command: CommandRow,
+  routeId: string,
+  threadId: string,
+  proposals: unknown[],
+  now: Date,
+) {
+  if (proposals.length === 0) return;
+  const owner = await client.query<{ user_id: string }>('SELECT user_id FROM contexts WHERE id = $1', [command.context_id]);
+  const userId = owner.rows[0]?.user_id;
+  if (!userId) throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
+  for (const [index, proposal] of proposals.entries()) {
+    if (!proposal || typeof proposal !== 'object' || !('scope' in proposal) || !('value' in proposal)) continue;
+    const candidate = proposal as { scope: string; key?: string; value: unknown };
+    await client.query(
+      'INSERT INTO memory_proposals ' +
+      '(id,user_id,command_id,context_id,route_id,thread_id,stage_key,scope,proposal_key,proposal_value,status,created_at) ' +
+      "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11)",
+      [randomUUID(), userId, command.id, command.context_id, routeId, threadId, command.stage_key,
+        candidate.scope, candidate.key?.trim() || `proposal_${index + 1}`, JSON.stringify(candidate.value), now],
+    );
+  }
+}
+
 export function createCommandRepository(pool: DatabasePool) {
   return {
     async claimCommand(input: ClaimCommandInput): Promise<ClaimCommandResult> {
@@ -603,6 +662,7 @@ export function createCommandRepository(pool: DatabasePool) {
         );
         await client.query('UPDATE workflow_threads SET updated_at = $2 WHERE id = $1', [command.source_thread_id, now]);
         await client.query('UPDATE contexts SET updated_at = $2 WHERE id = $1', [command.context_id, now]);
+        await insertMemoryProposals(client, command, command.source_route_id, command.source_thread_id, result.memoryProposals, now);
         return completeCommand(client, command, {
           routeId: command.source_route_id,
           threadId: command.source_thread_id,
@@ -637,7 +697,7 @@ export function createCommandRepository(pool: DatabasePool) {
         const sourceRoute = routeResult.rows[0];
         if (!sourceRoute) throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
 
-        if (ids.headCheckpointIdAtClaim && sourceRoute.head_checkpoint_id !== ids.headCheckpointIdAtClaim) {
+        if (sourceRoute.head_checkpoint_id !== ids.headCheckpointIdAtClaim) {
           await client.query(
             "UPDATE workflow_commands SET status = 'conflict', lease_expires_at = NULL, " +
             "error_code = 'CHECKPOINT_VERSION_CONFLICT', updated_at = $2 WHERE id = $1",
@@ -671,39 +731,16 @@ export function createCommandRepository(pool: DatabasePool) {
         const base = baseResult.rows[0];
         if (!base) throw new CommandRepositoryError('CHECKPOINT_VERSION_CONFLICT');
 
-        let routeId = command.source_route_id;
-        let threadId = command.source_thread_id;
-        let checkpointVersion = base.version + 1;
-        let parentCheckpointId: string | null = base.id;
-        let stageRows: StageProjection[];
-        if (ids.headCheckpointIdAtClaim) {
-          const currentStages = await client.query<StageRow>(
-            'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
-            'WHERE route_id = $1 ORDER BY position FOR UPDATE',
-            [routeId],
-          );
-          stageRows = currentStages.rows.map(mapStage);
-        } else {
-          if (!ids.derivedRouteId || !ids.derivedThreadId || !ids.derivedRouteName || !ids.derivedThreadTitle) {
-            throw new CommandRepositoryError('DERIVED_IDS_REQUIRED');
-          }
-          routeId = ids.derivedRouteId;
-          threadId = ids.derivedThreadId;
-          checkpointVersion = 0;
-          parentCheckpointId = null;
-          stageRows = base.snapshot.stages.map((stage, position) => ({
-            stageKey: stage.stage_key,
-            position,
-            status: stage.status,
-            internalState: stage.internal_state,
-          }));
-          await client.query(
-            'INSERT INTO workflow_routes ' +
-            '(id, context_id, name, origin_checkpoint_id, created_at, updated_at) ' +
-            'VALUES ($1, $2, $3, $4, $5, $5)',
-            [routeId, command.context_id, ids.derivedRouteName, base.id, now],
-          );
-        }
+        const routeId = command.source_route_id;
+        const threadId = command.source_thread_id;
+        const checkpointVersion = base.version + 1;
+        const parentCheckpointId = base.id;
+        const currentStages = await client.query<StageRow>(
+          'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
+          'WHERE route_id = $1 ORDER BY position FOR UPDATE',
+          [routeId],
+        );
+        const stageRows: StageProjection[] = currentStages.rows.map(mapStage);
 
         const stagesByKey = new Map(stageRows.map((stage) => [stage.stageKey, stage]));
         for (const signal of result.stageSignals) {
@@ -713,36 +750,11 @@ export function createCommandRepository(pool: DatabasePool) {
           stage.internalState = signal.internalState;
         }
 
-        if (ids.headCheckpointIdAtClaim) {
-          for (const stage of stageRows) {
-            await client.query(
-              'UPDATE route_stage_projections SET status = $3, internal_state = $4, updated_at = $5 ' +
-              'WHERE route_id = $1 AND stage_key = $2',
-              [routeId, stage.stageKey, stage.status, stage.internalState, now],
-            );
-          }
-        } else {
-          for (const stage of stageRows) {
-            await client.query(
-              'INSERT INTO route_stage_projections ' +
-              '(route_id, stage_key, position, status, internal_state, updated_at) ' +
-              'VALUES ($1, $2, $3, $4, $5, $6)',
-              [routeId, stage.stageKey, stage.position, stage.status, stage.internalState, now],
-            );
-          }
+        for (const stage of stageRows) {
           await client.query(
-            'INSERT INTO workflow_threads ' +
-            '(id, context_id, route_id, stage_key, title, origin_thread_id, created_at, updated_at) ' +
-            'VALUES ($1, $2, $3, $4, $5, $6, $7, $7)',
-            [
-              threadId,
-              command.context_id,
-              routeId,
-              command.stage_key,
-              ids.derivedThreadTitle,
-              command.source_thread_id,
-              now,
-            ],
+            'UPDATE route_stage_projections SET status = $3, internal_state = $4, updated_at = $5 ' +
+            'WHERE route_id = $1 AND stage_key = $2',
+            [routeId, stage.stageKey, stage.status, stage.internalState, now],
           );
         }
 
@@ -756,8 +768,22 @@ export function createCommandRepository(pool: DatabasePool) {
           result.reply,
           now,
         );
+        const artifactMap = new Map(
+          (base.snapshot.artifacts ?? []).map((artifact) => [artifact.id, artifact]),
+        );
+        if (result.adoptedThreadId) {
+          for (const artifact of await listAdoptedArtifacts(
+            client,
+            command.context_id,
+            routeId,
+            result.adoptedThreadId,
+          )) {
+            artifactMap.set(artifact.id, artifact);
+          }
+        }
         const snapshot = {
           stages: snapshotStages(stageRows),
+          artifacts: [...artifactMap.values()],
           command: {
             id: command.id,
             kind: command.kind,
@@ -788,6 +814,7 @@ export function createCommandRepository(pool: DatabasePool) {
         );
         await client.query('UPDATE workflow_threads SET updated_at = $2 WHERE id = $1', [threadId, now]);
         await client.query('UPDATE contexts SET updated_at = $2 WHERE id = $1', [command.context_id, now]);
+        await insertMemoryProposals(client, command, routeId, threadId, result.memoryProposals, now);
         return completeCommand(client, command, {
           routeId,
           threadId,

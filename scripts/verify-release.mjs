@@ -29,12 +29,19 @@ const NATIVE_REQUIRED = [
   'db/migrations/0001_identity.sql',
   'db/migrations/0002_workflow_domain.sql',
   'db/migrations/0003_workflow_commands.sql',
+  'db/migrations/0004_assets_memory_archive.sql',
   'apps/api/src/domain/service.ts',
   'apps/api/src/commands/bridge.ts',
   'apps/api/src/commands/service.ts',
   'apps/api/src/routes/domain.ts',
   'apps/api/src/routes/commands.ts',
+  'apps/api/src/assets/storage.ts',
+  'apps/api/src/routes/assets.ts',
+  'apps/api/src/archive/import-librechat.ts',
+  'apps/api/src/routes/archive.ts',
+  'apps/api/src/routes/memory.ts',
   'apps/web/src/commands/api.ts',
+  'apps/web/src/stages/StageWorkspace.tsx',
 ];
 const NATIVE_FORBIDDEN = ['librechat.yaml', 'upstream/librechat', 'scripts/build-librechat.mjs'];
 
@@ -44,6 +51,7 @@ const JSON_FILES = [
   'workflow/snapshot.json',
   'config/memory-schema.json',
   'config/required-executors.json',
+  'product.manifest.json',
 ];
 
 function composeServiceBlock(source, service) {
@@ -95,6 +103,8 @@ function verifyNativeIdentity(releaseRoot, errors) {
     for (const name of ['DATABASE_URL', 'AUTH_PEPPER', 'PUBLIC_APP_ORIGIN', 'SMTP_HOST']) {
       if (!compose.includes(name)) errors.push(`native compose missing auth configuration: ${name}`);
     }
+    if (!compose.includes('OBJECT_STORE_DIRECTORY')) errors.push('native compose missing object storage configuration');
+    if (!compose.includes('/data/objects')) errors.push('native compose missing persistent object storage volume');
     if (/mongo(db)?\s*:/i.test(compose) || /image:\s*[^\n]*mongo/i.test(compose)) {
       errors.push('forbidden MongoDB runtime in native compose');
     }
@@ -108,6 +118,7 @@ function verifyNativeIdentity(releaseRoot, errors) {
     for (const name of ['DATABASE_URL', 'AUTH_PEPPER', 'PUBLIC_APP_ORIGIN', 'SMTP_HOST']) {
       if (!compose.includes(name)) errors.push(`external database compose missing required configuration: ${name}`);
     }
+    if (!compose.includes('OBJECT_STORE_DIRECTORY')) errors.push('external database compose missing object storage configuration');
   }
 
   if (existsSync(envPath)) {
@@ -120,8 +131,16 @@ function verifyNativeIdentity(releaseRoot, errors) {
   }
 
   const packagePath = join(releaseRoot, 'package.json');
-  if (existsSync(packagePath) && /librechat|mongodb|mongoose/i.test(readFileSync(packagePath, 'utf8'))) {
-    errors.push('forbidden LibreChat or MongoDB dependency in native package');
+  if (existsSync(packagePath)) {
+    try {
+      const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+      const dependencies = { ...(packageJson.dependencies ?? {}), ...(packageJson.optionalDependencies ?? {}) };
+      if (Object.keys(dependencies).some((name) => /^(?:@librechat\/|librechat|mongodb|mongoose)$/i.test(name))) {
+        errors.push('forbidden LibreChat or MongoDB dependency in native package');
+      }
+    } catch {
+      errors.push('invalid JSON: package.json');
+    }
   }
 }
 
@@ -191,6 +210,28 @@ export function verifyRelease(releaseRoot) {
       if (actual !== manifest.workflow_checksum) {
         errors.push(`workflow checksum mismatch: manifest=${manifest.workflow_checksum} actual=${actual}`);
       }
+    }
+  }
+
+  const productManifest = parsed['product.manifest.json'];
+  if (templateFlavor === 'native' && manifest && productManifest) {
+    checked++;
+    if (productManifest.contract_version !== '1.0') {
+      errors.push('product manifest contract_version must be 1.0');
+    }
+    if (productManifest.workflow?.id !== manifest.workflow_id) {
+      errors.push(
+        `workflow identity mismatch: site=${manifest.workflow_id ?? 'missing'} product=${productManifest.workflow?.id ?? 'missing'}`,
+      );
+    }
+    const expectedProductId = String(manifest.release_id ?? '').replace(/_/g, '-');
+    if (productManifest.product?.id !== expectedProductId) {
+      errors.push(
+        `product identity mismatch: release=${expectedProductId || 'missing'} product=${productManifest.product?.id ?? 'missing'}`,
+      );
+    }
+    if (typeof productManifest.workflow?.endpoint !== 'string' || !productManifest.workflow.endpoint) {
+      errors.push('product manifest missing workflow endpoint');
     }
   }
 

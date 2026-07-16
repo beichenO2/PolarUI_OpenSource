@@ -74,6 +74,7 @@ describe('workflow bridge', () => {
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(baseInput.commandId);
     const body = JSON.parse(String(init?.body));
     expect(body).toMatchObject({
+      contract_version: '1.0',
       userId: baseInput.userId,
       scenarioId: baseInput.contextId,
       sessionId: baseInput.threadId,
@@ -81,6 +82,7 @@ describe('workflow bridge', () => {
       workflowId: 'demo-flow',
       history: baseInput.history,
       input: {
+        contract_version: '1.0',
         command_id: baseInput.commandId,
         route_id: baseInput.routeId,
         stage_key: 'discover',
@@ -221,8 +223,59 @@ describe('workflow bridge', () => {
     expect(JSON.stringify(result.memoryProposals)).not.toContain('cursor');
   });
 
+  it('accepts bounded inline artifact proposals without exposing a workflow path', async () => {
+    const content = Buffer.from('report body').toString('base64');
+    const { bridge } = setup(vi.fn(async () => response({
+      ok: true,
+      reply: 'Report ready',
+      pdf_path: '/private/workflow/report.pdf',
+      artifact_proposals: [{ filename: 'report.txt', media_type: 'text/plain', content_base64: content }],
+    })));
+    const result = await bridge.run(baseInput);
+    expect(result.artifactProposals).toEqual([
+      { filename: 'report.txt', mediaType: 'text/plain', body: Buffer.from('report body') },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('/private/workflow');
+  });
+
+  it('accepts a normalized headless Workflow response with no legacy PDF artifact', async () => {
+    const { bridge } = setup(vi.fn(async () => response({
+      ok: true,
+      reply: 'Fixture reply',
+      pdf_path: null,
+      artifact_proposals: [{
+        filename: 'workflow-report.txt',
+        media_type: 'text/plain',
+        content_base64: Buffer.from('report body').toString('base64'),
+      }],
+    })));
+
+    const result = await bridge.run(baseInput);
+
+    expect(result.reply).toBe('Fixture reply');
+    expect(result.artifactProposals[0]?.filename).toBe('workflow-report.txt');
+  });
+
+  it('fails closed for malformed artifact bodies and excessive proposal counts', async () => {
+    const malformed = setup(vi.fn(async () => response({
+      ok: true, reply: 'bad',
+      artifact_proposals: [{ filename: 'bad.bin', media_type: 'application/octet-stream', content_base64: '***' }],
+    })));
+    await expect(malformed.bridge.run(baseInput))
+      .rejects.toEqual(expect.objectContaining({ code: 'WORKFLOW_INVALID_ARTIFACT' }));
+
+    const excessive = setup(vi.fn(async () => response({
+      ok: true, reply: 'bad',
+      artifact_proposals: Array.from({ length: 11 }, (_, index) => ({
+        filename: `${index}.txt`, media_type: 'text/plain', content_base64: 'eA==',
+      })),
+    })));
+    await expect(excessive.bridge.run(baseInput))
+      .rejects.toEqual(expect.objectContaining({ code: 'WORKFLOW_INVALID_RESPONSE' }));
+  });
+
   it('rejects a multi-chunk response as soon as it exceeds the byte limit', async () => {
-    const chunk = new Uint8Array(1_100_000);
+    const chunk = new Uint8Array(19_000_000);
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(chunk);

@@ -63,19 +63,18 @@ node scripts/export-release.mjs --workflow taoci-outreach --compile-only \
 
 **Agent 职责**：调用 CLI、读 JSON 结果、报告路径。**禁止**在 `~/Desktop/Web_related/` 手写 `.tsx` / `.mjs` 建站。
 
-## Native workflow web template — Phase 2 identity
+## Native workflow web template — production default
 
-The native template remains opt-in. Phase 2 adds native PostgreSQL identity persistence: public users register with email, a mandatory username, and password; Mailpit or the configured SMTP service delivers a six-digit verification code; login accepts either email or username. Trusted operators can create an already verified user through the administrator CLI. Context, Route, Stage, Thread, and Checkpoint persistence remain Phase 3 work.
+The native template is the default export flavor. It includes email identity, PostgreSQL workflow hierarchy, durable command/SSE execution, attachments and artifacts, explicit memory-proposal decisions, and read-only LibreChat archive import. Use `--template-flavor legacy` only for a deliberate compatibility export.
 
 ```bash
 node scripts/export-release.mjs \
   --workflow claude-code \
-  --template-flavor native \
   --compile-only \
   --skip-preflight
 ```
 
-A native release contains one `polar-web` application and no LibreChat runtime. Phase 2 identity is complete, but native must remain opt-in until the Phase 3–5 workflow persistence, migration, and cutover gates are complete.
+A native release contains one public `polar-web` application and no LibreChat or MongoDB runtime. PostgreSQL and the object volume are private deployment dependencies.
 
 The exported `site.config.json` records non-secret identity metadata under `web.identity`. Credentials never enter that file or the release tree.
 

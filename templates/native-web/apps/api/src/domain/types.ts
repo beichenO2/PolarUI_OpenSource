@@ -16,6 +16,24 @@ export interface CheckpointSnapshot {
     status: RouteStageStatus;
     internal_state: string;
   }>;
+  artifacts?: CheckpointArtifact[];
+}
+
+export interface CheckpointArtifact {
+  id: string;
+  stage_key: string;
+  filename: string;
+  media_type: string;
+  byte_size: number;
+  sha256: string;
+  created_at: string;
+}
+
+export interface RouteOrigin {
+  routeId: string;
+  routeName: string;
+  version: number;
+  stageKey: string;
 }
 
 export interface WorkflowContext {
@@ -31,6 +49,7 @@ export interface WorkflowRoute {
   contextId: string;
   name: string;
   originCheckpointId: string | null;
+  origin: RouteOrigin | null;
   headCheckpointId: string;
   createdAt: Date;
   updatedAt: Date;

@@ -1,37 +1,34 @@
-# PolarUI — 使用指南
+---
+name: polarui-usage
+description: Use when opening, inspecting, restarting, or developing against the stable PolarUI GUI preview on the local Polarisor machine.
+---
 
-> 前端详情：[`docs/FRONTEND.md`](../../docs/FRONTEND.md)
+# PolarUI GUI usage
 
-## 启动
+## Runtime authority
 
-```bash
-cd ~/Polarisor/PolarUI
-npm ci
-npm run dev -- --port 5170
-```
+PolarPort is the only port authority and PolarProcess is the only lifecycle authority. The stable GUI service ID is `polarui`, with preferred port 5170 and health endpoint `http://127.0.0.1:5170/`.
 
-打开 http://127.0.0.1:5170/ — **无需切换 LG/WF 模式**（Tab 已删），从 Workflow 面板或打开 JSON 加载图即可。
-
-## Workflow 撰写与部署
-
-| 阶段 | Skill / 文档 |
-|------|-------------|
-| 画布编辑 | [`polarui-workflow-authoring`](../polarui-workflow-authoring/SKILL.md) |
-| Web 运行时契约 | [`polarui-workflow-contract`](../polarui-workflow-contract/SKILL.md) |
-| 部署到 Web | [`polarui-web-deploy`](../polarui-web-deploy/SKILL.md) |
-| 架构 | [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) |
-
-## 依赖服务（可选）
-
-| 服务 | 端口 | 用途 |
-|------|------|------|
-| PolarProcess | 11055 | 生态服务列表（dev 经 vite proxy） |
-| PolarCopilot Hub | 8040 | SSoT 在线编辑（dev 可回退本地 polaris.json） |
-| PolarPrivate | 12790 | LLM |
-
-## 健康检查
+Install and build are transient commands. Persistent preview actions must use the exact PolarProcess service ID:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5170/
-curl -s http://127.0.0.1:5170/api/polaris/PolarUI | head -c 80
+curl -fsS http://127.0.0.1:11050/api/health
+curl -fsS http://127.0.0.1:11055/api/services/polarui
+curl -fsS -X POST http://127.0.0.1:11055/api/services/polarui/restart
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5170/
 ```
+
+Do not start Vite directly, use background shell jobs, maintain PID files, send direct signals, or invoke launchd. Do not treat Native Web preview or QA service IDs as aliases for the stable GUI.
+
+## Workflow navigation
+
+Open `http://127.0.0.1:5170/`. Load a graph from the Workflow panel or open its JSON directly; LG/WF are graph features rather than separate modes.
+
+| Stage | Skill / document |
+|---|---|
+| Canvas editing | `polarui-workflow-authoring` |
+| Web runtime contract | `polarui-workflow-contract` |
+| Exported Web deployment | `polarui-web-deploy` |
+| Architecture | `docs/ARCHITECTURE.md` |
+
+Optional dependencies include PolarCopilot Hub for online SSoT and PolarPrivate for LLM access. Inspect their own PolarProcess records; never start them as a side effect of opening PolarUI.

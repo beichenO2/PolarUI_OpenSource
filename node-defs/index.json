@@ -13,5 +13,6 @@
     "functions/paradigms.json",
     "annotation.json",
     "evolve.json"
+    ,"native-web-qa.json"
   ]
 }

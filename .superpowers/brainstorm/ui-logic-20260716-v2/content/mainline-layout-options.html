@@ -1,0 +1,55 @@
+<h2>主线工作模式：什么应该占据页面中心？</h2>
+<p class="subtitle">三种方案都保留项目、路线、阶段导航；区别是“阶段任务”和“讨论”谁是主角。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a-workspace-primary" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f7f7f4">
+      <div style="display:grid;grid-template-columns:72px 1fr 94px;gap:8px;height:240px;font-size:11px">
+        <div style="border-right:1px solid #ccc;padding:6px">项目<br><b>主线</b><br><br>阶段<br>01 当前<br>02 下一步</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="padding:6px;background:#e8f0ec;color:#164a38"><b>主线工作</b> · 明确项目</div>
+          <div style="flex:1;border:2px solid #285b49;padding:10px"><b>阶段任务区</b><br><br>结构化表单 / 文档 / 方案卡片<br><br><button class="mock-button">提交阶段结果</button></div>
+          <div style="border:1px solid #ccc;padding:7px">附件与产物 · 2</div>
+        </div>
+        <div style="border-left:1px solid #ccc;padding:6px"><b>讨论</b><br>线程 A<br>线程 B<br><br><span style="color:#666">点击后抽屉展开</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 阶段任务为主（推荐）</h3>
+      <p>中央只呈现当前 Stage 的核心工作；Thread 收进右侧抽屉，需要时展开。最符合 Workflow 产品逻辑。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b-conversation-primary" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f7f7f4">
+      <div style="display:grid;grid-template-columns:72px 1fr;gap:8px;height:240px;font-size:11px">
+        <div style="border-right:1px solid #ccc;padding:6px">项目<br><b>主线</b><br><br>阶段<br>01 当前<br>02 下一步</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="padding:6px;background:#e8f0ec;color:#164a38"><b>主线工作</b> · 线程 A</div>
+          <div style="flex:1;border:2px solid #285b49;padding:10px"><b>对话时间线</b><br><br>你：需要明确目标<br><br>Workflow：建议先收集约束<br><br><div class="mock-input">继续讨论...</div></div>
+          <div style="border:1px solid #ccc;padding:7px">阶段任务 · 附件 · 笔记（折叠）</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 对话为主</h3>
+      <p>保留现在的聊天中心思路，阶段组件折叠到下方。熟悉，但不同 Workflow 最终仍容易长得像聊天产品。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c-split-view" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f7f7f4">
+      <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;height:240px;font-size:11px">
+        <div style="border-right:1px solid #ccc;padding:6px">项目<br><b>主线</b><br><br>阶段<br>01 当前</div>
+        <div style="border:2px solid #285b49;padding:10px"><b>阶段任务</b><br><br>表单 / 文档<br><br>附件与产物</div>
+        <div style="border:1px solid #999;padding:10px"><b>Thread A</b><br><br>对话记录<br><br><div class="mock-input">输入消息...</div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 任务与讨论并排</h3>
+      <p>上下文最完整，适合宽屏；移动端必须改成标签页，桌面也容易信息过载。</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">点击一个方案，再回到对话里告诉我你的选择和原因。</p>

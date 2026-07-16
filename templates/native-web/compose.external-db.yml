@@ -18,7 +18,14 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       WORKFLOW_ENDPOINT_OVERRIDE: ${WORKFLOW_ENDPOINT_OVERRIDE:-}
       WORKFLOW_TIMEOUT_MS: ${WORKFLOW_TIMEOUT_MS:-60000}
+      OBJECT_STORE_DIRECTORY: /data/objects
+      WORKFLOW_ARTIFACT_ROOT: ${WORKFLOW_ARTIFACT_ROOT:-}
+    volumes:
+      - polar_object_data:/data/objects
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "${POLAR_WEB_BIND:-127.0.0.1}:${POLAR_WEB_PORT:-3920}:3920"
+
+volumes:
+  polar_object_data:

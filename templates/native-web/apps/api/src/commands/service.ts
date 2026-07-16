@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ProductManifest } from '@polar/native-web-product-sdk';
 import type { WorkflowBridge } from './bridge.js';
+import type { AssetService } from '../assets/service.js';
 import { WorkflowBridgeError } from './bridge.js';
 import type { CommandRepository } from './repository.js';
 import { CommandRepositoryError } from './types.js';
@@ -95,6 +96,7 @@ export function createCommandService(options: {
   createId?: () => string;
   now?: () => Date;
   leaseDurationMs?: number;
+  assetService?: AssetService;
 }) {
   const createId = options.createId ?? randomUUID;
   const now = options.now ?? (() => new Date());
@@ -153,6 +155,10 @@ export function createCommandService(options: {
     };
     if (claimed.kind === 'replay') return { ...receipt, replayed: true };
 
+    if (!claimed.execution.baseIsHead) {
+      return rejectClaim(input.commandId, 'CHECKPOINT_NOT_CURRENT', 409);
+    }
+
     const definition = stageDefinitions.get(claimed.execution.stageKey);
     const projection = claimed.execution.stages.find((stage) => stage.stageKey === claimed.execution.stageKey);
     if (!definition || !projection) return rejectClaim(input.commandId, 'WORKFLOW_STATE_INVALID', 409);
@@ -200,8 +206,7 @@ export function createCommandService(options: {
           stages: prepared.execution.stages,
         });
         if (prepared.input.kind === 'named_action') {
-          const historical = !prepared.execution.baseIsHead;
-          await options.repository.finalizeAction(commandId, {
+          const committed = await options.repository.finalizeAction(commandId, {
             reply: result.reply,
             stageSignals: result.stageSignals,
             memoryProposals: result.memoryProposals,
@@ -212,14 +217,20 @@ export function createCommandService(options: {
             userMessageId: createId(),
             assistantMessageId: createId(),
             checkpointId: createId(),
-            headCheckpointIdAtClaim: historical ? null : prepared.execution.headCheckpointId,
-            derivedRouteId: historical ? createId() : undefined,
-            derivedThreadId: historical ? createId() : undefined,
-            derivedRouteName: historical ? `派生路线 ${prepared.execution.baseCheckpoint.version}` : undefined,
-            derivedThreadTitle: historical ? `派生讨论 ${prepared.execution.stageKey}` : undefined,
+            headCheckpointIdAtClaim: prepared.execution.headCheckpointId,
           }, now());
+          if (committed.status === 'succeeded' && options.assetService) {
+            for (const artifact of result.artifactProposals) {
+              await options.assetService.saveArtifact(prepared.execution.userId, commandId, {
+                contextId: prepared.execution.contextId,
+                routeId: committed.routeId,
+                threadId: committed.threadId,
+                stageKey: prepared.execution.stageKey,
+              }, artifact);
+            }
+          }
         } else {
-          await options.repository.finalizeMessage(commandId, {
+          const committed = await options.repository.finalizeMessage(commandId, {
             userMessageId: createId(),
             assistantMessageId: createId(),
             reply: result.reply,
@@ -230,6 +241,16 @@ export function createCommandService(options: {
               cursor: result.interrupt.cursor,
             } : null,
           }, now());
+          if (committed.status === 'succeeded' && options.assetService) {
+            for (const artifact of result.artifactProposals) {
+              await options.assetService.saveArtifact(prepared.execution.userId, commandId, {
+                contextId: prepared.execution.contextId,
+                routeId: committed.routeId,
+                threadId: committed.threadId,
+                stageKey: prepared.execution.stageKey,
+              }, artifact);
+            }
+          }
         }
       } catch (error) {
         const code = error instanceof WorkflowBridgeError ? error.code : 'WORKFLOW_UNAVAILABLE';

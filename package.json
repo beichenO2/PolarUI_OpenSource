@@ -19,6 +19,7 @@
     "qa:native-web": "node scripts/qa-native-web-release.mjs",
     "qa:native-identity": "node scripts/qa-native-identity-release.mjs",
     "qa:native-domain": "node scripts/qa-native-identity-release.mjs",
+    "qa:native-release": "node scripts/qa-native-release-governed.mjs",
     "export-release": "node scripts/export-release.mjs",
     "test:toolcall-graph": "node lib/toolcall-graph/register.test.mjs",
     "test:react-replay": "node --test workflows/tests/react-replay-graph.test.mjs workflows/tests/react-lg-routing.test.mjs",

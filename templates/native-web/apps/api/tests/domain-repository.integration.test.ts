@@ -79,6 +79,7 @@ integrationDescribe('workflow domain repository', () => {
         status,
         internal_state: internalState,
       })),
+      artifacts: [],
     });
   });
 
@@ -201,6 +202,7 @@ integrationDescribe('workflow domain repository', () => {
       route: {
         name: 'Alternative route',
         originCheckpointId: ids.checkpoint,
+        origin: { routeId: ids.route, routeName: 'Main route', version: 0, stageKey: 'discover' },
         headCheckpointId: '40000000-0000-4000-8000-000000000002',
       },
       checkpoint: { parentCheckpointId: null, reason: 'branch', version: 0 },
@@ -208,6 +210,12 @@ integrationDescribe('workflow domain repository', () => {
     const sourceAfter = await repository.getRouteWorkspace(ids.user, ids.route, 'discover');
     expect(sourceAfter?.route).toEqual(source.route);
     expect(sourceAfter?.checkpoints).toEqual([source.checkpoint]);
-    expect((await repository.getContextWorkspace(ids.user, ids.context))?.routes).toHaveLength(2);
+    expect((await repository.getContextWorkspace(ids.user, ids.context))?.routes).toEqual([
+      expect.objectContaining({ id: ids.route, origin: null }),
+      expect.objectContaining({
+        id: '30000000-0000-4000-8000-000000000002',
+        origin: { routeId: ids.route, routeName: 'Main route', version: 0, stageKey: 'discover' },
+      }),
+    ]);
   });
 });

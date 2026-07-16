@@ -138,6 +138,10 @@ integrationDescribe('identity migrations', () => {
         version: '0003_workflow_commands',
         checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
       }),
+      expect.objectContaining({
+        version: '0004_assets_memory_archive',
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
     ]);
 
     const tables = await pool.query<{ table_name: string }>(
@@ -148,10 +152,18 @@ integrationDescribe('identity migrations', () => {
         'ORDER BY table_name',
       [[
         'auth_sessions',
+        'asset_objects',
         'contexts',
         'email_verifications',
+        'librechat_archive_attachments',
+        'librechat_archive_conversations',
+        'librechat_archive_messages',
+        'memory_entries',
+        'memory_proposals',
         'route_stage_projections',
         'users',
+        'workflow_artifacts',
+        'workflow_attachments',
         'workflow_checkpoints',
         'workflow_command_events',
         'workflow_commands',
@@ -162,11 +174,19 @@ integrationDescribe('identity migrations', () => {
       ], schemaName],
     );
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      'asset_objects',
       'auth_sessions',
       'contexts',
       'email_verifications',
+      'librechat_archive_attachments',
+      'librechat_archive_conversations',
+      'librechat_archive_messages',
+      'memory_entries',
+      'memory_proposals',
       'route_stage_projections',
       'users',
+      'workflow_artifacts',
+      'workflow_attachments',
       'workflow_checkpoints',
       'workflow_command_events',
       'workflow_commands',

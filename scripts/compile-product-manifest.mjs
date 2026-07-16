@@ -29,7 +29,6 @@ export async function compileProductManifest({ workflowDir, workflowId, releaseI
     workflow: {
       ...raw.workflow,
       id: workflowId,
-      endpoint: `http://127.0.0.1:8065/run/${workflowId}/flow.json`,
     },
   };
   const { parseProductManifest } = await loadParser();

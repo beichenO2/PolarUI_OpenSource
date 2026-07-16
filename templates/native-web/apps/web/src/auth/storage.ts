@@ -5,12 +5,6 @@ function safeLocalPath(path: string) {
   return path.startsWith('/') && !path.startsWith('//') ? path : '/';
 }
 
-function normalizedLocalPath(path: string) {
-  const url = new URL(safeLocalPath(path), 'https://polar.local');
-  url.searchParams.sort();
-  return url.pathname + url.search;
-}
-
 export const setReturnPath = (productId: string, path: string) =>
   localStorage.setItem(returnPathKey(productId), safeLocalPath(path));
 export const takeReturnPath = (productId: string) => {
@@ -19,7 +13,34 @@ export const takeReturnPath = (productId: string) => {
   localStorage.removeItem(key);
   return value;
 };
-export const readDraft = (productId: string, path: string) =>
-  localStorage.getItem(prefix + productId + ':draft:' + normalizedLocalPath(path)) ?? '';
-export const writeDraft = (productId: string, path: string, value: string) =>
-  localStorage.setItem(prefix + productId + ':draft:' + normalizedLocalPath(path), value);
+export interface ComposerDraftScope {
+  productId: string;
+  userId: string;
+  contextId: string;
+  routeId: string;
+  stageKey: string;
+  threadId: string;
+}
+
+export const composerDraftKey = (scope: ComposerDraftScope) =>
+  prefix + [
+    scope.productId,
+    'composer-draft',
+    scope.userId,
+    scope.contextId,
+    scope.routeId,
+    scope.stageKey,
+    scope.threadId,
+  ].map(encodeURIComponent).join(':');
+
+export const readComposerDraft = (scope: ComposerDraftScope) =>
+  localStorage.getItem(composerDraftKey(scope)) ?? '';
+
+export const writeComposerDraft = (scope: ComposerDraftScope, value: string) => {
+  const key = composerDraftKey(scope);
+  if (value) localStorage.setItem(key, value);
+  else localStorage.removeItem(key);
+};
+
+export const clearComposerDraft = (scope: ComposerDraftScope) =>
+  localStorage.removeItem(composerDraftKey(scope));

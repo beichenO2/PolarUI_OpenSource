@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProductManifest } from '@polar/native-web-product-sdk';
 import type { SessionUser } from './auth/api';
-import { readDraft, writeDraft } from './auth/storage';
-import { ThreadConversation } from './commands/ThreadConversation';
+import { StageWorkspace } from './stages/StageWorkspace';
+import { ArchivePanel } from './archive/ArchivePanel';
+import { VersionArchive } from './workspace/VersionArchive';
+import { ThreadDrawer } from './workspace/ThreadDrawer';
 import {
-  branchRoute,
+  createRouteFromVersion,
   createContext,
   createThread,
   getContextWorkspace,
@@ -22,9 +24,10 @@ interface WorkspaceLocation {
   contextId: string;
   routeId: string;
   stageKey: string;
-  checkpointId?: string;
   threadId?: string;
 }
+
+const workspaceLabel = '工作空间';
 
 type NavigationResult = 'loaded' | 'failed' | 'stale';
 
@@ -38,7 +41,6 @@ function parseWorkspaceLocation(): WorkspaceLocation | null {
     contextId: decodeURIComponent(match[1]!),
     routeId: decodeURIComponent(match[2]!),
     stageKey: decodeURIComponent(match[3]!),
-    checkpointId: query.get('checkpoint') ?? undefined,
     threadId: query.get('thread') ?? undefined,
   };
 }
@@ -48,28 +50,28 @@ function workspacePath(location: WorkspaceLocation): string {
     `/routes/${encodeURIComponent(location.routeId)}` +
     `/stages/${encodeURIComponent(location.stageKey)}`;
   const query = new URLSearchParams();
-  if (location.checkpointId) query.set('checkpoint', location.checkpointId);
   if (location.threadId) query.set('thread', location.threadId);
   return query.size ? `${path}?${query}` : path;
 }
 
-function ProductBar({ manifest, user, onLogout }: {
+function ProductBar({ manifest, user, onLogout, onArchive }: {
   manifest: PublicProductManifest;
   user?: SessionUser;
   onLogout?: () => void;
+  onArchive?: () => void;
 }) {
   return <header className="product-bar" data-testid="product-bar">
     <div className="product-identity">
       <span className="product-mark" aria-hidden="true">P</span>
       <div>
         <strong>{manifest.product.name}</strong>
-        <span className="product-subtitle">Workflow field notes</span>
+        <span className="product-subtitle">路线工作空间</span>
       </div>
     </div>
     <div className="workflow-status">
       <span className="status-dot" aria-hidden="true" />
-      <span>{manifest.workflow.id}</span>
-      <span className="status-label">持久化工作区</span>
+      <span className="status-label">已同步</span>
+      {user && <button className="header-logout" type="button" onClick={onArchive}>导入档案</button>}
       {user && <button className="header-logout" type="button" onClick={onLogout}>{user.username} · 退出</button>}
     </div>
   </header>;
@@ -87,30 +89,21 @@ export function App({ manifest, user, onLogout }: {
   const [error, setError] = useState('');
   const [contextTitle, setContextTitle] = useState('');
   const [showContextForm, setShowContextForm] = useState(false);
-  const [threadTitle, setThreadTitle] = useState('');
-  const [showThreadForm, setShowThreadForm] = useState(false);
-  const [branchName, setBranchName] = useState('新路线');
-  const [showBranchForm, setShowBranchForm] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>();
-  const [threadRename, setThreadRename] = useState('');
-  const [draft, setDraft] = useState('');
-  const [draftPath, setDraftPath] = useState(() => {
-    const location = parseWorkspaceLocation();
-    return location ? workspacePath(location) : '';
-  });
   const [contextSubmitting, setContextSubmitting] = useState(false);
-  const [threadSubmitting, setThreadSubmitting] = useState(false);
-  const [branchSubmitting, setBranchSubmitting] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showVersionArchive, setShowVersionArchive] = useState(false);
+  const [threadDrawerOpen, setThreadDrawerOpen] = useState(false);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const navigationGeneration = useRef(0);
   const contextSubmission = useRef(false);
   const threadSubmission = useRef(false);
-  const branchSubmission = useRef(false);
+  const threadDrawerTrigger = useRef<HTMLButtonElement>(null);
 
   const replaceLocation = useCallback((location: WorkspaceLocation, replace = false) => {
     const next = workspacePath(location);
     history[replace ? 'replaceState' : 'pushState']({}, '', next);
     setSelectedThreadId(location.threadId);
-    setDraftPath(next);
   }, []);
 
   const selectLocalLocation = useCallback((location: WorkspaceLocation, replace = false) => {
@@ -130,14 +123,13 @@ export function App({ manifest, user, onLogout }: {
     setError('');
     replaceLocation(location, options.replace);
     try {
-      const next = await getRouteWorkspace(location.routeId, location.stageKey, location.checkpointId);
+      const next = await getRouteWorkspace(location.routeId, location.stageKey);
       if (generation !== navigationGeneration.current) return 'stale';
       setWorkspace(next);
       const canonicalLocation: WorkspaceLocation = {
         contextId: next.context.id,
         routeId: next.route.id,
         stageKey: next.selectedStageKey,
-        checkpointId: next.isHistorical ? next.selectedCheckpoint.id : undefined,
         threadId: location.threadId && next.threads.some((item) => item.id === location.threadId)
           ? location.threadId
           : undefined,
@@ -148,7 +140,7 @@ export function App({ manifest, user, onLogout }: {
       return 'loaded';
     } catch {
       if (generation !== navigationGeneration.current) return 'stale';
-      setError(options.failureMessage ?? '工作区暂时无法载入，请刷新后重试。');
+      setError(options.failureMessage ?? '工作空间暂时无法载入，请刷新后重试。');
       return 'failed';
     } finally {
       if (generation === navigationGeneration.current) setLoading(false);
@@ -176,7 +168,6 @@ export function App({ manifest, user, onLogout }: {
         contextId,
         routeId: route.id,
         stageKey,
-        checkpointId: preferred?.checkpointId,
         threadId: preferred?.threadId,
       }, {
         generation,
@@ -184,7 +175,7 @@ export function App({ manifest, user, onLogout }: {
       });
     } catch {
       if (generation !== navigationGeneration.current) return 'stale';
-      setError('工作区暂时无法载入，请刷新后重试。');
+      setError('工作空间暂时无法载入，请刷新后重试。');
       setLoading(false);
       return 'failed';
     }
@@ -207,7 +198,7 @@ export function App({ manifest, user, onLogout }: {
         await openContext(selectedContext.id, validContextLocation, !validContextLocation);
       } catch {
         if (active) {
-          setError('工作区列表暂时无法载入，请刷新后重试。');
+          setError('工作空间列表暂时无法载入，请刷新后重试。');
           setLoading(false);
         }
       }
@@ -216,7 +207,6 @@ export function App({ manifest, user, onLogout }: {
     const onPopState = () => {
       const location = parseWorkspaceLocation();
       if (location) {
-        setDraftPath(workspacePath(location));
         void openContext(location.contextId, location, true);
       }
     };
@@ -235,21 +225,16 @@ export function App({ manifest, user, onLogout }: {
     contextId: workspace.context.id,
     routeId: workspace.route.id,
     stageKey: workspace.selectedStageKey,
-    checkpointId: workspace.isHistorical ? workspace.selectedCheckpoint.id : undefined,
     threadId: selectedThreadId,
   } : null;
-  const currentDraftPath = draftPath;
-
-  useEffect(() => {
-    if (currentDraftPath) setDraft(readDraft(manifest.product.id, currentDraftPath));
-  }, [currentDraftPath, manifest.product.id]);
   if (contexts && contexts.length === 0) {
     return <div className="empty-shell">
-      <ProductBar manifest={manifest} user={user} onLogout={onLogout} />
+      <ProductBar manifest={manifest} user={user} onLogout={onLogout} onArchive={() => setShowArchive(true)} />
+      {showArchive && <ArchivePanel onClose={() => setShowArchive(false)} />}
       <main className="context-empty">
-        <p className="eyebrow">{manifest.product.context_label} / 01</p>
-        <h1>创建第一个{manifest.product.context_label}</h1>
-        <p>每个{manifest.product.context_label}都是独立的问题空间。创建后会同时生成主线和第一个不可变检查点。</p>
+        <p className="eyebrow">{workspaceLabel} / 01</p>
+        <h1>创建第一个{workspaceLabel}</h1>
+        <p>为这项工作命名，然后从第一条路线开始。</p>
         <form onSubmit={async (event) => {
           event.preventDefault();
           if (contextSubmission.current) return;
@@ -264,18 +249,18 @@ export function App({ manifest, user, onLogout }: {
               contextId: created.context.id,
               routeId: created.route.id,
               stageKey: manifest.stages[0]!.key,
-            }, { failureMessage: `${manifest.product.context_label}已创建，但工作区同步失败，请刷新后重试。` });
+            }, { failureMessage: `${workspaceLabel}已创建，但同步失败，请刷新后重试。` });
           } catch {
-            setError(`没有创建${manifest.product.context_label}，请检查名称后重试。`);
+            setError(`没有创建${workspaceLabel}，请检查名称后重试。`);
           } finally {
             contextSubmission.current = false;
             setContextSubmitting(false);
           }
         }}>
-          <label>{manifest.product.context_label}名称
+          <label>{workspaceLabel}名称
             <input value={contextTitle} onChange={(event) => setContextTitle(event.target.value)} maxLength={120} required />
           </label>
-          <button type="submit" disabled={contextSubmitting}>{contextSubmitting ? '正在创建…' : `创建${manifest.product.context_label}`}</button>
+          <button type="submit" disabled={contextSubmitting}>{contextSubmitting ? '正在创建…' : `创建${workspaceLabel}`}</button>
         </form>
         {error && <p className="domain-error" role="alert">{error}</p>}
       </main>
@@ -283,66 +268,49 @@ export function App({ manifest, user, onLogout }: {
   }
 
   if (loading && !workspace) {
-    return <div className="empty-shell"><ProductBar manifest={manifest} user={user} onLogout={onLogout} />
-      <main className="context-empty"><p>正在载入工作区…</p></main>
+    return <div className="empty-shell"><ProductBar manifest={manifest} user={user} onLogout={onLogout} onArchive={() => setShowArchive(true)} />
+      {showArchive && <ArchivePanel onClose={() => setShowArchive(false)} />}
+      <main className="context-empty"><p>正在载入工作空间…</p></main>
     </div>;
   }
 
   if (!workspace || !activeStage || !currentLocation) {
-    return <div className="empty-shell"><ProductBar manifest={manifest} user={user} onLogout={onLogout} />
+    return <div className="empty-shell"><ProductBar manifest={manifest} user={user} onLogout={onLogout} onArchive={() => setShowArchive(true)} />
+      {showArchive && <ArchivePanel onClose={() => setShowArchive(false)} />}
       <main className="context-empty"><p role="alert">{error || '工作区没有可显示的路线。'}</p></main>
     </div>;
   }
 
-  const branchControls = <div className="branch-controls">
-    <button className="branch-trigger" type="button" onClick={() => setShowBranchForm(true)}>
-      从此检查点创建新路线
-    </button>
-    {showBranchForm && <form className="inline-form branch-form" onSubmit={async (event) => {
-      event.preventDefault();
-      if (branchSubmission.current) return;
-      branchSubmission.current = true;
-      setBranchSubmitting(true);
-      setError('');
-      try {
-        const result = await branchRoute(workspace.context.id, {
-          sourceCheckpointId: workspace.selectedCheckpoint.id,
-          name: branchName,
-        });
-        setContextState((current) => {
-          if (!current || current.context.id !== workspace.context.id || current.routes.some((item) => item.id === result.route.id)) {
-            return current;
-          }
-          return { ...current, routes: [...current.routes, result.route] };
-        });
-        setShowBranchForm(false);
-        await openRoute({
-          contextId: workspace.context.id,
-          routeId: result.route.id,
-          stageKey: activeStage.stageKey,
-        }, {
-          failureMessage: '新路线已创建，但工作区同步失败，请重新打开路线。',
-        });
-      } catch {
-        setError('新路线没有创建，请稍后重试。');
-      } finally {
-        branchSubmission.current = false;
-        setBranchSubmitting(false);
-      }
-    }}>
-      <label>新路线名称<input value={branchName} onChange={(event) => setBranchName(event.target.value)} required maxLength={120} /></label>
-      <div><button type="submit" disabled={branchSubmitting}>{branchSubmitting ? '正在创建…' : '创建路线'}</button><button type="button" disabled={branchSubmitting} onClick={() => setShowBranchForm(false)}>取消</button></div>
-    </form>}
-    {error && <p className="domain-error" role="alert">{error}</p>}
-  </div>;
-
   return <div className="app-shell">
-    <ProductBar manifest={manifest} user={user} onLogout={onLogout} />
+    <ProductBar manifest={manifest} user={user} onLogout={onLogout} onArchive={() => setShowArchive(true)} />
+    {showArchive && <ArchivePanel onClose={() => setShowArchive(false)} />}
+    {showVersionArchive && <VersionArchive
+      checkpoints={workspace.checkpoints}
+      routeName={workspace.route.name}
+      stageLabels={Object.fromEntries(manifest.stages.map((stage) => [stage.key, stage.label]))}
+      onClose={() => setShowVersionArchive(false)}
+      onCreateRoute={async (sourceCheckpointId, name) => {
+        const source = workspace.checkpoints.find((item) => item.id === sourceCheckpointId);
+        if (!source) throw new Error('version not found');
+        const result = await createRouteFromVersion(workspace.context.id, { sourceCheckpointId, name });
+        setContextState((current) => current && current.context.id === workspace.context.id
+          ? { ...current, routes: current.routes.some((item) => item.id === result.route.id)
+            ? current.routes
+            : [...current.routes, result.route] }
+          : current);
+        setShowVersionArchive(false);
+        const navigation = await openContext(workspace.context.id, {
+          routeId: result.route.id,
+          stageKey: source.stageKey,
+        }, true);
+        if (navigation === 'failed') setError('新路线已创建，但工作空间同步失败，请重新打开路线。');
+      }}
+    />}
 
     <aside className="navigator" data-testid="navigator-slot">
       <section>
         <div className="section-heading">
-          <p className="eyebrow">{manifest.product.context_label}</p>
+          <p className="eyebrow">{workspaceLabel}</p>
           <span>{String(contexts?.length ?? 0).padStart(2, '0')}</span>
         </div>
         <div className="context-list">
@@ -353,11 +321,11 @@ export function App({ manifest, user, onLogout }: {
             onClick={() => void openContext(item.id)}
           >
             <span className="context-index">{String(index + 1).padStart(2, '0')}</span>
-            <span><strong>{item.title}</strong><small>{item.id === workspace.context.id ? '当前问题空间' : '切换进入'}</small></span>
+            <span><strong>{item.title}</strong><small>{item.id === workspace.context.id ? '当前' : '打开'}</small></span>
           </button>)}
         </div>
-        {!showContextForm && <button aria-label={`新建${manifest.product.context_label}`} className="new-context-button" type="button" onClick={() => setShowContextForm(true)}>
-          ＋ 新建{manifest.product.context_label}
+        {!showContextForm && <button aria-label={`新建${workspaceLabel}`} className="new-context-button" type="button" onClick={() => setShowContextForm(true)}>
+          ＋ 新建{workspaceLabel}
         </button>}
         {showContextForm && <form className="inline-form context-form" onSubmit={async (event) => {
           event.preventDefault();
@@ -375,16 +343,16 @@ export function App({ manifest, user, onLogout }: {
               contextId: created.context.id,
               routeId: created.route.id,
               stageKey: manifest.stages[0]!.key,
-            }, { failureMessage: `${manifest.product.context_label}已创建，但工作区同步失败，请重新打开。` });
+            }, { failureMessage: `${workspaceLabel}已创建，但同步失败，请重新打开。` });
           } catch {
-            setError(`没有创建${manifest.product.context_label}，请检查名称后重试。`);
+            setError(`没有创建${workspaceLabel}，请检查名称后重试。`);
           } finally {
             contextSubmission.current = false;
             setContextSubmitting(false);
           }
         }}>
-          <label>{manifest.product.context_label}名称<input value={contextTitle} onChange={(event) => setContextTitle(event.target.value)} maxLength={120} required autoFocus /></label>
-          <div><button type="submit" disabled={contextSubmitting}>{contextSubmitting ? '正在创建…' : `创建${manifest.product.context_label}`}</button><button type="button" disabled={contextSubmitting} onClick={() => setShowContextForm(false)}>取消</button></div>
+          <label>{workspaceLabel}名称<input value={contextTitle} onChange={(event) => setContextTitle(event.target.value)} maxLength={120} required autoFocus /></label>
+          <div><button type="submit" disabled={contextSubmitting}>{contextSubmitting ? '正在创建…' : `创建${workspaceLabel}`}</button><button type="button" disabled={contextSubmitting} onClick={() => setShowContextForm(false)}>取消</button></div>
         </form>}
       </section>
 
@@ -395,12 +363,14 @@ export function App({ manifest, user, onLogout }: {
             aria-current={item.id === workspace.route.id ? 'page' : undefined}
             className={item.id === workspace.route.id ? 'route-chip active-route' : 'route-chip'}
             key={item.id}
-            onClick={() => void openRoute({ ...currentLocation, routeId: item.id, checkpointId: undefined, threadId: undefined })}
+            onClick={() => void openRoute({ ...currentLocation, routeId: item.id, threadId: undefined })}
             type="button"
           >{item.name}</button>)}
         </div>
         {workspace.route.originCheckpointId && <p className="route-origin">
-          源自检查点 {String(workspace.selectedCheckpoint.version).padStart(2, '0')}
+          {workspace.route.origin
+            ? `来源：${workspace.route.origin.routeName} / 版本 ${String(workspace.route.origin.version).padStart(2, '0')}`
+            : '来源：版本记录'}
         </p>}
       </section>
 
@@ -414,7 +384,7 @@ export function App({ manifest, user, onLogout }: {
             aria-current={item.stageKey === activeStage.stageKey ? 'step' : undefined}
             className={item.stageKey === activeStage.stageKey ? 'stage-link active' : 'stage-link'}
             key={item.stageKey}
-            onClick={() => void openRoute({ ...currentLocation, stageKey: item.stageKey, checkpointId: undefined, threadId: undefined })}
+            onClick={() => void openRoute({ ...currentLocation, stageKey: item.stageKey, threadId: undefined })}
             type="button"
           >
             <span className={`stage-number stage-${item.status}`}>{String(item.position + 1).padStart(2, '0')}</span>
@@ -423,168 +393,111 @@ export function App({ manifest, user, onLogout }: {
         </nav>
       </section>
 
-      <section className="checkpoint-section">
-        <p className="eyebrow">检查点</p>
-        <div className="checkpoint-list">
-          {workspace.checkpoints.map((item) => <button
-            aria-current={item.id === workspace.selectedCheckpoint.id ? 'true' : undefined}
-            className={item.id === workspace.selectedCheckpoint.id ? 'checkpoint-button selected-checkpoint' : 'checkpoint-button'}
-            key={item.id}
-            onClick={() => void openRoute({ ...currentLocation, checkpointId: item.id })}
-            type="button"
-          >
-            <strong>检查点 {String(item.version).padStart(2, '0')}</strong>
-            <span>{item.reason === 'bootstrap' ? '路线建立' : item.reason === 'branch' ? '路线派生' : '受控动作'}</span>
-          </button>)}
-        </div>
-      </section>
-      <p className="navigator-note">浏览不会推进状态。任何共享状态变化都必须生成新的检查点。</p>
     </aside>
 
     <main className="workspace" data-testid="workspace-slot" aria-busy={loading}>
       <div className="workspace-heading">
         <div><p className="eyebrow">{workspace.context.title} / {workspace.route.name}</p><h1>{activeStage.label}</h1></div>
-        <span className="component-key">{activeStage.componentKey}</span>
+        <div className="workspace-heading-actions"><button type="button" onClick={() => setShowVersionArchive(true)}>版本</button></div>
       </div>
+      {error && <p className="domain-error" role="alert">{error}</p>}
 
-      {workspace.isHistorical && <div className="history-banner" role="status">
-        正在浏览历史检查点 {String(workspace.selectedCheckpoint.version).padStart(2, '0')}。原路线仍停留在最新头部。
-      </div>}
-
-      {activeThread && activeStageDefinition ? <>
-        <ThreadConversation
-          thread={activeThread}
-          stage={activeStage}
-          checkpoint={workspace.selectedCheckpoint}
-          actions={activeStageDefinition.actions}
-          onCommandFinished={(result) => {
-            if (result.outcome !== 'succeeded') return;
-            const nextStageKey = result.stageKey && manifest.stages.some((item) => item.key === result.stageKey)
-              ? result.stageKey
-              : activeStage.stageKey;
-            if (result.resultRouteId && result.resultRouteId !== workspace.route.id) {
-              void openContext(workspace.context.id, {
-                routeId: result.resultRouteId,
-                stageKey: nextStageKey,
-                threadId: result.resultThreadId,
-              }, true);
-            } else {
-              void openRoute({
-                ...currentLocation,
-                stageKey: nextStageKey,
-                checkpointId: undefined,
-                threadId: result.resultThreadId ?? activeThread.id,
-              }, { replace: true });
-            }
-          }}
-          onConflict={() => void openRoute(currentLocation, { replace: true })}
-        />
-        <section className="stage-memo" aria-labelledby="stage-memo-heading">
-          <div>
-            <p className="card-kicker">阶段备忘</p>
-            <h2 id="stage-memo-heading">当前浏览位置的未提交笔记</h2>
-          </div>
-          <label className="draft-field">阶段草稿
-            <textarea aria-label="阶段草稿" value={draft} onChange={(event) => {
-              setDraft(event.target.value);
-              writeDraft(manifest.product.id, currentDraftPath, event.target.value);
-            }} placeholder="未提交内容只保存在当前浏览器" />
-          </label>
-          {branchControls}
-        </section>
-      </> : <article className="workspace-card">
-        <div className="card-rule" aria-hidden="true" />
-        <p className="card-kicker">{activeStage.status === 'not_started' ? '提前讨论' : '阶段工作区'}</p>
-        <h2>{activeStage.status === 'not_started' ? '现在可以讨论，但不会提前推进状态' : '围绕当前阶段整理材料与判断'}</h2>
-        <p>选择或创建一个线程后即可开始持久化对话。普通消息只影响线程；共享状态通过受控动作和新检查点推进。</p>
-        <div className="checkpoint-row">
-          <span>浏览检查点</span>
-          <strong>{String(workspace.selectedCheckpoint.version).padStart(2, '0')} · {activeStage.internalState}</strong>
-        </div>
-        <label className="draft-field">阶段草稿
-          <textarea aria-label="阶段草稿" value={draft} onChange={(event) => {
-            setDraft(event.target.value);
-            writeDraft(manifest.product.id, currentDraftPath, event.target.value);
-          }} placeholder="未提交内容只保存在当前浏览器" />
-        </label>
-        {branchControls}
-      </article>}
-
-      <footer className="workspace-footer"><span>阶段自由浏览</span><span>状态只向前追加</span><span>历史改动派生路线</span></footer>
+      {activeStageDefinition && <StageWorkspace
+        componentKey={activeStageDefinition.component_key}
+        routeId={workspace.route.id}
+        stageKey={activeStage.stageKey}
+        revision={workspaceRevision}
+      />}
+      <button
+        ref={threadDrawerTrigger}
+        className="discussion-trigger"
+        type="button"
+        aria-label={`打开讨论，${workspace.threads.length} 个`}
+        onClick={() => {
+          if (!activeThread && workspace.threads[0]) {
+            selectLocalLocation({ ...currentLocation, threadId: workspace.threads[0].id });
+          }
+          setThreadDrawerOpen(true);
+        }}
+      >
+        <span>阶段讨论</span><strong>{workspace.threads.length}</strong>
+      </button>
     </main>
 
-    <aside className="threads" data-testid="thread-slot">
-      <div className="section-heading"><p className="eyebrow">Threads</p><button className="icon-button" type="button" aria-label="新建线程" onClick={() => setShowThreadForm(true)}>＋</button></div>
-      <p className="thread-stage-label">{activeStage.label} · {workspace.threads.length} 个讨论</p>
-      {showThreadForm && <form className="inline-form thread-form" onSubmit={async (event) => {
-        event.preventDefault();
+    {threadDrawerOpen && <ThreadDrawer
+      threads={workspace.threads}
+      selectedThreadId={activeThread?.id}
+      stageLabel={activeStage.label}
+      returnFocusRef={threadDrawerTrigger}
+      onClose={() => setThreadDrawerOpen(false)}
+      onSelectThread={(threadId) => selectLocalLocation({ ...currentLocation, threadId })}
+      onCreateThread={async (title) => {
         if (threadSubmission.current) return;
         threadSubmission.current = true;
-        setThreadSubmitting(true);
-        setError('');
         try {
-          const created = await createThread(workspace.route.id, { stageKey: activeStage.stageKey, title: threadTitle });
+          const created = await createThread(workspace.route.id, { stageKey: activeStage.stageKey, title });
           setWorkspace((current) => {
             if (!current || current.route.id !== created.routeId || current.selectedStageKey !== created.stageKey) return current;
             if (current.threads.some((item) => item.id === created.id)) return current;
             return { ...current, threads: [created, ...current.threads] };
           });
-          setThreadTitle('');
-          setThreadRename(created.title);
-          setShowThreadForm(false);
           selectLocalLocation({ ...currentLocation, threadId: created.id });
-        } catch {
-          setError('线程没有创建，请检查标题后重试。');
         } finally {
           threadSubmission.current = false;
-          setThreadSubmitting(false);
         }
-      }}>
-        <label>线程标题<input value={threadTitle} onChange={(event) => setThreadTitle(event.target.value)} required maxLength={120} autoFocus /></label>
-        <div><button type="submit" disabled={threadSubmitting}>{threadSubmitting ? '正在创建…' : '创建线程'}</button><button type="button" disabled={threadSubmitting} onClick={() => setShowThreadForm(false)}>取消</button></div>
-      </form>}
-      <div className="thread-list">
-        {workspace.threads.map((item) => <button
-          type="button"
-          key={item.id}
-          aria-label={item.title}
-          className={item.id === selectedThreadId ? 'thread-card active-thread' : 'thread-card'}
-          onClick={() => {
-            setThreadRename(item.title);
-            selectLocalLocation({ ...currentLocation, threadId: item.id });
-          }}
-        ><span className="thread-meta">{workspace.route.name} · {activeStage.label}</span><strong>{item.title}</strong><small>独立阶段讨论</small></button>)}
-        {workspace.threads.length === 0 && <p className="thread-empty">这个阶段还没有线程。可以提前开一个讨论，不会改变路线状态。</p>}
-      </div>
-      {!showThreadForm && <button type="button" className="new-thread-button" onClick={() => setShowThreadForm(true)}>＋ 新建线程</button>}
-      {activeThread && <form className="thread-manage" onSubmit={async (event) => {
-        event.preventDefault();
-        setError('');
-        try {
-          await updateThread(activeThread.id, { title: threadRename });
-          await openRoute(currentLocation, {
-            replace: true,
-            failureMessage: '线程名称已保存，但工作区同步失败，请重新打开。',
-          });
-        } catch {
-          setError('线程名称没有保存，请稍后重试。');
-        }
-      }}>
-        <label>线程名称<input value={threadRename} onChange={(event) => setThreadRename(event.target.value)} /></label>
-        <div><button type="submit">保存名称</button><button type="button" onClick={async () => {
-          setError('');
-          try {
-            await updateThread(activeThread.id, { status: 'archived' });
-            await openRoute({ ...currentLocation, threadId: undefined }, {
-              replace: true,
-              failureMessage: '线程已归档，但工作区同步失败，请重新打开。',
-            });
-          } catch {
-            setError('线程没有归档，请稍后重试。');
-          }
-        }}>归档线程</button></div>
-      </form>}
-      <p className="thread-note">同一阶段可以并行讨论多个问题。采纳与推进都会留下不可变检查点。</p>
-    </aside>
+      }}
+      onRenameThread={async (threadId, title) => {
+        await updateThread(threadId, { title });
+        const navigation = await openRoute(currentLocation, {
+          replace: true,
+          failureMessage: '讨论名称已保存，但工作空间同步失败，请重新打开。',
+        });
+        if (navigation === 'failed') throw new Error('discussion reconciliation failed');
+      }}
+      onArchiveThread={async (threadId) => {
+        await updateThread(threadId, { status: 'archived' });
+        const navigation = await openRoute({ ...currentLocation, threadId: undefined }, {
+          replace: true,
+          failureMessage: '讨论已归档，但工作空间同步失败，请重新打开。',
+        });
+        if (navigation === 'failed') throw new Error('discussion reconciliation failed');
+      }}
+      revision={workspaceRevision}
+      conversation={activeThread && activeStageDefinition ? {
+        thread: activeThread,
+        stage: activeStage,
+        checkpoint: workspace.selectedCheckpoint,
+        actions: activeStageDefinition.actions,
+        draftScope: {
+          productId: manifest.product.id,
+          userId: user?.id ?? 'anonymous',
+          contextId: workspace.context.id,
+          routeId: workspace.route.id,
+          stageKey: activeStage.stageKey,
+          threadId: activeThread.id,
+        },
+        onCommandFinished: (result) => {
+          if (result.outcome !== 'succeeded') return;
+          const nextStageKey = result.stageKey && manifest.stages.some((item) => item.key === result.stageKey)
+            ? result.stageKey
+            : activeStage.stageKey;
+          void (async () => {
+            const navigation = result.resultRouteId && result.resultRouteId !== workspace.route.id
+              ? await openContext(workspace.context.id, {
+                  routeId: result.resultRouteId,
+                  stageKey: nextStageKey,
+                  threadId: result.resultThreadId,
+                }, true)
+              : await openRoute({
+                  ...currentLocation,
+                  stageKey: nextStageKey,
+                  threadId: result.resultThreadId ?? activeThread.id,
+                }, { replace: true });
+            if (navigation === 'loaded') setWorkspaceRevision((current) => current + 1);
+          })();
+        },
+        onConflict: () => void openRoute(currentLocation, { replace: true }),
+      } : undefined}
+    />}
   </div>;
 }

@@ -31,9 +31,26 @@ function safeName(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9_.-]/g, '-').slice(0, 48);
 }
 
+function resolveNativeComposeProject(releaseId, environment) {
+  const project = environment.POLAR_NATIVE_COMPOSE_PROJECT ?? `polar-${safeName(releaseId)}`;
+  if (!/^[a-z0-9][a-z0-9_.-]{0,62}$/.test(project)) {
+    throw new Error('POLAR_NATIVE_COMPOSE_PROJECT must be a valid lowercase Docker Compose project name');
+  }
+  return project;
+}
+
 function requireEnvironment(environment, names) {
   const missing = names.filter((name) => !environment[name]);
   if (missing.length > 0) throw new Error(`native deployment requires ${missing.join(', ')}`);
+}
+
+export function resolveNativePreferredPort(config, environment = process.env) {
+  const raw = environment.POLAR_WEB_PREFERRED_PORT ?? config.preferred_web_port ?? 3920;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+    throw new Error('POLAR_WEB_PREFERRED_PORT must be an integer between 1024 and 65535');
+  }
+  return port;
 }
 
 export function buildNativeDeploymentPlan({
@@ -52,12 +69,13 @@ export function buildNativeDeploymentPlan({
     ...(databaseMode === 'bundled' ? ['POSTGRES_PASSWORD'] : ['DATABASE_URL']),
   ]);
 
-  const projectName = `polar-${safeName(releaseId)}`;
+  const projectName = resolveNativeComposeProject(releaseId, environment);
   const containerName = `${projectName}-web`.slice(0, 63);
   const imageTag = `polar-native-${safeName(releaseId)}:latest`;
   if (databaseMode === 'bundled') {
     return {
       databaseMode,
+      composeProject: projectName,
       containerName,
       imageTag,
       envFilePath,
@@ -94,12 +112,35 @@ export function buildNativeDeploymentPlan({
   };
 }
 
-function writeNativeEnvFile(plan, environment, webPort) {
+export function buildNativeServiceRegistration({
+  serviceId,
+  releaseId,
+  command,
+  releaseRoot,
+  webPort,
+}) {
+  return {
+    id: serviceId,
+    name: `Web ${releaseId}`,
+    command,
+    work_dir: releaseRoot,
+    port: webPort,
+    health_check_url: `http://127.0.0.1:${webPort}/readyz`,
+    auto_start: true,
+    restart_on_failure: true,
+    max_restarts: 5,
+    device_id: 'any',
+    start_script_dir: '-',
+  };
+}
+
+export function writeNativeEnvFile(plan, environment, webPort) {
   mkdirSync(join(homedir(), '.config', 'polarui', 'release-env'), { recursive: true });
   const names = [
     'NODE_ENV', 'DATABASE_URL', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
     'AUTH_PEPPER', 'PUBLIC_APP_ORIGIN', 'COOKIE_SECURE', 'TRUST_PROXY', 'SMTP_HOST', 'SMTP_PORT',
     'SMTP_FROM', 'SMTP_SECURE', 'SMTP_USERNAME', 'SMTP_PASSWORD',
+    'WORKFLOW_ENDPOINT_OVERRIDE', 'WORKFLOW_TIMEOUT_MS',
   ];
   const defaults = { NODE_ENV: 'production', COOKIE_SECURE: 'true' };
   const lines = [`POLAR_WEB_PORT=${webPort}`];
@@ -161,7 +202,7 @@ export async function deployWebRelease(opts) {
       webPort = await claimPolarPort({
         serviceName: webService,
         project: 'PolarUI',
-        preferred: config.preferred_web_port ?? 3920,
+        preferred: resolveNativePreferredPort(config, environment),
       });
       plan = buildNativeDeploymentPlan({
         databaseMode,
@@ -178,18 +219,13 @@ export async function deployWebRelease(opts) {
         });
         if (build.status !== 0) throw new Error('native web docker build failed');
       }
-      const serviceBody = {
-        id: webService,
-        name: `Web ${releaseId}`,
+      const serviceBody = buildNativeServiceRegistration({
+        serviceId: webService,
+        releaseId,
         command: plan.command,
-        work_dir: releaseRoot,
-        port: webPort,
-        health_check_url: `http://127.0.0.1:${webPort}/readyz`,
-        auto_start: true,
-        restart_on_failure: true,
-        max_restarts: 5,
-        device_id: 'any',
-      };
+        releaseRoot,
+        webPort,
+      });
       const start = await registerAndStartService(serviceBody);
       config.port = webPort;
       config.web = { ...config.web, database_mode: databaseMode };
@@ -203,6 +239,7 @@ export async function deployWebRelease(opts) {
         web_url: `http://127.0.0.1:${webPort}/`,
         service_id: webService,
         database_mode: databaseMode,
+        compose_project: plan.composeProject ?? null,
       };
       mkdirSync(join(releaseRoot, 'injected'), { recursive: true });
       writeFileSync(join(releaseRoot, 'injected/deploy.json'), JSON.stringify(deploy, null, 2));

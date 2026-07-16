@@ -1,33 +1,26 @@
-# PolarUI — 部署索引
+---
+name: polarui-deploy
+description: Use when deciding between the local PolarUI GUI preview and exporting a workflow as an independently governed Web release.
+---
 
-> 本 skill 为**入口索引**。PolarUI 有两类「部署」，勿混淆。
+# PolarUI deployment index
 
-## 🔷 本地编辑器（画布 dev）
+## Local GUI preview
 
-启动 PolarUI GUI，编辑 workflow 图：
-
-→ [`polarui-usage/SKILL.md`](../polarui-usage/SKILL.md)
+Use `polarui-usage`. The stable GUI is `polarui:5170`; PolarPort owns allocation and PolarProcess owns start, stop, restart, PID, and health supervision.
 
 ```bash
-cd ~/Polarisor/PolarUI
-npm ci && npm run dev -- --port 5170
+curl -fsS http://127.0.0.1:11055/api/services/polarui
 ```
 
-## 🔶 Web 发行版（LibreChat + polar-api）
+## Exported Web release
 
-把 workflow 编译部署为独立网站：
-
-→ [`polarui-web-deploy/SKILL.md`](../polarui-web-deploy/SKILL.md)  
-→ [`docs/WEB_EXPORT.md`](../../docs/WEB_EXPORT.md)
+Use `polarui-web-deploy` and `docs/WEB_EXPORT.md`. Export compilation is a transient command; the resulting persistent service must claim its host port through PolarPort and register/start through PolarProcess.
 
 ```bash
 node scripts/export-release.mjs --workflow <id> --json
 ```
 
-## 相关 Skills
+The export/deploy pipeline must use `http://127.0.0.1:11050` and `http://127.0.0.1:11055`. It must not use detached containers, direct Vite/Node server startup, PID files, broad process matching, or another process manager.
 
-| Skill | 用途 |
-|-------|------|
-| [`polarui-workflow-contract`](../polarui-workflow-contract/SKILL.md) | Web 运行时契约（builtin / graph-cli） |
-| [`polarui-workflow-authoring`](../polarui-workflow-authoring/SKILL.md) | 画布撰写七步流程 |
-| [`polarui-troubleshoot`](../polarui-troubleshoot/SKILL.md) | 本地 dev 故障排查 |
+Native Web preview and `polarui-native-web-qa-*` are separate service boundaries. Never restart or release them while operating the stable GUI.

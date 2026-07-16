@@ -15,22 +15,40 @@ function nativeFixture() {
   writeFileSync(join(root, 'config/memory-schema.json'), '{}');
   writeFileSync(join(root, 'config/required-executors.json'), '{"executors":["LLM"]}');
   writeFileSync(join(root, 'site.config.json'), '{"template_flavor":"native"}');
-  writeFileSync(join(root, 'product.manifest.json'), '{"contract_version":"1.0"}');
+  writeFileSync(join(root, 'product.manifest.json'), JSON.stringify({
+    contract_version: '1.0',
+    product: { id: 'native', name: 'Native', context_label: '项目', route_label: '路线' },
+    workflow: { id: 'demo', endpoint: 'https://workflow.example.test/run' },
+    stages: [{
+      key: 'discover', label: '发现', component_key: 'generic_chat',
+      internal_states: ['start'], actions: [],
+    }],
+  }));
   writeFileSync(join(root, 'Dockerfile'), 'FROM node:22-alpine\n');
   mkdirSync(join(root, 'db/migrations'), { recursive: true });
   writeFileSync(join(root, 'db/migrations/0001_identity.sql'), 'CREATE TABLE users(id uuid primary key);\n');
   writeFileSync(join(root, 'db/migrations/0002_workflow_domain.sql'), 'CREATE TABLE contexts(id uuid primary key);\n');
   writeFileSync(join(root, 'db/migrations/0003_workflow_commands.sql'), 'CREATE TABLE workflow_commands(id uuid primary key);\n');
+  writeFileSync(join(root, 'db/migrations/0004_assets_memory_archive.sql'), 'CREATE TABLE asset_objects(id uuid primary key);\n');
   mkdirSync(join(root, 'apps/api/src/domain'), { recursive: true });
   mkdirSync(join(root, 'apps/api/src/commands'), { recursive: true });
   mkdirSync(join(root, 'apps/api/src/routes'), { recursive: true });
+  mkdirSync(join(root, 'apps/api/src/assets'), { recursive: true });
+  mkdirSync(join(root, 'apps/api/src/archive'), { recursive: true });
   mkdirSync(join(root, 'apps/web/src/commands'), { recursive: true });
+  mkdirSync(join(root, 'apps/web/src/stages'), { recursive: true });
   writeFileSync(join(root, 'apps/api/src/domain/service.ts'), 'export const domain = true;\n');
   writeFileSync(join(root, 'apps/api/src/routes/domain.ts'), 'export const routes = true;\n');
   writeFileSync(join(root, 'apps/api/src/commands/bridge.ts'), 'export const bridge = true;\n');
   writeFileSync(join(root, 'apps/api/src/commands/service.ts'), 'export const commands = true;\n');
   writeFileSync(join(root, 'apps/api/src/routes/commands.ts'), 'export const routes = true;\n');
+  writeFileSync(join(root, 'apps/api/src/assets/storage.ts'), 'export const storage = true;\n');
+  writeFileSync(join(root, 'apps/api/src/routes/assets.ts'), 'export const assets = true;\n');
+  writeFileSync(join(root, 'apps/api/src/archive/import-librechat.ts'), 'export const importer = true;\n');
+  writeFileSync(join(root, 'apps/api/src/routes/archive.ts'), 'export const archive = true;\n');
+  writeFileSync(join(root, 'apps/api/src/routes/memory.ts'), 'export const memory = true;\n');
   writeFileSync(join(root, 'apps/web/src/commands/api.ts'), 'export const commands = true;\n');
+  writeFileSync(join(root, 'apps/web/src/stages/StageWorkspace.tsx'), 'export const workspace = true;\n');
   writeFileSync(join(root, 'compose.yml'), `services:
   web:
     environment:
@@ -38,6 +56,9 @@ function nativeFixture() {
       AUTH_PEPPER: \${AUTH_PEPPER:?AUTH_PEPPER is required}
       PUBLIC_APP_ORIGIN: \${PUBLIC_APP_ORIGIN:?PUBLIC_APP_ORIGIN is required}
       SMTP_HOST: mailpit
+      OBJECT_STORE_DIRECTORY: /data/objects
+    volumes:
+      - polar-objects:/data/objects
     ports:
       - "127.0.0.1:3920:3920"
   postgres:
@@ -54,6 +75,7 @@ volumes:
       AUTH_PEPPER: \${AUTH_PEPPER:?AUTH_PEPPER is required}
       PUBLIC_APP_ORIGIN: \${PUBLIC_APP_ORIGIN:?PUBLIC_APP_ORIGIN is required}
       SMTP_HOST: \${SMTP_HOST:?SMTP_HOST is required}
+      OBJECT_STORE_DIRECTORY: /data/objects
 `);
   writeFileSync(join(root, '.env.example'), [
     'DATABASE_URL=postgresql://polar:change-me@postgres:5432/polar',
@@ -116,12 +138,36 @@ test('native verification requires command migration and runtime modules', () =>
   }
 });
 
+test('native verification requires asset, memory, and archive cutover files', () => {
+  const root = nativeFixture();
+  for (const file of [
+    'db/migrations/0004_assets_memory_archive.sql', 'apps/api/src/assets/storage.ts',
+    'apps/api/src/routes/assets.ts', 'apps/api/src/archive/import-librechat.ts',
+    'apps/api/src/routes/archive.ts', 'apps/api/src/routes/memory.ts',
+    'apps/web/src/stages/StageWorkspace.tsx',
+  ]) rmSync(join(root, file));
+  const result = verifyRelease(root);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.length >= 7);
+});
+
 test('native verification rejects LibreChat runtime files', () => {
   const root = nativeFixture();
   writeFileSync(join(root, 'librechat.yaml'), 'version: 1\n');
   const result = verifyRelease(root);
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((error) => error.includes('librechat.yaml')));
+});
+
+test('native verification rejects workflow identity drift between product and site manifests', () => {
+  const root = nativeFixture();
+  const productPath = join(root, 'product.manifest.json');
+  const product = JSON.parse(readFileSync(productPath, 'utf8'));
+  product.workflow.id = 'different-workflow';
+  writeFileSync(productPath, JSON.stringify(product));
+  const result = verifyRelease(root);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /workflow identity mismatch/i.test(error)));
 });
 
 test('native verification rejects a public PostgreSQL port', () => {

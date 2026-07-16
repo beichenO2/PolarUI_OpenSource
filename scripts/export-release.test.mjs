@@ -13,7 +13,12 @@ import { exportRelease, parseArgs as parseExportArgs, resolveReleaseId } from '.
 import { verifyRelease } from './verify-release.mjs';
 import { verifyOrthogonality } from './verify-orthogonality.mjs';
 import { graphNodeTypes } from './graph-utils.mjs';
-import { buildNativeDeploymentPlan } from './deploy-web-release.mjs';
+import {
+  buildNativeDeploymentPlan,
+  buildNativeServiceRegistration,
+  resolveNativePreferredPort,
+  writeNativeEnvFile,
+} from './deploy-web-release.mjs';
 
 const WEB_ROOT = join(process.env.HOME ?? '~', 'Desktop/Web_related');
 const TEST_PREFIX = `test-export-${randomUUID().slice(0, 8)}`;
@@ -26,6 +31,11 @@ test('native export CLI accepts an explicit external database mode', () => {
     '--template-flavor', 'native', '--database-mode', 'external',
   ]);
   assert.equal(args.databaseMode, 'external');
+});
+
+test('native is the default export flavor and legacy remains explicit', () => {
+  assert.equal(parseExportArgs(['node', 'scripts/export-release.mjs', '--workflow', WORKFLOW_ID]).templateFlavor, 'native');
+  assert.equal(parseExportArgs(['node', 'scripts/export-release.mjs', '--workflow', WORKFLOW_ID, '--template-flavor', 'legacy']).templateFlavor, 'legacy');
 });
 
 before(() => {
@@ -295,6 +305,7 @@ test('AC-L01 README attribution', () => {
 test('P2a export merges --http-workflow into site.config + librechat.yaml', async () => {
   const r = await exportRelease({
     workflow: WORKFLOW_ID,
+    templateFlavor: 'legacy',
     webRoot: TEST_ROOT,
     skipPreflight: true,
     compileOnly: true,
@@ -383,6 +394,19 @@ test('native deployment defaults to bundled compose and keeps database volumes',
   assert.equal(plan.databaseMode, 'bundled');
 });
 
+test('native deployment registration opts out of Start script auto-detection', () => {
+  const registration = buildNativeServiceRegistration({
+    serviceId: 'web-native-demo',
+    releaseId: 'native-demo',
+    command: 'docker compose up web',
+    releaseRoot: '/tmp/native-demo',
+    webPort: 13920,
+  });
+  assert.equal(registration.start_script_dir, '-');
+  assert.equal(registration.command, 'docker compose up web');
+  assert.equal(registration.port, 13920);
+});
+
 test('external native deployment requires DATABASE_URL and runs only web', () => {
   assert.throws(() => buildNativeDeploymentPlan({
     databaseMode: 'external',
@@ -419,4 +443,68 @@ test('external native deployment requires DATABASE_URL and runs only web', () =>
   assert.doesNotMatch(plan.command, /postgresql:\/\/db\.example\.test/);
   assert.doesNotMatch(plan.command, /docker compose/);
   assert.equal(plan.databaseMode, 'external');
+});
+
+test('native deployment env forwards the workflow runtime override and timeout', () => {
+  const root = mkdtempSync(join(tmpdir(), 'native-deploy-env-'));
+  const plan = buildNativeDeploymentPlan({
+    databaseMode: 'bundled',
+    releaseRoot: '/tmp/native-release',
+    releaseId: 'native-web-qa',
+    webPort: 13930,
+    envFilePath: join(root, 'release.env'),
+    environment: {
+      POSTGRES_PASSWORD: 'database-secret',
+      AUTH_PEPPER: 'x'.repeat(32),
+      PUBLIC_APP_ORIGIN: 'https://127.0.0.1:13935',
+      SMTP_HOST: 'host.docker.internal',
+      SMTP_PORT: '13940',
+      SMTP_FROM: 'Workflow <noreply@example.test>',
+      SMTP_SECURE: 'false',
+      WORKFLOW_ENDPOINT_OVERRIDE: 'http://host.docker.internal:13925/run',
+      WORKFLOW_TIMEOUT_MS: '1000',
+    },
+  });
+  writeNativeEnvFile(plan, {
+    POSTGRES_PASSWORD: 'database-secret',
+    AUTH_PEPPER: 'x'.repeat(32),
+    PUBLIC_APP_ORIGIN: 'https://127.0.0.1:13935',
+    SMTP_HOST: 'host.docker.internal',
+    SMTP_PORT: '13940',
+    SMTP_FROM: 'Workflow <noreply@example.test>',
+    SMTP_SECURE: 'false',
+    WORKFLOW_ENDPOINT_OVERRIDE: 'http://host.docker.internal:13925/run',
+    WORKFLOW_TIMEOUT_MS: '1000',
+  }, 13930);
+  const env = readFileSync(plan.envFilePath, 'utf8');
+  assert.match(env, /^WORKFLOW_ENDPOINT_OVERRIDE=http:\/\/host\.docker\.internal:13925\/run$/m);
+  assert.match(env, /^WORKFLOW_TIMEOUT_MS=1000$/m);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('native deployment accepts only a valid PolarPort preferred port override', () => {
+  assert.equal(resolveNativePreferredPort({ preferred_web_port: 3920 }, { POLAR_WEB_PREFERRED_PORT: '15920' }), 15920);
+  assert.equal(resolveNativePreferredPort({ preferred_web_port: 3920 }, {}), 3920);
+  assert.throws(() => resolveNativePreferredPort({ preferred_web_port: 3920 }, { POLAR_WEB_PREFERRED_PORT: 'not-a-port' }), /POLAR_WEB_PREFERRED_PORT/);
+});
+
+test('native deployment can isolate a governed QA run with an explicit Compose project', () => {
+  const plan = buildNativeDeploymentPlan({
+    databaseMode: 'bundled',
+    releaseRoot: '/tmp/native-release',
+    releaseId: 'native-web-qa',
+    webPort: 15920,
+    environment: {
+      POSTGRES_PASSWORD: 'database-secret',
+      AUTH_PEPPER: 'x'.repeat(32),
+      PUBLIC_APP_ORIGIN: 'https://127.0.0.1:14935',
+      SMTP_HOST: 'host.docker.internal',
+      SMTP_PORT: '14945',
+      SMTP_FROM: 'Workflow <noreply@example.test>',
+      SMTP_SECURE: 'false',
+      POLAR_NATIVE_COMPOSE_PROJECT: 'polar-native-web-qa-mrnjlpud',
+    },
+  });
+  assert.equal(plan.composeProject, 'polar-native-web-qa-mrnjlpud');
+  assert.match(plan.command, /--project-name 'polar-native-web-qa-mrnjlpud'/);
 });

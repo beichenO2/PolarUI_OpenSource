@@ -1,0 +1,18 @@
+{
+  "_name": "Native Workflow Web Release QA",
+  "_description": "Executable deterministic fixture for native Web release acceptance.",
+  "1": {
+    "class_type": "NativeWebQaFixture",
+    "inputs": {},
+    "params": {}
+  },
+  "2": {
+    "class_type": "Output",
+    "inputs": {
+      "content": ["1", 0]
+    },
+    "params": {
+      "format": "json"
+    }
+  }
+}

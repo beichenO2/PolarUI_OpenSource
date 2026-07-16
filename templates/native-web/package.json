@@ -16,7 +16,8 @@
     "test:unit": "npm run test -ws --if-present",
     "dev:web": "npm run dev -w @polar/native-web-web",
     "dev:api": "npm run dev -w @polar/native-web-api",
-    "user:create": "npm run user:create --workspace @polar/native-web-api --"
+    "user:create": "npm run user:create --workspace @polar/native-web-api --",
+    "import:librechat": "npm run import:librechat --workspace @polar/native-web-api --"
   },
   "engines": {
     "node": ">=22"

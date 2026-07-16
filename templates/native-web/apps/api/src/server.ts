@@ -14,6 +14,11 @@ import { createDomainService } from './domain/service.js';
 import { createCommandRepository } from './commands/repository.js';
 import { createCommandService } from './commands/service.js';
 import { createWorkflowBridge } from './commands/bridge.js';
+import { createAssetRepository } from './assets/repository.js';
+import { createAssetService } from './assets/service.js';
+import { createLocalObjectStore } from './assets/storage.js';
+import { createMemoryRepository } from './memory/repository.js';
+import { createArchiveRepository } from './archive/repository.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../../..');
@@ -37,6 +42,10 @@ const domainService = createDomainService({
   manifest,
 });
 const commandRepository = createCommandRepository(pool);
+const assetService = createAssetService({
+  repository: createAssetRepository(pool),
+  store: createLocalObjectStore(config.objectStoreDirectory),
+});
 const commandService = createCommandService({
   repository: commandRepository,
   bridge: createWorkflowBridge({
@@ -44,9 +53,11 @@ const commandService = createCommandService({
     workflowId: manifest.workflow.id,
     manifest,
     timeoutMs: config.workflowTimeoutMs,
+    artifactRoot: config.workflowArtifactRoot,
   }),
   manifest,
   leaseDurationMs: config.workflowTimeoutMs + 30_000,
+  assetService,
 });
 const app = buildApp({
   manifest,
@@ -56,6 +67,9 @@ const app = buildApp({
   domainService,
   commandService,
   commandRepository,
+  assetService,
+  memoryRepository: createMemoryRepository(pool),
+  archiveRepository: createArchiveRepository(pool),
   readiness: {
     async check() {
       try {

@@ -197,7 +197,7 @@ describe('workflow command service', () => {
     }));
   });
 
-  it('finalizes a head action without deriving a route', async () => {
+  it('finalizes a current action on its existing route and thread', async () => {
     const { repository, service } = setup({ bridgeResult: {
       reply: 'Advanced', workflowCursor: null, memoryProposals: [], interrupt: null,
       stageSignals: [{ stageKey: 'discover', status: 'completed', internalState: 'done' }],
@@ -210,28 +210,24 @@ describe('workflow command service', () => {
       adoptedThreadId: null,
     }), expect.objectContaining({
       headCheckpointIdAtClaim: ids.checkpoint,
-      derivedRouteId: undefined,
-      derivedThreadId: undefined,
     }), expect.any(Date));
   });
 
-  it('derives route and thread identifiers for a historical adoption', async () => {
-    const { repository, service } = setup({ executionOverride: {
+  it('rejects commands against an archived version before workflow execution', async () => {
+    const { bridge, repository, service } = setup({ executionOverride: {
       baseIsHead: false,
       headCheckpointId: '10000000-0000-4000-8000-000000000099',
     } });
-    await service.createCommand(ids.user, ids.thread, {
-      ...messageInput, kind: 'named_action', actionKey: 'adopt_thread', content: 'Alternative',
-    });
-    await service.executeCommand(ids.command);
-    expect(repository.finalizeAction).toHaveBeenCalledWith(ids.command, expect.objectContaining({
-      adoptedThreadId: ids.thread,
-    }), expect.objectContaining({
-      headCheckpointIdAtClaim: null,
-      derivedRouteId: expect.any(String),
-      derivedThreadId: expect.any(String),
-      derivedRouteName: expect.stringContaining('路线'),
-    }), expect.any(Date));
+
+    await expect(service.createCommand(ids.user, ids.thread, messageInput)).rejects.toEqual(
+      expect.objectContaining({ code: 'CHECKPOINT_NOT_CURRENT', statusCode: 409 }),
+    );
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'CHECKPOINT_NOT_CURRENT',
+      expect.any(Date),
+    );
+    expect(bridge.run).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -32,7 +32,7 @@ export function LoginPage({ onLogin, onNavigate }: {
 
 export function AuthFrame({ title, note, children }: { title: string; note: string; children: ReactNode }) {
   return <main className="auth-page"><section className="auth-card">
-    <span className="product-mark">P</span><p className="eyebrow">Polar workflow</p>
+    <span className="product-mark">P</span><p className="eyebrow">路线工作空间</p>
     <h1>{title}</h1><p className="auth-note">{note}</p>{children}
   </section></main>;
 }

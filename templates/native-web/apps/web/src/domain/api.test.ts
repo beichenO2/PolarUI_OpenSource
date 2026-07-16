@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  branchRoute,
+  createRouteFromVersion,
   createContext,
   createThread,
   getContextWorkspace,
@@ -27,11 +27,11 @@ describe('workflow domain web client', () => {
     vi.stubGlobal('fetch', fetchMock);
     await listContexts();
     await getContextWorkspace('context id');
-    await getRouteWorkspace('route id', 'future_stage', 'checkpoint id');
+    await getRouteWorkspace('route id', 'future_stage');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/contexts',
       '/api/contexts/context%20id/workspace',
-      '/api/routes/route%20id/workspace?stage=future_stage&checkpoint=checkpoint+id',
+      '/api/routes/route%20id/workspace?stage=future_stage',
     ]);
   });
 
@@ -41,7 +41,7 @@ describe('workflow domain web client', () => {
     await createContext('Project');
     await createThread('route-1', { stageKey: 'discover', title: 'Topic' });
     await updateThread('thread-1', { title: 'Renamed' });
-    await branchRoute('context-1', { sourceCheckpointId: 'checkpoint-1', name: 'Branch' });
+    await createRouteFromVersion('context-1', { sourceCheckpointId: 'checkpoint-1', name: 'Route B' });
     expect(fetchMock.mock.calls.map(([url, init]) => ({
       url,
       method: init?.method,
@@ -51,7 +51,7 @@ describe('workflow domain web client', () => {
       { url: '/api/contexts', method: 'POST', body: { title: 'Project' }, credentials: 'same-origin' },
       { url: '/api/routes/route-1/threads', method: 'POST', body: { stageKey: 'discover', title: 'Topic' }, credentials: 'same-origin' },
       { url: '/api/threads/thread-1', method: 'PATCH', body: { title: 'Renamed' }, credentials: 'same-origin' },
-      { url: '/api/contexts/context-1/routes', method: 'POST', body: { sourceCheckpointId: 'checkpoint-1', name: 'Branch' }, credentials: 'same-origin' },
+      { url: '/api/contexts/context-1/routes', method: 'POST', body: { sourceCheckpointId: 'checkpoint-1', name: 'Route B' }, credentials: 'same-origin' },
     ]);
   });
 });

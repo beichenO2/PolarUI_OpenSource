@@ -65,7 +65,33 @@ Set `WORKFLOW_ENDPOINT_OVERRIDE` to the complete workflow `/run` URL when the ma
 
 `GET /api/threads/:threadId/messages` returns persisted messages plus only the public ID and prompt for a pending human-input interrupt. Resume it with an authenticated `resume_interrupt` command containing that public interrupt ID and the user's reply. The private PolarFlow cursor stays in PostgreSQL, is never returned to the browser, and is restored upstream only by the server during that resume.
 
-Phase 5 remains unstarted. It owns attachments, artifact/object storage, optional memory-proposal management, LibreChat archive import, and native-default cutover; none of those capabilities are part of the Phase 4 command runtime.
+Phase 5 is complete. Each Thread now owns durable attachments and Workflow artifacts backed by a SHA-256-addressed object volume. Workflow memory proposals remain pending until the user explicitly adopts or rejects them, and adopted values are versioned. The fixed component registry renders `generic_chat`, `structured_form`, `card_selection`, and `document_workspace` without accepting recursive layout configuration.
+
+```text
+GET  /api/threads/:threadId/assets
+POST /api/threads/:threadId/attachments   (application/octet-stream + X-File-Name + X-File-Media-Type)
+GET  /api/assets/:kind/:assetId/download
+GET  /api/memory-proposals?thread=<uuid>
+POST /api/memory-proposals/:proposalId/decision
+GET  /api/archive/conversations
+GET  /api/archive/conversations/:conversationId
+```
+
+Files are limited to 25 MB, downloaded with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`, and authorized by opaque asset ID plus the current HttpOnly session. `OBJECT_STORE_DIRECTORY` defaults to `/data/objects`; both Compose modes mount it as a persistent named volume.
+
+Import a previously exported LibreChat archive into an existing native user. The command is idempotent by original conversation/message/attachment ID, verifies attachment hashes, produces a machine-readable report, and supports a write-free dry run:
+
+```bash
+npm run import:librechat -- \
+  --input /imports/librechat-export.json \
+  --attachments-dir /imports/files \
+  --target-user user@example.com \
+  --dry-run
+```
+
+Remove `--dry-run` only after reviewing the report. Imported conversations are exposed as read-only history and cannot receive new messages.
+
+For a direct read-only Mongo migration, install `mongosh` in the operator environment and provide the URI only through `LIBRECHAT_MONGO_URI`; the CLI executes `find` queries and never writes to Mongo. Add `--source-user <legacy-user-id>` when the source database contains multiple users. Keep the URI out of shell history and unset it after import.
 
 ## Bundled Docker Compose
 

@@ -46,7 +46,7 @@ describe('workflow domain service', () => {
     expect(repository.createContext).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       title: 'Research project',
-      routeName: '主线',
+      routeName: '路线 1',
       stages: [
         { stageKey: 'discover', position: 0, status: 'active', internalState: 'start' },
         { stageKey: 'decide', position: 1, status: 'not_started', internalState: 'waiting' },

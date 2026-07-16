@@ -2,8 +2,8 @@
   "contract_version": "1.0",
   "product": {
     "id": "native-web-template",
-    "name": "Workflow Workspace",
-    "context_label": "情境",
+    "name": "路线工作空间",
+    "context_label": "工作空间",
     "route_label": "路线"
   },
   "workflow": {

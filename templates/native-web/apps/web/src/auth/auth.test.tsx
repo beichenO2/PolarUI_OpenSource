@@ -116,7 +116,7 @@ describe('native identity UI', () => {
     expect(Object.values(localStorage).join('\n')).not.toContain('123456');
   });
 
-  it('returns to the protected URL after email-or-username login and restores its draft', async () => {
+  it('returns to the protected URL after login without restoring a legacy stage note', async () => {
     history.replaceState({}, '', protectedPath);
     localStorage.setItem(`polar-native:identity-demo:draft:${protectedPath}`, '未提交的研究备忘');
     const fetchMock = vi.fn((url: string) => {
@@ -135,7 +135,8 @@ describe('native identity UI', () => {
     await userEvent.type(screen.getByLabelText('密码'), 'not-a-real-password');
     await userEvent.click(screen.getByRole('button', { name: '登录' }));
 
-    expect(await screen.findByDisplayValue('未提交的研究备忘')).toBeInTheDocument();
+    await screen.findByTestId('workspace-slot');
+    expect(screen.queryByDisplayValue('未提交的研究备忘')).not.toBeInTheDocument();
     expect(window.location.pathname + window.location.search).toBe(protectedPath);
     expect(localStorage.getItem('polar-native:identity-demo:return-path')).toBeNull();
     expect(Object.values(localStorage).join('\n')).not.toContain('not-a-real-password');

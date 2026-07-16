@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readComposerDraft, writeComposerDraft } from '../auth/storage';
 import { ThreadConversation } from './ThreadConversation';
 import * as commandApi from './api';
 
@@ -32,6 +33,14 @@ const actions = [
   { key: 'adopt_thread', label: '采纳到当前路线' },
   { key: 'advance', label: '推进阶段' },
 ];
+const draftScope = {
+  productId: 'demo',
+  userId: 'user-1',
+  contextId: thread.contextId,
+  routeId: thread.routeId,
+  stageKey: thread.stageKey,
+  threadId: thread.id,
+};
 
 function renderConversation(overrides: Partial<React.ComponentProps<typeof ThreadConversation>> = {}) {
   const onCommandFinished = vi.fn();
@@ -41,6 +50,7 @@ function renderConversation(overrides: Partial<React.ComponentProps<typeof Threa
     stage={stage}
     checkpoint={checkpoint}
     actions={actions}
+    draftScope={draftScope}
     onCommandFinished={onCommandFinished}
     onConflict={onConflict}
     {...overrides}
@@ -49,6 +59,7 @@ function renderConversation(overrides: Partial<React.ComponentProps<typeof Threa
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.mocked(commandApi.listThreadMessages).mockReset().mockResolvedValue({
     messages: [
       { id: 'm1', commandId: 'c1', role: 'user', content: 'Question', sequence: 1, createdAt: checkpoint.createdAt },
@@ -67,12 +78,22 @@ beforeEach(() => {
 });
 
 describe('ThreadConversation', () => {
+  it('restores the unsent draft for the active discussion', async () => {
+    writeComposerDraft(draftScope, 'Saved question');
+
+    renderConversation();
+
+    expect(await screen.findByLabelText('消息内容')).toHaveValue('Saved question');
+  });
+
   it('loads immutable messages and renders only the public pending interrupt', async () => {
     vi.mocked(commandApi.listThreadMessages).mockResolvedValueOnce({
       messages: [],
       pendingInterrupt: { id: 'interrupt-1', prompt: '请选择权威来源' },
     });
     renderConversation();
+    expect(screen.getByText('讨论 / 00')).toBeInTheDocument();
+    expect(screen.queryByText(/Thread/)).not.toBeInTheDocument();
     expect(await screen.findByText('请选择权威来源')).toBeInTheDocument();
     expect(screen.queryByText(/cursor|secret/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText('中断回复')).toBeInTheDocument();
@@ -98,6 +119,7 @@ describe('ThreadConversation', () => {
       kind: 'message', content: 'New question', baseCheckpointId: checkpoint.id, expectedCheckpointVersion: 0,
     }), expect.objectContaining({ signal: expect.any(AbortSignal) })));
     expect(screen.getByLabelText('消息内容')).toHaveValue('');
+    expect(readComposerDraft(draftScope)).toBe('');
     expect(commandApi.listThreadMessages).toHaveBeenCalledTimes(2);
     expect(onCommandFinished).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'succeeded' }));
   });
@@ -116,6 +138,22 @@ describe('ThreadConversation', () => {
     await act(async () => resolveStream({ lastEventId: 1, finished: { outcome: 'failed', code: 'WORKFLOW_TIMEOUT' } }));
     expect(await screen.findByRole('alert')).toHaveTextContent('WORKFLOW_TIMEOUT');
     expect(screen.getByLabelText('消息内容')).toHaveValue('Keep this');
+    expect(readComposerDraft(draftScope)).toBe('Keep this');
+  });
+
+  it('directs checkpoint conflicts to the version archive without historical terminology', async () => {
+    vi.mocked(commandApi.streamCommandEvents).mockResolvedValueOnce({
+      lastEventId: 1,
+      finished: { outcome: 'conflict', code: 'CHECKPOINT_VERSION_CONFLICT' },
+    });
+    const { onConflict } = renderConversation();
+    await screen.findByText('Answer');
+    await userEvent.type(screen.getByLabelText('消息内容'), 'Conflicting change');
+    await userEvent.click(screen.getByLabelText('发送消息'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('请刷新到最新路线，或从版本归档创建一条新路线');
+    expect(screen.queryByText(/历史检查点/)).not.toBeInTheDocument();
+    expect(onConflict).toHaveBeenCalledOnce();
   });
 
   it('renders manifest actions and disables them for a not-started stage', async () => {
@@ -140,7 +178,7 @@ describe('ThreadConversation', () => {
       .mockResolvedValue({ messages: [], pendingInterrupt: null });
     renderConversation();
     await userEvent.type(await screen.findByLabelText('中断回复'), 'Approved');
-    await userEvent.click(screen.getByRole('button', { name: '继续工作流' }));
+    await userEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(commandApi.createCommand).toHaveBeenCalledWith(thread.id, expect.objectContaining({
       kind: 'resume_interrupt', interruptId: 'interrupt-1', content: 'Approved',
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }));

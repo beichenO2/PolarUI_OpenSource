@@ -47,7 +47,7 @@ export function parseArgs(argv) {
     skipPreflight: false,
     json: false,
     exportEntry: 'cli',
-    templateFlavor: 'legacy',
+    templateFlavor: 'native',
     databaseMode: undefined,
     httpWorkflows: parseHttpWorkflowCliArgs(argv),
   };
@@ -143,7 +143,7 @@ async function runStep(log, index, id, title, fn) {
 export async function exportRelease(opts) {
   const workflowId = opts.workflow;
   const webRoot = opts.webRoot ?? WEB_ROOT;
-  const templateFlavor = opts.templateFlavor ?? 'legacy';
+  const templateFlavor = opts.templateFlavor ?? 'native';
   const templateDir = opts.templateDir ?? resolveTemplateSource({
     flavor: templateFlavor,
     polaruiRoot: POLARUI_ROOT,

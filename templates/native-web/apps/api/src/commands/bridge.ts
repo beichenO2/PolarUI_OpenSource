@@ -1,5 +1,7 @@
 import type { ProductManifest } from '@polar/native-web-product-sdk';
 import { z } from 'zod';
+import { readFile, realpath } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
 import type { RouteStageStatus, StageProjection } from '../domain/types.js';
 
 export type WorkflowCommandKind = 'message' | 'named_action' | 'resume_interrupt';
@@ -33,6 +35,7 @@ export interface WorkflowBridgeResult {
   workflowCursor: unknown | null;
   memoryProposals: unknown[];
   interrupt: { prompt: string; cursor: unknown } | null;
+  artifactProposals: Array<{ filename: string; mediaType: string; body: Buffer }>;
 }
 
 export interface WorkflowBridge {
@@ -59,9 +62,15 @@ const responseSchema = z.object({
   stage_signals: z.array(stageSignalSchema).optional(),
   workflow_cursor: z.unknown().optional(),
   memory_proposals: z.array(z.unknown()).optional(),
+  artifact_proposals: z.array(z.object({
+    filename: z.string().min(1).max(255),
+    media_type: z.string().min(3).max(200),
+    content_base64: z.string().min(1).max(35_000_000),
+  }).strict()).max(10).optional(),
   memory_delta: z.object({
     session: z.record(z.string(), z.unknown()).optional(),
   }).passthrough().optional(),
+  pdf_path: z.string().min(1).nullable().optional(),
 }).passthrough();
 
 const publicMemoryProposalSchema = z.object({
@@ -70,7 +79,7 @@ const publicMemoryProposalSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 }).strict();
 
-const maximumResponseBytes = 2_000_000;
+const maximumResponseBytes = 36_000_000;
 
 const statusRank: Record<RouteStageStatus, number> = {
   not_started: 0,
@@ -174,6 +183,7 @@ export function createWorkflowBridge(options: {
   manifest: ProductManifest;
   timeoutMs: number;
   fetch?: typeof fetch;
+  artifactRoot?: string | null;
 }): WorkflowBridge {
   const fetchImpl = options.fetch ?? fetch;
 
@@ -186,6 +196,7 @@ export function createWorkflowBridge(options: {
         session.polarflow_pending_run = input.interruptCursor;
       }
       const body = {
+        contract_version: '1.0',
         userId: input.userId,
         scenarioId: input.contextId,
         sessionId: input.threadId,
@@ -207,6 +218,7 @@ export function createWorkflowBridge(options: {
         },
         workflowId: options.workflowId,
         input: {
+          contract_version: '1.0',
           command_id: input.commandId,
           route_id: input.routeId,
           stage_key: input.stageKey,
@@ -261,12 +273,36 @@ export function createWorkflowBridge(options: {
         const publicProposal = publicMemoryProposalSchema.safeParse(proposal);
         return publicProposal.success ? [publicProposal.data] : [];
       });
+      const artifactProposals = (parsed.data.artifact_proposals ?? []).map((proposal) => {
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(proposal.content_base64) || proposal.content_base64.length % 4 !== 0) {
+          fail('WORKFLOW_INVALID_ARTIFACT');
+        }
+        const body = Buffer.from(proposal.content_base64, 'base64');
+        if (body.byteLength === 0 || body.byteLength > 25 * 1024 * 1024 || body.toString('base64') !== proposal.content_base64) {
+          fail('WORKFLOW_INVALID_ARTIFACT');
+        }
+        return { filename: proposal.filename, mediaType: proposal.media_type, body };
+      });
+      if (parsed.data.pdf_path && options.artifactRoot) {
+        try {
+          const root = await realpath(resolve(options.artifactRoot));
+          const path = await realpath(resolve(parsed.data.pdf_path));
+          if (path !== root && !path.startsWith(root + '/')) fail('WORKFLOW_INVALID_ARTIFACT');
+          const body = await readFile(path);
+          if (body.byteLength === 0 || body.byteLength > 25 * 1024 * 1024) fail('WORKFLOW_INVALID_ARTIFACT');
+          artifactProposals.push({ filename: basename(path), mediaType: 'application/pdf', body });
+        } catch (error) {
+          if (error instanceof WorkflowBridgeError) throw error;
+          fail('WORKFLOW_INVALID_ARTIFACT');
+        }
+      }
       return {
         reply: parsed.data.reply.trim(),
         stageSignals,
         workflowCursor: parsed.data.workflow_cursor ?? null,
         memoryProposals,
         interrupt,
+        artifactProposals,
       };
     },
   };

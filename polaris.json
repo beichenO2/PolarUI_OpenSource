@@ -2,7 +2,7 @@
   "name": "PolarUI",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-13T08:44:01+08:00"
+    "last_synced_at": "2026-07-17T17:27:00+08:00"
   },
   "description": "PolarUI — workflow 编辑器与图执行引擎。Workflow 只管数据 IO；网站部署；飞书渠道搁置。",
   "tier": "platform",
@@ -389,6 +389,28 @@
           "test_status": "passed",
           "evidence": [
             "2026-07-07: npm run test:web-release 全绿"
+          ]
+        },
+        {
+          "name": "Native Workflow Web 发行全链路 QA",
+          "description": "真实 Workflow fixture → export-release → PolarPort/PolarProcess 一键部署 → 生产容器浏览器与恢复验收",
+          "status": "done",
+          "behavior": [
+            "Source Manifest、Release Manifest、Workflow Bridge 与冻结 graph snapshot 契约一致",
+            "QA fixture 由 PolarUI headless graph engine 实际执行，不由测试脚本伪造 Workflow HTTP 响应",
+            "Workflow Runtime、邮件服务与 Web 发行容器全部由 PolarPort/PolarProcess 管理",
+            "自动化覆盖身份、领域层级、命令、Artifact/Memory、归档、隔离、并发、错误与容器重启恢复",
+            "路线工作空间以阶段为中心，讨论按需展开；版本只读，来源路线与普通路线能力一致"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "docs/superpowers/plans/2026-07-16-native-workflow-web-release-qa.md",
+            "2026-07-16: npm run qa:native-release completed 20/20 production checks with real browser screenshots and governed container restart recovery",
+            "2026-07-16: Native Web/release gates 175 passed; focused release/governance tests 56 passed; production build passed",
+            "2026-07-16: PolarProcess port-occupant ownership regression 2/2 and full suite 29/29 passed; Docker host proxy remained external after the five-minute orphan grace",
+            "2026-07-16: PolarUI and PolarProcess runtime governance audits compliant; PolarPort, PolarProcess, and production /readyz healthy",
+            "2026-07-17: Native Web 169 unit/component/service tests passed; production build passed; Safari desktop and 390px checks verified discussion draft isolation, full-screen mobile discussion, read-only versions, exact route provenance, and no legacy UI concepts",
+            "~/Documents/Codex/2026-07-16/workflow-web-deploy-qa/outputs/native-workflow-web-release-qa.json"
           ]
         }
       ]
@@ -953,7 +975,7 @@
         {
           "name": "def 逐批函数化迁移",
           "description": "ToolCall=LLM+工具定义、RetryLoop=路由+回边+计数、Agentic 范式=大组合等，逐批以函数子图替代专用 def",
-          "status": "in-progress",
+          "status": "done",
           "behavior": [
             "每批迁移后 npm run qa 全绿 + 双主题基线不红（或有意更新）",
             "迁移完成后 palette 仅剩 6 原语 + 函数库"
@@ -970,6 +992,98 @@
           ]
         }
       ]
+    },
+    {
+      "id": "R12",
+      "need": "运行时端口与进程统一治理",
+      "approach": "将稳定 GUI、Native Web preview 与 feature-owned QA/brainstorm 服务按真实生命周期写入 service_management.services；每个服务由 PolarProcess 管理，所有主次监听由 PolarPort 管理。",
+      "features": [
+        {
+          "name": "runtime_governance",
+          "status": "in-progress",
+          "tech": [
+            "PolarPort",
+            "PolarProcess",
+            "Bash",
+            "Node.js",
+            "Vite"
+          ],
+          "behavior": [
+            "polarui GUI 仅由 PolarProcess 管理并通过 PolarPort 申请 canonical preferred port 5170",
+            "GUI launcher 以前台 exec 运行，不使用 npm wrapper、后台符号、PID 文件或直接信号",
+            "重复 preferred reservation PolarUI/polarui-dev:5170 精确退役，保留 PolarUI/polarui:5170",
+            "polarui-native-web-preview 保持 auto_start=false；Start/start.sh 与 Native QA 代码属于当前 active feature 边界",
+            "Mailpit 的 14940 HTTP 与 14945 SMTP 由同一个 PolarProcess 服务真实拥有，SMTP 以 port_bindings 表达",
+            "polarui-brainstorm-ui-logic 使用 PolarPort exact claim 与 PolarProcess 前台 launcher，不再依赖 literal-port direct command"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-16: baseline project audit compliant but ecosystem audit reported polarui:5170 missing an active PolarPort owner",
+            "2026-07-16: baseline GUI listener PID 87502 was adopted by PolarProcess while its npm wrapper had PPID 1; command used a literal 5170",
+            "2026-07-16: TDD RED failed because canonical Start/gui.sh and stable multi-service SSoT were missing",
+            "2026-07-16: active dev/polarui-ui worktree contained 30 PolarUI feature changes and governed Native QA services; all are protected from this migration commit and lifecycle actions",
+            "2026-07-16: GREEN passed GUI runtime contract, three shell syntax checks, JSON validation, Vite CLI availability and project governance audit compliant",
+            "2026-07-16: exact polarui restart converged to PID 85284 with PPID PolarProcess, pid_verified=true, one 5170 listener, canonical PolarUI/polarui active owner and HTTP 200",
+            "2026-07-16: legacy npm wrapper PID 87477 exited; protected Native/QA/brainstorm/Web release service hash e6667c11… and port hash 4736d6ea… were identical before and after cutover",
+            "2026-07-16: ecosystem drift reduced from 11 to 10; remaining PolarUI SMTP row is the secondary 14945 listener of PP-managed Mailpit PID 2506 and was not rewritten during active feature work",
+            "2026-07-17: service_management.services now maps Mailpit PID 2506 to both 14940 HTTP and 14945 SMTP without a duplicate PolarProcess record",
+            "2026-07-17: polarui-brainstorm-ui-logic switched through its exact PolarProcess ID to governed PID 16246 with canonical PolarPort owner on 14950",
+            "2026-07-17: composite governance tests 3/3, stable GUI contract, Shell/JSON and project audit passed",
+            "2026-07-17: fresh ecosystem runtime governance audit compliant (drift 2 -> 0); protected service hash a5291e14… and port hash ad622e84… unchanged"
+          ]
+        }
+      ],
+      "blockers": []
     }
-  ]
+  ],
+  "service_management": {
+    "service_id": "polarui-native-web-preview",
+    "start_command": "bash Start/start.sh",
+    "restart_command": "bash Start/start.sh",
+    "health_endpoint": "http://127.0.0.1:13920/readyz",
+    "preferred_port": 13920,
+    "auto_start": false,
+    "process_mode": "foreground_command",
+    "services": [
+      {
+        "service_id": "polarui-native-web-preview",
+        "name": "PolarUI Native Web Preview",
+        "start_command": "bash Start/start.sh",
+        "health_endpoint": "http://127.0.0.1:13920/readyz",
+        "preferred_port": 13920,
+        "auto_start": false,
+        "process_mode": "foreground_command"
+      },
+      {
+        "service_id": "polarui",
+        "name": "PolarUI GUI Preview",
+        "start_command": "bash Start/gui.sh",
+        "health_endpoint": "http://127.0.0.1:5170/",
+        "preferred_port": 5170,
+        "auto_start": true,
+        "process_mode": "foreground_command"
+      },
+      {
+        "service_id": "polarui-native-web-qa-mailpit",
+        "name": "Native Web QA Mail Capture",
+        "health_endpoint": "http://127.0.0.1:14940/api/v1/messages",
+        "preferred_port": 14940,
+        "auto_start": false,
+        "process_mode": "foreground_command",
+        "port_bindings": [
+          { "service_name": "polarui-native-web-qa-smtp", "project": "PolarUI", "port": 14945 }
+        ]
+      },
+      {
+        "service_id": "polarui-brainstorm-ui-logic",
+        "name": "PolarUI UI Logic Brainstorm",
+        "start_command": "bash Start/brainstorm-ui-logic.sh",
+        "health_endpoint": "http://127.0.0.1:14950/",
+        "preferred_port": 14950,
+        "auto_start": false,
+        "process_mode": "foreground_command"
+      }
+    ],
+    "notes": "Stable and active feature-owned services are listed by their real PolarProcess lifecycle identity; secondary listeners remain port bindings, never duplicate services."
+  }
 }

@@ -20,6 +20,12 @@ export interface WorkflowRoute {
   contextId: string;
   name: string;
   originCheckpointId: string | null;
+  origin?: {
+    routeId: string;
+    routeName: string;
+    version: number;
+    stageKey: string;
+  } | null;
   headCheckpointId: string;
   createdAt: string;
   updatedAt: string;
@@ -42,7 +48,18 @@ export interface WorkflowCheckpoint {
   version: number;
   stageKey: string;
   reason: 'bootstrap' | 'branch' | 'workflow_action';
-  snapshot: { stages: Array<{ stage_key: string; status: StageStatus; internal_state: string }> };
+  snapshot: {
+    stages: Array<{ stage_key: string; status: StageStatus; internal_state: string }>;
+    artifacts?: Array<{
+      id: string;
+      stage_key: string;
+      filename: string;
+      media_type: string;
+      byte_size: number;
+      sha256: string;
+      created_at: string;
+    }>;
+  };
   createdAt: string;
 }
 
@@ -95,9 +112,8 @@ export const createContext = (title: string) => request<{
 export const getContextWorkspace = (contextId: string) =>
   request<ContextWorkspace>(`/api/contexts/${encodeURIComponent(contextId)}/workspace`);
 
-export function getRouteWorkspace(routeId: string, stageKey: string, checkpointId?: string) {
+export function getRouteWorkspace(routeId: string, stageKey: string) {
   const query = new URLSearchParams({ stage: stageKey });
-  if (checkpointId) query.set('checkpoint', checkpointId);
   return request<RouteWorkspace>(
     `/api/routes/${encodeURIComponent(routeId)}/workspace?${query.toString()}`,
   );
@@ -113,7 +129,7 @@ export const updateThread = (threadId: string, input: { title?: string; status?:
     method: 'PATCH', body: JSON.stringify(input),
   });
 
-export const branchRoute = (
+export const createRouteFromVersion = (
   contextId: string,
   input: { sourceCheckpointId: string; name: string },
 ) => request<{ route: WorkflowRoute; checkpoint: WorkflowCheckpoint }>(

@@ -24,7 +24,7 @@ export function AuthGate({ manifest }: { manifest: PublicProductManifest }) {
     return () => removeEventListener('popstate', listener);
   }, []);
 
-  if (user === undefined) return <main className="auth-page"><p>正在载入工作区…</p></main>;
+  if (user === undefined) return <main className="auth-page"><p>正在载入工作空间…</p></main>;
   if (!user) {
     if (path === '/register') return <RegisterPage onNavigate={navigate} onRegistered={(email) => {
       setVerificationEmail(email); navigate('/verify-email');

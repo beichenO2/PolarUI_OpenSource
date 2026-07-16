@@ -1,46 +1,32 @@
-# PolarUI — 故障排查
+---
+name: polarui-troubleshoot
+description: Use when the PolarUI GUI, Native Web preview, or a governed PolarUI QA service is unavailable, unhealthy, or bound to an unexpected port.
+---
 
-> 节点图可视化编辑器 + Workflow 引擎：正则化元件、Hub 对接、桌面应用
+# PolarUI troubleshooting
 
-## 健康检查
-
-```bash
-# 进程存活
-pgrep -f "PolarUI" || echo "NOT RUNNING"
-
-# HTTP 端点
-curl -s http://127.0.0.1:5170/ (Vite dev server)
-```
-
-## 关键端口
-
-| 端口 | 说明 |
-|---|---|
-| 5170 | PolarUI 主服务 |
-
-## 常见故障
-
-### 1. 节点渲染异常
-
-**修复**：`清除浏览器缓存，检查 ReactFlow 版本`
-
-### 2. Hub API 对接失败
-
-**修复**：`确认 Hub 在 8040 端口运行`
-
-### 3. 桌面打包失败
-
-**修复**：`检查 Electron 和 electron-builder 版本`
-
-## 依赖服务
-
-- PolarCopilot Hub (API 数据源)
-- ReactFlow
-
-## 紧急恢复
+## Read-only diagnosis
 
 ```bash
-cd ~/Polarisor/PolarUI
-npm run dev -- --port 5170
-curl -s http://127.0.0.1:5170/ (Vite dev server) && echo 'OK' || echo 'BROKEN'
+curl -fsS http://127.0.0.1:11050/api/health
+curl -fsS http://127.0.0.1:11055/api/health
+curl -fsS http://127.0.0.1:11055/api/services/polarui
+curl -fsS http://127.0.0.1:11050/api/list
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5170/
 ```
+
+Use PolarProcess's verified PID and PolarPort's exact `service_name/project/port` owner. Do not infer ownership from a broad process-name search.
+
+## Exact recovery
+
+After both authorities pass health checks, act only on the failing service ID:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:11055/api/services/polarui/restart
+```
+
+The stable GUI (`polarui`), Native Web preview (`polarui-native-web-preview`), QA services, brainstorm previews, and exported Web releases are separate boundaries. Never restart one to repair another.
+
+## Prohibited shortcuts
+
+Do not start Vite/Node/Docker directly for a persistent listener. Do not use detached containers, background shell jobs, PID files, direct signals, launchd, or manual release of another service's port.

@@ -97,7 +97,7 @@ export function createDomainService(options: {
         contextId: createId(),
         title: title(input.title),
         routeId: createId(),
-        routeName: '主线',
+        routeName: '路线 1',
         checkpointId: createId(),
         stages: initialStages(),
         now: now(),

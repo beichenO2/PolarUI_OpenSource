@@ -29,6 +29,10 @@ interface RouteRow {
   head_checkpoint_id: string;
   created_at: Date;
   updated_at: Date;
+  origin_route_id?: string | null;
+  origin_route_name?: string | null;
+  origin_version?: number | null;
+  origin_stage_key?: string | null;
 }
 
 interface RouteWorkspaceRow extends RouteRow {
@@ -84,6 +88,15 @@ function mapRoute(row: RouteRow): WorkflowRoute {
     contextId: row.context_id,
     name: row.name,
     originCheckpointId: row.origin_checkpoint_id,
+    origin: row.origin_checkpoint_id && row.origin_route_id && row.origin_route_name &&
+      row.origin_version !== null && row.origin_version !== undefined && row.origin_stage_key
+      ? {
+          routeId: row.origin_route_id,
+          routeName: row.origin_route_name,
+          version: row.origin_version,
+          stageKey: row.origin_stage_key,
+        }
+      : null,
     headCheckpointId: row.head_checkpoint_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -133,8 +146,17 @@ function snapshotFromStages(stages: StageProjection[]): CheckpointSnapshot {
       status: stage.status,
       internal_state: stage.internalState,
     })),
+    artifacts: [],
   };
 }
+
+const routeOriginColumns =
+  'origin_cp.route_id AS origin_route_id, origin_route.name AS origin_route_name, ' +
+  'origin_cp.version AS origin_version, origin_cp.stage_key AS origin_stage_key';
+
+const routeOriginJoins =
+  'LEFT JOIN workflow_checkpoints origin_cp ON origin_cp.id = r.origin_checkpoint_id ' +
+  'LEFT JOIN workflow_routes origin_route ON origin_route.id = origin_cp.route_id ';
 
 export function createDomainRepository(pool: DatabasePool) {
   return {
@@ -209,7 +231,9 @@ export function createDomainRepository(pool: DatabasePool) {
       );
       if (!contextResult.rows[0]) return null;
       const routesResult = await pool.query<RouteRow>(
-        'SELECT * FROM workflow_routes WHERE context_id = $1 ORDER BY created_at, id',
+        'SELECT r.*, ' + routeOriginColumns + ' ' +
+        'FROM workflow_routes r ' + routeOriginJoins +
+        'WHERE r.context_id = $1 ORDER BY r.created_at, r.id',
         [contextId],
       );
       return {
@@ -220,9 +244,11 @@ export function createDomainRepository(pool: DatabasePool) {
 
     async getRouteWorkspace(userId: string, routeId: string, stageKey: string) {
       const routeResult = await pool.query<RouteWorkspaceRow>(
-        'SELECT r.*, c.title, c.status, c.created_at AS context_created_at, ' +
+        'SELECT r.*, ' + routeOriginColumns + ', ' +
+        'c.title, c.status, c.created_at AS context_created_at, ' +
         'c.updated_at AS context_updated_at ' +
-        'FROM workflow_routes r JOIN contexts c ON c.id = r.context_id ' +
+        'FROM workflow_routes r ' + routeOriginJoins +
+        'JOIN contexts c ON c.id = r.context_id ' +
         'WHERE r.id = $1 AND c.user_id = $2 LIMIT 1',
         [routeId, userId],
       );
@@ -321,8 +347,9 @@ export function createDomainRepository(pool: DatabasePool) {
       now: Date;
     }) {
       return withTransaction(pool, async (client) => {
-        const sourceResult = await client.query<CheckpointRow>(
-          'SELECT cp.* FROM workflow_checkpoints cp ' +
+        const sourceResult = await client.query<CheckpointRow & { source_route_name: string }>(
+          'SELECT cp.*, source_route.name AS source_route_name FROM workflow_checkpoints cp ' +
+          'JOIN workflow_routes source_route ON source_route.id = cp.route_id ' +
           'JOIN contexts c ON c.id = cp.context_id ' +
           'WHERE cp.id = $1 AND cp.context_id = $2 AND c.user_id = $3 FOR UPDATE OF cp',
           [input.sourceCheckpointId, input.contextId, input.userId],
@@ -355,7 +382,13 @@ export function createDomainRepository(pool: DatabasePool) {
         );
         await client.query('UPDATE contexts SET updated_at = $2 WHERE id = $1', [input.contextId, input.now]);
         return {
-          route: mapRoute(routeResult.rows[0]!),
+          route: mapRoute({
+            ...routeResult.rows[0]!,
+            origin_route_id: source.route_id,
+            origin_route_name: source.source_route_name,
+            origin_version: source.version,
+            origin_stage_key: source.stage_key,
+          }),
           checkpoint: mapCheckpoint(checkpointResult.rows[0]!),
         };
       });

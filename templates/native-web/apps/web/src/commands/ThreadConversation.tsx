@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProductManifest } from '@polar/native-web-product-sdk';
+import {
+  clearComposerDraft,
+  composerDraftKey,
+  readComposerDraft,
+  writeComposerDraft,
+  type ComposerDraftScope,
+} from '../auth/storage';
 import type { StageProjection, WorkflowCheckpoint, WorkflowThread } from '../domain/api';
 import {
   CommandApiError,
@@ -22,9 +29,9 @@ function commandId() {
 
 function errorLabel(code: string) {
   const labels: Record<string, string> = {
-    WORKFLOW_TIMEOUT: '工作流响应超时，命令不会自动重试。',
-    WORKFLOW_UNAVAILABLE: '工作流暂时不可用，请稍后重新提交。',
-    CHECKPOINT_VERSION_CONFLICT: '路线已发生变化。刷新后可选择最新状态，或从当前历史检查点创建新路线。',
+    WORKFLOW_TIMEOUT: '处理超时，请重新发送。',
+    WORKFLOW_UNAVAILABLE: '服务暂时不可用，请稍后重新发送。',
+    CHECKPOINT_VERSION_CONFLICT: '路线已发生变化。请刷新到最新路线，或从版本归档创建一条新路线。',
     COMMAND_IN_PROGRESS: '这条命令仍在执行，请稍候。',
   };
   return labels[code] ? `${labels[code]}（${code}）` : code;
@@ -35,6 +42,7 @@ export function ThreadConversation({
   stage,
   checkpoint,
   actions,
+  draftScope,
   onCommandFinished,
   onConflict,
 }: {
@@ -42,6 +50,7 @@ export function ThreadConversation({
   stage: StageProjection;
   checkpoint: WorkflowCheckpoint;
   actions: ProductManifest['stages'][number]['actions'];
+  draftScope: ComposerDraftScope;
   onCommandFinished: (result: CommandFinishedPayload) => void;
   onConflict: () => void;
 }) {
@@ -55,6 +64,11 @@ export function ThreadConversation({
   const [error, setError] = useState('');
   const observation = useRef<AbortController | null>(null);
   const submitting = useRef(false);
+  const draftKey = composerDraftKey(draftScope);
+
+  useEffect(() => {
+    setDraft(readComposerDraft(draftScope));
+  }, [draftKey]);
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     const state = await listThreadMessages(thread.id, { signal });
@@ -133,7 +147,10 @@ export function ThreadConversation({
       }
       if (!finished) throw new CommandApiError('COMMAND_STREAM_INVALID', 200);
       if (finished.outcome === 'succeeded') {
-        if (source === 'message') setDraft('');
+        if (source === 'message') {
+          clearComposerDraft(draftScope);
+          setDraft('');
+        }
         if (source === 'interrupt') setInterruptDraft('');
         await reload(controller.signal);
         onCommandFinished(finished);
@@ -152,31 +169,31 @@ export function ThreadConversation({
       submitting.current = false;
       if (observation.current === controller) setBusy(false);
     }
-  }, [checkpoint.id, checkpoint.version, onCommandFinished, onConflict, reload, thread.id]);
+  }, [checkpoint.id, checkpoint.version, draftKey, onCommandFinished, onConflict, reload, thread.id]);
 
   return <section className="conversation" aria-busy={loading || busy}>
     <header className="conversation-header">
       <div>
-        <p className="card-kicker">Thread / {String(checkpoint.version).padStart(2, '0')}</p>
+        <p className="card-kicker">讨论 / {String(checkpoint.version).padStart(2, '0')}</p>
         <h2>{thread.title}</h2>
       </div>
-      <span className="conversation-state">{busy ? '工作流执行中' : '消息已持久化'}</span>
+      <span className="conversation-state">{busy ? '正在处理' : '已保存'}</span>
     </header>
 
     <div className="message-timeline" aria-live="polite">
       {loading && <p className="conversation-empty">正在载入讨论记录…</p>}
       {!loading && messages.length === 0 && !streamedReply && <p className="conversation-empty">
-        从一个具体问题开始。消息只属于当前线程；共享状态必须通过下方受控动作改变。
+        从一个具体问题开始。
       </p>}
       {messages.map((message) => <article
         className={`message-entry message-${message.role}`}
         key={message.id}
       >
-        <span>{message.role === 'user' ? '你' : 'Workflow'}</span>
+        <span>{message.role === 'user' ? '你' : '助手'}</span>
         <p>{message.content}</p>
       </article>)}
       {streamedReply && <article className="message-entry message-assistant message-streaming">
-        <span>Workflow · streaming</span><p>{streamedReply}</p>
+        <span>助手 · 正在回复</span><p>{streamedReply}</p>
       </article>}
     </div>
 
@@ -194,7 +211,7 @@ export function ThreadConversation({
       <label>中断回复
         <textarea aria-label="中断回复" value={interruptDraft} onChange={(event) => setInterruptDraft(event.target.value)} />
       </label>
-      <button type="submit" disabled={busy || !interruptDraft.trim()}>继续工作流</button>
+      <button type="submit" disabled={busy || !interruptDraft.trim()}>继续</button>
     </form>}
 
     <form className="message-composer" onSubmit={(event) => {
@@ -206,20 +223,25 @@ export function ThreadConversation({
         <textarea
           aria-label="消息内容"
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={pendingInterrupt ? '请先回复工作流中断' : '写下当前线程要继续讨论的问题…'}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            writeComposerDraft(draftScope, event.target.value);
+          }}
+          placeholder={pendingInterrupt ? '请先完成上方确认' : '写下想继续讨论的问题…'}
           disabled={Boolean(pendingInterrupt)}
         />
       </label>
       <div className="composer-footer">
-        <span>{stage.status === 'not_started' ? '可提前讨论；受控动作暂不可用' : `${stage.label} · ${stage.internalState}`}</span>
+        <span>{draft
+          ? '未发送 · 已在本机保存'
+          : stage.status === 'not_started' ? '可提前讨论；阶段操作尚未开放' : `${stage.label} · 进行中`}</span>
         <button aria-label="发送消息" type="submit" disabled={busy || Boolean(pendingInterrupt) || !draft.trim()}>
           {busy ? '执行中…' : '发送'}
         </button>
       </div>
     </form>
 
-    <div className="workflow-actions" aria-label="受控工作流动作">
+    <div className="workflow-actions" aria-label="阶段操作">
       {actions.map((action) => <button
         key={action.key}
         type="button"
