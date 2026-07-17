@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { ApiError, authMessage, login, type SessionUser } from './api';
 
-export function LoginPage({ onLogin, onNavigate }: {
+export function LoginPage({ onLogin, onNavigate, demoLogin }: {
   onLogin(user: SessionUser): void;
   onNavigate(path: string): void;
+  demoLogin?: { username: string; password: string };
 }) {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -21,8 +22,8 @@ export function LoginPage({ onLogin, onNavigate }: {
         setError(authMessage(cause instanceof ApiError ? cause.code : 'REQUEST_FAILED'));
       } finally { setPending(false); }
     }}>
-      <label>邮箱或用户名<input name="identifier" autoComplete="username" required /></label>
-      <label>密码<input name="password" type="password" autoComplete="current-password" required /></label>
+      <label>邮箱或用户名<input name="identifier" autoComplete="username" required defaultValue={demoLogin?.username} /></label>
+      <label>密码<input name="password" type="password" autoComplete="current-password" required defaultValue={demoLogin?.password} /></label>
       <p className="auth-error" aria-live="polite">{error}</p>
       <button className="auth-primary" disabled={pending}>{pending ? '登录中…' : '登录'}</button>
     </form>

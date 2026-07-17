@@ -133,6 +133,27 @@ function createHarness(options: { verificationTtlSeconds?: number; sessionTtlSec
 }
 
 describe('auth service', () => {
+  it('provisions the configured verified demo account idempotently', async () => {
+    const harness = createHarness();
+    const input = {
+      email: 'demo@native-web.test',
+      username: 'demo',
+      password: 'Demo-Workflow-2026!',
+    };
+
+    await expect(harness.service.ensureVerifiedDemoUser(input))
+      .resolves.toMatchObject({ ok: true, created: true });
+    await expect(harness.service.ensureVerifiedDemoUser(input))
+      .resolves.toMatchObject({ ok: true, created: false });
+    expect(harness.users).toHaveLength(1);
+    await expect(harness.service.login({
+      identifier: 'demo',
+      password: input.password,
+      userAgent: null,
+      ipPrefix: null,
+    })).resolves.toMatchObject({ ok: true });
+  });
+
   it('registers an unverified user and sends a ten-minute code', async () => {
     const harness = createHarness();
     const result = await harness.service.register({

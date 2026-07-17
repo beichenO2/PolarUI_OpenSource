@@ -100,19 +100,84 @@ export function createAuthService(options: CreateAuthServiceOptions) {
     });
   }
 
+  async function prepareVerifiedUser(input: { email: string; username: string; password: string }) {
+    const email = parseEmail(input.email);
+    const username = parseUsername(input.username);
+    return {
+      email,
+      username,
+      passwordHash: await hashPassword(input.password),
+    };
+  }
+
+  async function matchesVerifiedDemoUser(
+    user: StoredUser | null,
+    input: { emailNormalized: string; usernameNormalized: string; password: string },
+  ) {
+    return Boolean(
+      user &&
+      user.emailNormalized === input.emailNormalized &&
+      user.usernameNormalized === input.usernameNormalized &&
+      user.emailVerifiedAt &&
+      user.status === 'active' &&
+      await verifyPassword(input.password, user.passwordHash),
+    );
+  }
+
   return {
+    async ensureVerifiedDemoUser(input: {
+      email: string;
+      username: string;
+      password: string;
+    }) {
+      let prepared;
+      try {
+        prepared = await prepareVerifiedUser(input);
+      } catch (error) {
+        if (error instanceof IdentityValidationError || error instanceof PasswordValidationError) {
+          return { ok: false as const, code: error.code };
+        }
+        throw error;
+      }
+      const expected = {
+        emailNormalized: prepared.email.normalized,
+        usernameNormalized: prepared.username.normalized,
+        password: input.password,
+      };
+      const existing = await options.repository.findUserByLoginIdentifier(prepared.username.normalized);
+      if (existing) {
+        return await matchesVerifiedDemoUser(existing, expected)
+          ? { ok: true as const, created: false, user: existing }
+          : { ok: false as const, code: 'DEMO_USER_CONFLICT' as const };
+      }
+      const createdAt = clock();
+      const created = await options.repository.createUser({
+        id: createId(),
+        email: prepared.email.value,
+        emailNormalized: prepared.email.normalized,
+        username: prepared.username.value,
+        usernameNormalized: prepared.username.normalized,
+        passwordHash: prepared.passwordHash,
+        emailVerifiedAt: createdAt,
+        status: 'active',
+        createdVia: 'admin_cli',
+        createdAt,
+      });
+      if (created.ok) return { ok: true as const, created: true, user: created.user };
+      const raced = await options.repository.findUserByLoginIdentifier(prepared.email.normalized);
+      return await matchesVerifiedDemoUser(raced, expected)
+        ? { ok: true as const, created: false, user: raced! }
+        : { ok: false as const, code: 'DEMO_USER_CONFLICT' as const };
+    },
+
     async createVerifiedAdminUser(input: {
       email: string;
       username: string;
       password: string;
     }) {
-      let email;
-      let username;
-      let passwordHash;
+      let prepared;
       try {
-        email = parseEmail(input.email);
-        username = parseUsername(input.username);
-        passwordHash = await hashPassword(input.password);
+        prepared = await prepareVerifiedUser(input);
       } catch (error) {
         if (error instanceof IdentityValidationError || error instanceof PasswordValidationError) {
           return { ok: false as const, code: error.code };
@@ -122,11 +187,11 @@ export function createAuthService(options: CreateAuthServiceOptions) {
       const createdAt = clock();
       return options.repository.createUser({
         id: createId(),
-        email: email.value,
-        emailNormalized: email.normalized,
-        username: username.value,
-        usernameNormalized: username.normalized,
-        passwordHash,
+        email: prepared.email.value,
+        emailNormalized: prepared.email.normalized,
+        username: prepared.username.value,
+        usernameNormalized: prepared.username.normalized,
+        passwordHash: prepared.passwordHash,
         emailVerifiedAt: createdAt,
         status: 'active',
         createdVia: 'admin_cli',

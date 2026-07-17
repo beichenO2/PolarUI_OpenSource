@@ -1,0 +1,124 @@
+<style>
+  .lead { max-width:940px; margin-bottom:22px; }
+  .axiom { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:14px 0 24px; }
+  .axiom div { padding:12px; border-top:3px solid #205844; background:#edf2ef; color:#35433c; font-size:11px; line-height:1.5; }
+  .axiom strong { display:block; margin-bottom:4px; }
+  .boundary { display:grid; grid-template-columns:1fr 72px 1fr; gap:10px; align-items:stretch; }
+  .domain { border:1px solid #aab5af; background:#fff; color:#24312c; overflow:hidden; }
+  .domain-head { display:flex; justify-content:space-between; align-items:center; padding:11px 13px; background:#e8eeeb; border-bottom:1px solid #ccd4cf; }
+  .domain-head h3 { margin:0; font-size:14px; }
+  .domain-head span { color:#66736d; font-size:9px; }
+  .domain-body { padding:14px; }
+  .lane { display:grid; grid-template-columns:94px 1fr; align-items:center; min-height:52px; border-bottom:1px solid #dde2df; font-size:10px; }
+  .lane:last-child { border-bottom:0; }
+  .lane strong { color:#205844; }
+  .lane p { margin:0; color:#4f5d56; line-height:1.45; }
+  .bridge { display:grid; place-items:center; text-align:center; color:#205844; font-size:9px; font-weight:700; }
+  .bridge::before { content:'Input →\A← Projection'; white-space:pre; padding:10px 4px; border-top:1px solid #205844; border-bottom:1px solid #205844; }
+  .fsm { display:flex; align-items:center; gap:5px; margin:8px 0 12px; }
+  .state { flex:1; padding:9px 5px; border:1px solid #bdc8c2; text-align:center; font-size:9px; }
+  .state.active { border-color:#205844; background:#dfeae5; color:#205844; font-weight:700; }
+  .arr { color:#205844; font-weight:700; }
+  .rule-list { margin:0; padding-left:18px; color:#4f5d56; font-size:10px; line-height:1.7; }
+  .layout-title { margin:30px 0 10px; display:flex; justify-content:space-between; align-items:end; gap:14px; }
+  .layout-title p { color:#66736d; font-size:11px; }
+  .desk { display:grid; grid-template:42px 388px / 156px minmax(380px,1fr) 268px; border:1px solid #9eaaa4; background:#fff; color:#24312c; box-shadow:0 10px 26px rgba(27,52,42,.08); overflow:hidden; }
+  .top { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; padding:0 14px; border-bottom:1px solid #ccd4cf; font-size:10px; font-weight:700; }
+  .nav { padding:12px 9px; background:#e8eeeb; border-right:1px solid #ccd4cf; font-size:8px; }
+  .nav-head { display:flex; justify-content:space-between; margin-bottom:7px; color:#64716a; font-weight:700; }
+  .context { padding:8px 7px; margin-bottom:5px; border:1px solid #bdc8c2; background:#fff; }
+  .context.on { border-color:#205844; }
+  .context strong, .context small { display:block; }
+  .context small { margin-top:3px; color:#78837e; }
+  .new { margin-top:8px; padding:7px; border:1px dashed #9faca5; text-align:center; color:#65716b; }
+  .conv { position:relative; display:flex; flex-direction:column; min-width:0; }
+  .conv-head { display:flex; justify-content:space-between; align-items:center; padding:11px 15px; border-bottom:1px solid #d6ddd9; }
+  .conv-head h3 { margin:0 0 2px; font-size:16px; }
+  .conv-head small { color:#6c7872; font-size:8px; }
+  .conv-tools { display:flex; gap:5px; font-size:8px; }
+  .conv-tools span { padding:5px 7px; border:1px solid #b5c1bb; }
+  .timeline { flex:1; padding:16px; font-size:9px; }
+  .msg { max-width:78%; margin:7px 0; padding:8px 9px; background:#edf1ef; line-height:1.45; }
+  .msg.me { margin-left:auto; background:#dce9e3; }
+  .event { margin:12px auto; width:max-content; max-width:90%; padding:5px 8px; background:#f3f5f4; color:#69756f; font-size:7px; text-align:center; }
+  .composer { margin:0 15px 13px; padding:10px; border:1.5px solid #205844; box-shadow:0 5px 17px rgba(30,70,54,.10); color:#69756f; font-size:9px; }
+  .composer::after { content:'发送'; float:right; padding:4px 7px; margin-top:-4px; background:#205844; color:#fff; font-weight:700; }
+  .side { background:#f4f6f5; border-left:1px solid #ccd4cf; padding:11px; font-size:8px; }
+  .side-tabs { display:flex; gap:4px; margin-bottom:9px; }
+  .side-tabs span { flex:1; padding:6px 4px; border-bottom:1px solid #acb8b2; text-align:center; }
+  .side-tabs .on { color:#205844; border-bottom:2px solid #205844; font-weight:700; }
+  .panel { padding:9px; margin-bottom:7px; border:1px solid #c5cfca; background:#fff; }
+  .panel-head { display:flex; justify-content:space-between; margin-bottom:5px; color:#205844; font-weight:700; }
+  .memory-row { padding:5px 0; border-bottom:1px solid #e0e4e2; color:#4e5b54; line-height:1.35; }
+  .memory-row:last-child { border:0; }
+  .memory-row small { display:block; color:#7a8580; }
+  .status-line { display:flex; align-items:center; gap:5px; margin:5px 0; }
+  .dot { width:6px; height:6px; border-radius:50%; background:#b15a32; }
+  .mobile-row { display:flex; justify-content:center; gap:18px; }
+  .phone { position:relative; width:190px; height:350px; border:1px solid #87958e; border-radius:18px; overflow:hidden; background:#fff; color:#24312c; font-size:8px; box-shadow:0 8px 20px rgba(27,52,42,.08); }
+  .phone-top { display:flex; justify-content:space-between; padding:12px 10px 8px; border-bottom:1px solid #ccd4cf; font-weight:700; }
+  .phone-context { display:flex; justify-content:space-between; padding:9px 10px; background:#edf2ef; font-weight:700; }
+  .phone-thread { display:flex; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #d6ddd9; }
+  .phone-body { padding:10px; }
+  .phone .msg { font-size:8px; padding:7px; }
+  .phone .event { font-size:6px; }
+  .phone-compose { position:absolute; left:8px; right:8px; bottom:9px; padding:9px; border:1.5px solid #205844; background:#fff; color:#69756f; }
+  .phone-compose::after { content:'➤'; float:right; color:#205844; }
+  .sheet { position:absolute; inset:35px 0 0; padding:12px 10px; background:#f4f6f5; }
+  .sheet-head { display:flex; justify-content:space-between; margin-bottom:10px; font-weight:700; }
+  .sheet .panel { font-size:8px; }
+  .wrong-right { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:22px; }
+  .compare { padding:14px; border:1px solid #c6d0cb; background:#fff; color:#3f4d46; font-size:11px; }
+  .compare.bad { border-top:3px solid #9b4b43; }
+  .compare.good { border-top:3px solid #205844; }
+  .compare strong { display:block; margin-bottom:7px; }
+  .compare ul { margin:0 0 0 17px; line-height:1.65; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media (max-width:900px) { .boundary { grid-template-columns:1fr; } .bridge { min-height:50px; transform:rotate(90deg); } .desk { grid-template:42px 370px / 110px minmax(320px,1fr) 210px; } }
+  @media (max-width:650px) { .axiom, .wrong-right { grid-template-columns:1fr; } .desk { display:none; } .mobile-row { flex-direction:column; align-items:center; } .decision { flex-direction:column; } }
+</style>
+
+<div class="lead">
+  <h2>纠正后的产品边界：Web UI 管交互与记忆，Workflow 管 FSM</h2>
+  <p class="subtitle">Context 的唯一使命是形成可复用的公共记忆范围，减少重复输入。Stage 不再拥有 URL、对话或输入，只是 Workflow 可选择返回的一种状态投影。</p>
+</div>
+
+<div class="axiom">
+  <div><strong>Context = 公共记忆范围</strong>事实、材料、约束与历史成果在同一情景内复用。</div>
+  <div><strong>Conversation = 交互通道</strong>用户从任何对话输入，Web 组装 Context Memory 后交给 Workflow。</div>
+  <div><strong>Stage = Workflow 内部状态</strong>FSM 自行迁移；Web 只显示状态，不选择、不路由、不绑定对话。</div>
+</div>
+
+<div class="boundary">
+  <section class="domain">
+    <header class="domain-head"><h3>Web UI 职责</h3><span>Memory + Interaction</span></header>
+    <div class="domain-body"><div class="lane"><strong>直接输入</strong><p>零 Context 也可发送；系统自动建立情景。</p></div><div class="lane"><strong>多对话</strong><p>隔离局部对话历史，但共享 Context 公共记忆。</p></div><div class="lane"><strong>记忆管理</strong><p>查看来源、修正、删除、调整作用域与确认提案。</p></div><div class="lane"><strong>结果呈现</strong><p>显示回复、成果、版本和 Workflow 状态投影。</p></div></div>
+  </section>
+  <div class="bridge" aria-label="Input 进入 Workflow，Projection 返回 Web"></div>
+  <section class="domain">
+    <header class="domain-head"><h3>Workflow 职责</h3><span>FSM + Execution</span></header>
+    <div class="domain-body"><div class="fsm"><div class="state">S0</div><div class="arr">→</div><div class="state active">S1</div><div class="arr">→</div><div class="state">S2</div></div><ul class="rule-list"><li>理解用户输入与 Context Memory</li><li>决定执行哪个节点和是否状态迁移</li><li>生成回复、成果和记忆提案</li><li>输出可观察的状态与进度</li><li>处理中断、恢复、重试与完成</li></ul></div>
+  </section>
+</div>
+
+<div class="layout-title"><div><h3>修订后的 A：对话主轴 + Context Memory 侧栏</h3></div><p>Stage 从页面骨架降为 Workflow 状态信息</p></div>
+<div class="desk">
+  <header class="top"><span>Native Workflow <small>交互与记忆工作台</small></span><span>● 已同步　版本</span></header>
+  <aside class="nav"><div class="nav-head"><span>情景</span><span>＋</span></div><div class="context on"><strong>Workflow 输入入口设计</strong><small>3 条公共记忆</small></div><div class="context"><strong>发布流程复核</strong><small>8 条公共记忆</small></div><div class="new">直接输入新问题</div></aside>
+  <main class="conv"><header class="conv-head"><div><h3>Workflow 输入入口设计</h3><small>路线 1 · 当前版本 04</small></div><div class="conv-tools"><span>主对话⌄</span><span>＋ 新对话</span></div></header><div class="timeline"><div class="msg me">Web UI 应该只负责管理记忆和提供交互。</div><div class="msg">收到。我会以 Context Memory 作为公共上下文，把 Input 交给 Workflow 决定后续状态。</div><div class="event">Workflow 状态更新：正在梳理产品边界 · 由 Agent 控制</div></div><div class="composer">继续输入问题、材料或指令…</div></main>
+  <aside class="side"><div class="side-tabs"><span class="on">记忆</span><span>结果</span><span>运行</span></div><div class="panel"><div class="panel-head"><span>Context 公共记忆</span><span>管理</span></div><div class="memory-row">Web UI 负责记忆与交互<small>来源：本对话 · 刚刚</small></div><div class="memory-row">FSM 由 Workflow 管辖<small>来源：用户确认</small></div><div class="memory-row">Context 应自动建立<small>来源：产品原则</small></div></div><div class="panel"><div class="panel-head"><span>Workflow 运行</span><span>详情</span></div><div class="status-line"><i class="dot"></i><span>Agent 正在执行</span></div><div>当前状态：边界梳理</div></div><div class="panel"><div class="panel-head"><span>成果</span><span>1</span></div><div>核心输入模型草案</div></div></aside>
+</div>
+
+<div class="layout-title"><div><h3>移动端</h3></div><p>对话常驻；记忆、结果、运行状态进入统一侧层</p></div>
+<div class="mobile-row"><div class="phone"><div class="phone-top"><span>☰ 情景</span><span>版本</span></div><div class="phone-context"><span>Workflow 输入入口设计</span><span>记忆 · 3 ›</span></div><div class="phone-thread"><span>主对话⌄</span><span>＋</span></div><div class="phone-body"><div class="msg me">UI 只管记忆和交互。</div><div class="msg">明白，状态由 Workflow 决定。</div><div class="event">Workflow 正在执行 · 边界梳理</div></div><div class="phone-compose">继续输入…</div></div><div class="phone"><div class="phone-top"><span>Workflow 输入入口设计</span><span>关闭</span></div><div class="sheet"><div class="sheet-head"><span>情景信息</span><span>管理</span></div><div class="panel"><div class="panel-head"><span>公共记忆</span><span>3</span></div><div class="memory-row">UI 负责记忆与交互</div><div class="memory-row">FSM 归 Workflow</div><div class="memory-row">自动建立 Context</div></div><div class="panel"><div class="panel-head"><span>Workflow 运行</span><span>详情</span></div><div class="status-line"><i class="dot"></i><span>Agent 正在执行</span></div></div><div class="panel"><div class="panel-head"><span>成果</span><span>1</span></div>输入模型草案</div></div></div></div>
+
+<div class="wrong-right">
+  <div class="compare bad"><strong>删除的错误约束</strong><ul><li>Stage 路由决定当前输入</li><li>Thread 必须属于某个 Stage</li><li>用户在 Stage 间导航来控制流程</li><li>Stage 工作台占据页面主结构</li></ul></div>
+  <div class="compare good"><strong>新的稳定边界</strong><ul><li>Input 只绑定 Context、Conversation 与运行路线</li><li>Workflow 从自身 FSM 判断状态</li><li>Stage Projection 只用于观察和解释</li><li>Memory 是 Web UI 的第一等管理对象</li></ul></div>
+</div>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-memory-interaction-boundary" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可这个职责边界</h3><p>以此为新基线细化多对话、记忆和运行反馈。</p></div></div>
+  <div class="option" data-choice="revise-memory-interaction-boundary" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>仍需调整</h3><p>指出 Web UI 还承担了哪项不该承担的职责。</p></div></div>
+</div>

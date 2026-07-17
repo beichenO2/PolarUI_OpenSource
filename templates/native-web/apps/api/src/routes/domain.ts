@@ -10,11 +10,17 @@ const title = z.string();
 const contextParams = z.object({ contextId: uuid }).strict();
 const routeParams = z.object({ routeId: uuid }).strict();
 const threadParams = z.object({ threadId: uuid }).strict();
+const conversationParams = z.object({ conversationId: uuid }).strict();
 const routeQuery = z.object({
-  stage: z.string().regex(/^[a-z][a-z0-9_]*$/),
   checkpoint: uuid.optional(),
 }).strict();
 const createContextBody = z.object({ title }).strict();
+const renameContextBody = z.object({ title }).strict();
+const createConversationBody = z.object({}).strict();
+const updateConversationBody = z.object({
+  title: title.optional(),
+  status: z.enum(['active', 'archived']).optional(),
+}).strict().refine((value) => value.title !== undefined || value.status !== undefined);
 const createThreadBody = z.object({
   stageKey: z.string().regex(/^[a-z][a-z0-9_]*$/),
   title,
@@ -85,6 +91,15 @@ export async function registerDomainRoutes(
     return domainService.getContextWorkspace(sessionUser.id, params.contextId);
   });
 
+  app.patch('/api/contexts/:contextId', async (request, reply) => {
+    const sessionUser = await mutationUser(request, reply);
+    if (!sessionUser) return;
+    const params = parse(contextParams, request.params, reply);
+    const body = parse(renameContextBody, request.body, reply);
+    if (!params || !body) return;
+    return domainService.renameContext(sessionUser.id, params.contextId, body);
+  });
+
   app.get('/api/routes/:routeId/workspace', async (request, reply) => {
     const sessionUser = await user(request, reply);
     if (!sessionUser) return;
@@ -92,9 +107,26 @@ export async function registerDomainRoutes(
     const query = parse(routeQuery, request.query, reply);
     if (!params || !query) return;
     return domainService.getRouteWorkspace(sessionUser.id, params.routeId, {
-      stageKey: query.stage,
       checkpointId: query.checkpoint,
     });
+  });
+
+  app.post('/api/routes/:routeId/conversations', async (request, reply) => {
+    const sessionUser = await mutationUser(request, reply);
+    if (!sessionUser) return;
+    const params = parse(routeParams, request.params, reply);
+    const body = parse(createConversationBody, request.body, reply);
+    if (!params || !body) return;
+    return reply.code(201).send(await domainService.createConversation(sessionUser.id, params.routeId));
+  });
+
+  app.patch('/api/conversations/:conversationId', async (request, reply) => {
+    const sessionUser = await mutationUser(request, reply);
+    if (!sessionUser) return;
+    const params = parse(conversationParams, request.params, reply);
+    const body = parse(updateConversationBody, request.body, reply);
+    if (!params || !body) return;
+    return domainService.updateConversation(sessionUser.id, params.conversationId, body);
   });
 
   app.post('/api/routes/:routeId/threads', async (request, reply) => {

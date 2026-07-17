@@ -10,6 +10,11 @@
     "id": "native-web-qa",
     "endpoint": "http://127.0.0.1:13925/run"
   },
+  "demo_login": {
+    "email": "demo@native-web.test",
+    "username": "demo",
+    "password": "Demo-Workflow-2026!"
+  },
   "stages": [
     {
       "key": "discover",

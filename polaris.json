@@ -412,6 +412,23 @@
             "2026-07-17: Native Web 169 unit/component/service tests passed; production build passed; Safari desktop and 390px checks verified discussion draft isolation, full-screen mobile discussion, read-only versions, exact route provenance, and no legacy UI concepts",
             "~/Documents/Codex/2026-07-16/workflow-web-deploy-qa/outputs/native-workflow-web-release-qa.json"
           ]
+        },
+        {
+          "name": "Native Workflow Web 核心输入与两层记忆重构",
+          "description": "对话主轴、零 Context Start Command、动态只读 Stage Projection、用户/情景两层版本记忆",
+          "status": "in-progress",
+          "behavior": [
+            "Workflow 是状态机权威，Web 不选择 Stage",
+            "首条 Input 原子建立隐藏初始化范围并在成功后公开",
+            "历史 Checkpoint Input 自动创建同等 Route",
+            "Context/Conversation 重命名不触发 Workflow",
+            "用户记忆跨 Context；情景记忆仅限当前 Context"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "docs/superpowers/specs/2026-07-17-native-workflow-web-core-input-design.md",
+            "docs/superpowers/plans/2026-07-17-native-workflow-web-core-input.md"
+          ]
         }
       ]
     },

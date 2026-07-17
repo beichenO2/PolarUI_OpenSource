@@ -63,4 +63,50 @@ describe('native API', () => {
     expect(response.json()).toEqual({ error: { code: 'AUTH_SERVICE_UNAVAILABLE' } });
     expect(response.body).not.toContain('postgres.internal');
   });
+
+  it('sanitizes unexpected Conversation repository failures', async () => {
+    const origin = 'http://127.0.0.1:3920';
+    const config = loadConfig({
+      NODE_ENV: 'test',
+      DATABASE_URL: 'postgresql://polar:polar@127.0.0.1:5432/polar',
+      AUTH_PEPPER: 'test-pepper-with-at-least-32-characters',
+      PUBLIC_APP_ORIGIN: origin,
+      COOKIE_SECURE: 'false',
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: '1025',
+      SMTP_FROM: 'Demo <no-reply@example.test>',
+    });
+    const app = buildApp({
+      manifest,
+      staticRoot: null,
+      config,
+      authService: {
+        async getSessionUser() {
+          return {
+            id: '10000000-0000-4000-8000-000000000001',
+            email: 'owner@example.test',
+            username: 'owner',
+          };
+        },
+      } as any,
+      domainService: {
+        async updateConversation() {
+          throw new Error('duplicate key in postgres.internal workflow_threads secret_detail');
+        },
+      } as any,
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/conversations/50000000-0000-4000-8000-000000000001',
+      headers: { cookie: 'polar_session=token', origin },
+      payload: { status: 'archived' },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: { code: 'DOMAIN_SERVICE_UNAVAILABLE' } });
+    expect(response.body).not.toContain('postgres.internal');
+    expect(response.body).not.toContain('secret_detail');
+  });
 });

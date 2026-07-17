@@ -35,6 +35,7 @@ const desktopScreenshot = join(outputRoot, 'native-workflow-web-release-desktop.
 const versionArchiveScreenshot = join(outputRoot, 'native-workflow-web-release-version-archive.png');
 const mobileScreenshot = join(outputRoot, 'native-workflow-web-release-mobile.png');
 const mobileDiscussionScreenshot = join(outputRoot, 'native-workflow-web-release-mobile-discussion.png');
+const loginScreenshot = join(outputRoot, 'native-workflow-web-release-login.png');
 const failureScreenshot = join(outputRoot, 'native-workflow-web-release-failure.png');
 const report = {
   run_id: runId,
@@ -47,7 +48,7 @@ const report = {
   release: {},
   screenshots: [],
   contract: {
-    manifest: 'product.manifest declares product identity, Stage projection, legal actions, fixed component keys, Artifact rules, and the Workflow endpoint.',
+    manifest: 'product.manifest declares product identity, optional one-click demo login, Stage projection, legal actions, fixed component keys, Artifact rules, and the Workflow endpoint.',
     workflow_bridge: 'The Bridge translates the versioned Command Envelope to Workflow input and normalizes reply_events, stage_signal, artifact_proposals, memory_proposals, and workflow_cursor.',
     template_injection_points: ['product.manifest.json', 'Workflow Bridge runtime endpoint'],
     export_artifacts: ['workflow/snapshot.json', 'product.manifest.json', 'site.config.json', 'migrations/', 'compose.yml', 'Start/start.sh'],
@@ -134,6 +135,23 @@ function run(command, args, options = {}) {
   return result.stdout.trim();
 }
 
+function cleanupStaleQaComposeProjects() {
+  const projects = JSON.parse(run('docker', ['compose', 'ls', '--all', '--format', 'json']) || '[]');
+  const releaseEnv = join(homedir(), '.config', 'polarui', 'release-env', 'native-web-qa.env');
+  let cleaned = 0;
+
+  for (const entry of projects) {
+    if (!entry.Name.startsWith('polar-native-web-qa-')) continue;
+    const configPath = String(entry.ConfigFiles ?? '').split(',').find((candidate) => candidate.endsWith('/compose.yml'));
+    if (!configPath || !configPath.startsWith(`${join(taskRoot, 'work')}/`)) continue;
+    run('docker', ['compose', '--project-name', entry.Name, '--env-file', releaseEnv,
+      '-f', configPath, 'down', '--remove-orphans'], { label: `remove stale QA Compose project ${entry.Name}` });
+    cleaned += 1;
+  }
+
+  console.log(`[QA CLEANUP] removed ${cleaned} stale native Web QA Compose project(s); volumes preserved`);
+}
+
 async function waitFor(label, probe, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
@@ -159,7 +177,7 @@ async function waitForServiceStatus(serviceId, expectedStatus) {
 }
 
 async function disableServiceAutoStart(service) {
-  if (!service.auto_start) return;
+  if (!service.auto_start && !service.restart_on_failure) return;
   const response = await fetch('http://127.0.0.1:11055/api/services/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -172,7 +190,7 @@ async function disableServiceAutoStart(service) {
       gpu_mem_requirement_mb: service.gpu_mem_requirement_mb,
       device_id: service.device_id,
       auto_start: false,
-      restart_on_failure: Boolean(service.restart_on_failure),
+      restart_on_failure: false,
       max_restarts: service.max_restarts,
       port: service.port,
       health_check_url: service.health_check_url,
@@ -273,17 +291,15 @@ async function runNamedAction(label, expectedReply) {
 try {
   const runtimeServiceId = 'polarui-native-web-qa-runtime';
   const mailpitServiceId = 'polarui-native-web-qa-mailpit';
-  const tlsServiceId = 'polarui-native-web-qa-tls';
   await stopIfRegistered(runtimeServiceId);
   await stopIfRegistered(mailpitServiceId);
-  await stopIfRegistered(tlsServiceId);
   await stopIfRegistered('web-native-web-qa');
+  cleanupStaleQaComposeProjects();
   const runtimePort = await claimGovernedQaPort({ serviceName: runtimeServiceId, preferred: 14925 });
   const mailpitHttpPort = await claimGovernedQaPort({ serviceName: mailpitServiceId, preferred: 14940 });
   const mailpitSmtpPort = await claimGovernedQaPort({ serviceName: 'polarui-native-web-qa-smtp', preferred: 14945 });
-  const publicPort = await claimGovernedQaPort({ serviceName: tlsServiceId, preferred: 14935 });
-  assert.equal(new Set([runtimePort, mailpitHttpPort, mailpitSmtpPort, publicPort]).size, 4);
-  record('PolarPort allocated all QA listener ports', `${runtimePort},${mailpitHttpPort},${mailpitSmtpPort},${publicPort}`);
+  assert.equal(new Set([runtimePort, mailpitHttpPort, mailpitSmtpPort]).size, 3);
+  record('PolarPort allocated all QA support ports', `${runtimePort},${mailpitHttpPort},${mailpitSmtpPort}`);
 
   await registerAndStartGovernedService(buildGovernedServiceRegistration({
     id: runtimeServiceId,
@@ -321,15 +337,15 @@ try {
     POSTGRES_USER: 'polar',
     POSTGRES_PASSWORD: randomBytes(24).toString('base64url'),
     AUTH_PEPPER: randomBytes(36).toString('base64url'),
-    PUBLIC_APP_ORIGIN: `https://127.0.0.1:${publicPort}`,
-    COOKIE_SECURE: 'true',
+    PUBLIC_APP_ORIGIN: 'http://127.0.0.1:14935',
+    COOKIE_SECURE: 'false',
     SMTP_HOST: 'host.docker.internal',
     SMTP_PORT: String(mailpitSmtpPort),
     SMTP_FROM: 'Native Workflow QA <qa@example.test>',
     SMTP_SECURE: 'false',
     WORKFLOW_ENDPOINT_OVERRIDE: `http://host.docker.internal:${runtimePort}/run`,
     WORKFLOW_TIMEOUT_MS: '1000',
-    POLAR_WEB_PREFERRED_PORT: '15920',
+    POLAR_WEB_PREFERRED_PORT: '14935',
     POLAR_NATIVE_COMPOSE_PROJECT: `polar-native-web-qa-${runId.toLowerCase().replace(/[^a-z0-9_.-]/g, '-').slice(0, 24)}`,
   });
   const exported = await exportRelease({
@@ -344,6 +360,7 @@ try {
   if (!exported.ok) throw new Error(`export/deploy failed: ${JSON.stringify(exported)}`);
   const releasePath = exported.release_path;
   const webPort = exported.deploy.web_port;
+  assert.equal(webPort, 14935);
   const webServiceId = exported.deploy.service_id;
   await waitForHttp(`http://127.0.0.1:${webPort}/readyz`);
   report.services.web = { id: webServiceId, port: webPort };
@@ -356,33 +373,27 @@ try {
   const frozenProduct = JSON.parse(readFileSync(join(releasePath, 'product.manifest.json'), 'utf8'));
   assert.equal(frozenProduct.workflow.id, 'native-web-qa');
   assert.equal(frozenProduct.workflow.endpoint, 'http://127.0.0.1:13925/run');
+  assert.deepEqual(frozenProduct.demo_login, {
+    email: 'demo@native-web.test',
+    username: 'demo',
+    password: 'Demo-Workflow-2026!',
+  });
   record('export-release compiled and PolarProcess deployed production container', exported.release_id);
 
-  const tlsKey = join(workRoot, 'qa-tls-key.pem');
-  const tlsCertificate = join(workRoot, 'qa-tls-certificate.pem');
-  run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', tlsKey, '-out', tlsCertificate,
-    '-days', '1', '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { label: 'generate QA TLS certificate' });
-  const tlsConfig = join(workRoot, 'tls.json');
-  writeFileSync(tlsConfig, JSON.stringify({ port: publicPort, targetPort: webPort, keyPath: tlsKey, certificatePath: tlsCertificate }));
-  await registerAndStartGovernedService(buildGovernedServiceRegistration({
-    id: tlsServiceId,
-    name: 'Native Web QA TLS Proxy',
-    command: `${shellQuote(process.execPath)} scripts/native-web-qa-tls-proxy.mjs ${shellQuote(tlsConfig)}`,
-    workDir: projectRoot,
-    port: publicPort,
-    healthUrl: `http://127.0.0.1:${webPort}/readyz`,
-  }));
-  await waitFor(`TLS proxy`, async () => {
-    const result = spawnSync('curl', ['-kfsS', `https://127.0.0.1:${publicPort}/__qa_proxy_health`]);
-    return result.status === 0;
-  });
-  report.services.tls = { id: tlsServiceId, port: publicPort };
-  record('TLS public entry is governed and healthy');
-
-  const appOrigin = `https://127.0.0.1:${publicPort}`;
+  const appOrigin = `http://127.0.0.1:${webPort}`;
+  record('production Web container serves the local release directly over HTTP', appOrigin);
   const mailpitOrigin = `http://127.0.0.1:${mailpitHttpPort}`;
   browser = await chromium.launch();
-  page = await browser.newPage({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true });
+  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(`${appOrigin}/login`, { waitUntil: 'domcontentloaded' });
+  assert.equal(await page.getByLabel('邮箱或用户名').inputValue(), frozenProduct.demo_login.username);
+  assert.equal(await page.getByLabel('密码').inputValue(), frozenProduct.demo_login.password);
+  await page.screenshot({ path: loginScreenshot, fullPage: true });
+  report.screenshots.push(loginScreenshot);
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: 'demo · 退出' }).waitFor();
+  record('prefilled demo account logs in with one click');
+  await page.getByRole('button', { name: 'demo · 退出' }).click();
   await page.goto(`${appOrigin}/register`, { waitUntil: 'domcontentloaded' });
   await page.getByLabel('邮箱').fill(email);
   await page.getByLabel('用户名').fill(username);
@@ -393,7 +404,7 @@ try {
   await page.getByLabel('六位验证码').fill(code);
   await page.getByRole('button', { name: '完成验证' }).click();
   await login(email, password, username);
-  await page.getByRole('heading', { name: '创建第一个项目' }).waitFor();
+  await page.getByRole('heading', { name: '创建第一个工作空间' }).waitFor();
   record('email registration, verification, and email login');
 
   const composeProject = exported.deploy.compose_project;
@@ -428,8 +439,8 @@ try {
   await page.getByRole('button', { name: '关闭', exact: true }).click();
   record('read-only archive import and browser rendering');
 
-  await page.getByLabel('项目名称').fill(`发行项目 ${suffix}`);
-  await page.getByRole('button', { name: '创建项目' }).click();
+  await page.getByLabel('工作空间名称').fill(`发行项目 ${suffix}`);
+  await page.getByRole('button', { name: '创建工作空间' }).click();
   await page.getByTestId('workspace-slot').waitFor();
   assert.equal(await page.getByRole('dialog', { name: '阶段讨论' }).count(), 0);
   assert.equal(await page.getByText('当前浏览位置的未提交笔记').count(), 0);
@@ -468,9 +479,8 @@ try {
   await page.locator('.attachment-panel').getByRole('button', { name: '刷新' }).click();
   await page.getByRole('link', { name: new RegExp(`attachment-${suffix}\\.txt`) }).waitFor();
   const artifactCommand = await sendUiMessage('[qa:artifact] release contract', 'Fixture reply · release contract');
-  await page.getByRole('link', { name: /workflow-report\.txt/ }).waitFor();
   await page.locator('.proposal-row').filter({ hasText: 'qa_fact' }).getByRole('button', { name: '采纳' }).click();
-  record('attachment, Workflow Artifact, and explicit memory proposal adoption');
+  record('discussion attachment, Workflow Artifact proposal, and explicit memory proposal adoption');
 
   const replay = await browserJson(`/api/threads/${activeIds.threadId}/commands`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(artifactCommand),
@@ -484,9 +494,15 @@ try {
   record('command idempotency and mismatched replay rejection');
 
   await runNamedAction('采纳到当前路线', 'Fixture adopted thread');
+  await page.getByRole('button', { name: '关闭讨论' }).click();
+  await page.locator('.artifact-panel').getByRole('button', { name: '刷新' }).click();
+  await page.getByRole('link', { name: /workflow-report\.txt/ }).waitFor();
+  record('adopted discussion promotes its Workflow Artifact to a Stage outcome');
+
+  await page.getByRole('button', { name: /打开讨论/ }).click();
   await runNamedAction('推进阶段', 'Fixture advanced to work');
   await waitFor('forward Stage projection', async () => /已完成/.test(await page.getByRole('button', { name: '明确项目' }).textContent() ?? ''));
-  record('named adoption, forward Stage transition, and Checkpoint creation');
+  record('forward Stage transition and Checkpoint creation');
 
   const sourceWorkspace = await browserJson(`/api/routes/${sourceIds.routeId}/workspace?stage=discover`);
   const archivedCheckpoint = sourceWorkspace.body.checkpoints.find((checkpoint) => checkpoint.version === 0);
@@ -518,7 +534,7 @@ try {
     return Boolean(routeId && routeId !== sourceIds.routeId);
   });
   await page.getByRole('button', { name: versionRouteName, exact: true }).waitFor();
-  await page.getByText('来源：归档版本', { exact: true }).waitFor();
+  await page.getByText(/^来源：.*\/ 版本 00$/).waitFor();
   assert.equal(await page.getByText('派生路线').count(), 0);
   await page.getByRole('button', { name: /打开讨论/ }).click();
   await page.getByRole('dialog', { name: '阶段讨论' }).waitFor();

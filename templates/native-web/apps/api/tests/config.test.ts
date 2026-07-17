@@ -36,14 +36,15 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...valid, WORKFLOW_ENDPOINT_OVERRIDE: '' }).workflowEndpointOverride).toBeNull();
   });
 
-  it('requires HTTPS and secure cookies in production', () => {
-    expect(() => loadConfig({ ...valid, NODE_ENV: 'production' })).toThrow(/https/i);
-    expect(() => loadConfig({
-      ...valid,
-      NODE_ENV: 'production',
-      PUBLIC_APP_ORIGIN: 'https://workflow.example.com',
-      COOKIE_SECURE: 'false',
-    })).toThrow(/secure/i);
+  it('accepts HTTP and non-secure cookies in production deployments', () => {
+    const config = loadConfig({ ...valid, NODE_ENV: 'production' });
+    expect(config.publicAppOrigin).toBe('http://127.0.0.1:3920');
+    expect(config.cookie.secure).toBe(false);
+
+    const defaultCookie = loadConfig({ ...valid, NODE_ENV: 'production', COOKIE_SECURE: undefined });
+    expect(defaultCookie.cookie.secure).toBe(false);
+    expect(() => loadConfig({ ...valid, NODE_ENV: 'production', COOKIE_SECURE: 'true' }))
+      .toThrow(/COOKIE_SECURE=false/);
   });
 
   it('rejects missing database and short pepper values', () => {

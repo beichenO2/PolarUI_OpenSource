@@ -22,6 +22,47 @@ describe('parseProductManifest', () => {
     expect(parseProductManifest(valid).stages[0].key).toBe('define');
   });
 
+  it('accepts a Stage-independent manifest with optional named intents', () => {
+    const { stages: _legacyStages, ...stageIndependent } = valid;
+    const intents = [
+      { key: 'summarize', label: '总结当前结论' },
+      { key: 'request_evidence', label: '请求补充证据' },
+    ];
+
+    expect(parseProductManifest({ ...stageIndependent, intents })).toMatchObject({
+      intents,
+      stages: [],
+    });
+  });
+
+  it('defaults both legacy Stages and optional intents to empty lists', () => {
+    const { stages: _legacyStages, ...stageIndependent } = valid;
+
+    expect(parseProductManifest(stageIndependent)).toMatchObject({
+      intents: [],
+      stages: [],
+    });
+  });
+
+  it('rejects duplicate top-level intent keys', () => {
+    const { stages: _legacyStages, ...stageIndependent } = valid;
+    const intent = { key: 'summarize', label: '总结当前结论' };
+
+    expect(() => parseProductManifest({ ...stageIndependent, intents: [intent, intent] }))
+      .toThrow(/duplicate intent key/);
+  });
+
+  it('accepts an optional public demo login contract', () => {
+    const demoLogin = {
+      email: 'demo@native-web.test',
+      username: 'demo',
+      password: 'Demo-Workflow-2026!',
+    };
+
+    expect(parseProductManifest({ ...valid, demo_login: demoLogin }).demo_login)
+      .toEqual(demoLogin);
+  });
+
   it('rejects duplicate stage keys', () => {
     expect(() => parseProductManifest({ ...valid, stages: [valid.stages[0], valid.stages[0]] }))
       .toThrow(/duplicate stage key/);
@@ -43,11 +84,24 @@ describe('parseProductManifest', () => {
     expect(() => parseProductManifest({ ...valid, stages })).toThrow(/duplicate action key/);
   });
 
-  it.each([
-    ['native Web template', new URL('../../../product.manifest.json', import.meta.url)],
-    ['Claude Code workflow', new URL('../../../../../workflows/claude-code/product.manifest.json', import.meta.url)],
-  ])('declares controlled release actions for the %s', (_name, manifestUrl) => {
-    const manifest = parseProductManifest(JSON.parse(readFileSync(manifestUrl, 'utf8')));
+  it('ships the native Web template without hard-coded Stages', () => {
+    const manifest = parseProductManifest(JSON.parse(readFileSync(
+      new URL('../../../product.manifest.json', import.meta.url),
+      'utf8',
+    )));
+
+    expect(manifest.stages).toEqual([]);
+    expect(manifest.intents.map((intent) => intent.key)).toEqual([
+      'summarize',
+      'request_evidence',
+    ]);
+  });
+
+  it('continues parsing controlled actions from a legacy Workflow manifest', () => {
+    const manifest = parseProductManifest(JSON.parse(readFileSync(
+      new URL('../../../../../workflows/claude-code/product.manifest.json', import.meta.url),
+      'utf8',
+    )));
 
     manifest.stages.forEach((stage, index) => {
       const actionKeys = stage.actions.map((action) => action.key);
@@ -58,5 +112,6 @@ describe('parseProductManifest', () => {
           : ['adopt_thread', 'advance'],
       );
     });
+    expect(manifest.stages.length).toBeGreaterThan(0);
   });
 });

@@ -1,13 +1,21 @@
 import type { DatabasePool } from '../db/pool.js';
 import { withTransaction } from '../db/pool.js';
+import {
+  checkpointStages,
+  normalizeCheckpointSnapshot,
+} from './types.js';
 import type {
   CheckpointReason,
   CheckpointSnapshot,
   ContextStatus,
+  LegacyCheckpointSnapshot,
+  PublicScopeStatus,
   RouteStageStatus,
   StageProjection,
   ThreadStatus,
+  TitleSource,
   WorkflowCheckpoint,
+  WorkflowConversation,
   WorkflowContext,
   WorkflowRoute,
   WorkflowThread,
@@ -55,9 +63,9 @@ interface CheckpointRow {
   route_id: string;
   parent_checkpoint_id: string | null;
   version: number;
-  stage_key: string;
+  stage_key: string | null;
   reason: CheckpointReason;
-  snapshot: CheckpointSnapshot;
+  snapshot: unknown;
   created_at: Date;
 }
 
@@ -65,8 +73,10 @@ interface ThreadRow {
   id: string;
   context_id: string;
   route_id: string;
-  stage_key: string;
+  stage_key: string | null;
   title: string;
+  title_source: TitleSource;
+  is_primary: boolean;
   status: ThreadStatus;
   created_at: Date;
   updated_at: Date;
@@ -89,12 +99,12 @@ function mapRoute(row: RouteRow): WorkflowRoute {
     name: row.name,
     originCheckpointId: row.origin_checkpoint_id,
     origin: row.origin_checkpoint_id && row.origin_route_id && row.origin_route_name &&
-      row.origin_version !== null && row.origin_version !== undefined && row.origin_stage_key
+      row.origin_version !== null && row.origin_version !== undefined
       ? {
           routeId: row.origin_route_id,
           routeName: row.origin_route_name,
           version: row.origin_version,
-          stageKey: row.origin_stage_key,
+          stageKey: row.origin_stage_key ?? null,
         }
       : null,
     headCheckpointId: row.head_checkpoint_id,
@@ -121,7 +131,7 @@ function mapCheckpoint(row: CheckpointRow): WorkflowCheckpoint {
     version: row.version,
     stageKey: row.stage_key,
     reason: row.reason,
-    snapshot: row.snapshot,
+    snapshot: normalizeCheckpointSnapshot(row.snapshot),
     createdAt: row.created_at,
   };
 }
@@ -139,15 +149,53 @@ function mapThread(row: ThreadRow): WorkflowThread {
   };
 }
 
-function snapshotFromStages(stages: StageProjection[]): CheckpointSnapshot {
+function mapConversation(row: ThreadRow): WorkflowConversation {
   return {
-    stages: stages.map((stage) => ({
-      stage_key: stage.stageKey,
-      status: stage.status,
-      internal_state: stage.internalState,
-    })),
-    artifacts: [],
+    id: row.id,
+    contextId: row.context_id,
+    routeId: row.route_id,
+    title: row.title,
+    titleSource: row.title_source,
+    isPrimary: row.is_primary,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
+}
+
+function snapshotFromStages(stages: StageProjection[]): CheckpointSnapshot {
+  if (stages.length === 0) {
+    return {
+      workflowState: {},
+      memoryReferences: [],
+      artifacts: [],
+    };
+  }
+  const legacyStages = stages.map((stage) => ({
+    stage_key: stage.stageKey,
+    status: stage.status,
+    internal_state: stage.internalState,
+  }));
+  const snapshot: CheckpointSnapshot & LegacyCheckpointSnapshot = {
+    workflowState: {
+      legacyCompatibility: {
+        stages: legacyStages,
+      },
+    },
+    stageProjection: {
+      revision: 'legacy-stage-projection-v1',
+      items: stages.map((stage) => ({
+        key: stage.stageKey,
+        label: stage.stageKey,
+        status: stage.status,
+        summary: stage.internalState,
+      })),
+    },
+    memoryReferences: [],
+    artifacts: [],
+    stages: legacyStages,
+  };
+  return snapshot;
 }
 
 const routeOriginColumns =
@@ -197,7 +245,7 @@ export function createDomainRepository(pool: DatabasePool) {
             input.checkpointId,
             input.contextId,
             input.routeId,
-            input.stages[0]!.stageKey,
+            input.stages[0]?.stageKey ?? null,
             snapshotFromStages(input.stages),
             input.now,
           ],
@@ -226,14 +274,14 @@ export function createDomainRepository(pool: DatabasePool) {
     async getContextWorkspace(userId: string, contextId: string) {
       const contextResult = await pool.query<ContextRow>(
         'SELECT id, title, status, created_at, updated_at FROM contexts ' +
-        'WHERE id = $1 AND user_id = $2 LIMIT 1',
+        "WHERE id = $1 AND user_id = $2 AND status = 'active' LIMIT 1",
         [contextId, userId],
       );
       if (!contextResult.rows[0]) return null;
       const routesResult = await pool.query<RouteRow>(
         'SELECT r.*, ' + routeOriginColumns + ' ' +
         'FROM workflow_routes r ' + routeOriginJoins +
-        'WHERE r.context_id = $1 ORDER BY r.created_at, r.id',
+        "WHERE r.context_id = $1 AND r.status = 'active' ORDER BY r.created_at, r.id",
         [contextId],
       );
       return {
@@ -242,33 +290,29 @@ export function createDomainRepository(pool: DatabasePool) {
       };
     },
 
-    async getRouteWorkspace(userId: string, routeId: string, stageKey: string) {
+    async getRouteWorkspace(userId: string, routeId: string) {
       const routeResult = await pool.query<RouteWorkspaceRow>(
         'SELECT r.*, ' + routeOriginColumns + ', ' +
         'c.title, c.status, c.created_at AS context_created_at, ' +
         'c.updated_at AS context_updated_at ' +
         'FROM workflow_routes r ' + routeOriginJoins +
         'JOIN contexts c ON c.id = r.context_id ' +
-        'WHERE r.id = $1 AND c.user_id = $2 LIMIT 1',
+        "WHERE r.id = $1 AND c.user_id = $2 " +
+        "AND r.status = 'active' AND c.status = 'active' LIMIT 1",
         [routeId, userId],
       );
       const row = routeResult.rows[0];
       if (!row) return null;
-      const [stagesResult, checkpointsResult, threadsResult] = await Promise.all([
-        pool.query<StageRow>(
-          'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
-          'WHERE route_id = $1 ORDER BY position',
-          [routeId],
-        ),
+      const [checkpointsResult, conversationsResult] = await Promise.all([
         pool.query<CheckpointRow>(
           'SELECT * FROM workflow_checkpoints WHERE route_id = $1 ORDER BY version, created_at, id',
           [routeId],
         ),
         pool.query<ThreadRow>(
           'SELECT * FROM workflow_threads ' +
-          "WHERE route_id = $1 AND stage_key = $2 AND status = 'active' " +
+          "WHERE route_id = $1 AND status = 'active' " +
           'ORDER BY updated_at DESC, id',
-          [routeId, stageKey],
+          [routeId],
         ),
       ]);
       return {
@@ -280,10 +324,124 @@ export function createDomainRepository(pool: DatabasePool) {
           updated_at: row.context_updated_at,
         }),
         route: mapRoute(row),
-        stages: stagesResult.rows.map(mapStage),
         checkpoints: checkpointsResult.rows.map(mapCheckpoint),
-        threads: threadsResult.rows.map(mapThread),
+        conversations: conversationsResult.rows.map(mapConversation),
       };
+    },
+
+    async renameContext(input: {
+      userId: string;
+      contextId: string;
+      title: string;
+      now: Date;
+    }): Promise<WorkflowContext | null> {
+      const result = await pool.query<ContextRow>(
+        "UPDATE contexts SET title = $3, title_source = 'user', updated_at = $4 " +
+        'WHERE id = $1 AND user_id = $2 ' +
+        'RETURNING id, title, status, created_at, updated_at',
+        [input.contextId, input.userId, input.title, input.now],
+      );
+      return result.rows[0] ? mapContext(result.rows[0]) : null;
+    },
+
+    async createConversation(input: {
+      userId: string;
+      id: string;
+      routeId: string;
+      title: string;
+      titleSource: TitleSource;
+      status: PublicScopeStatus;
+      now: Date;
+    }): Promise<WorkflowConversation | null> {
+      return withTransaction(pool, async (client) => {
+        const routeResult = await client.query<{ context_id: string }>(
+          'SELECT r.context_id FROM workflow_routes r ' +
+          'JOIN contexts c ON c.id = r.context_id ' +
+          'WHERE r.id = $1 AND c.user_id = $2 FOR UPDATE OF r',
+          [input.routeId, input.userId],
+        );
+        const route = routeResult.rows[0];
+        if (!route) return null;
+        const result = await client.query<ThreadRow>(
+          'INSERT INTO workflow_threads ' +
+          '(id, context_id, route_id, stage_key, title, title_source, is_primary, status, created_at, updated_at) ' +
+          'VALUES ($1, $2, $3, NULL, $4, $5, ' +
+          "NOT EXISTS (SELECT 1 FROM workflow_threads existing WHERE existing.route_id = $3 AND existing.status <> 'archived'), " +
+          '$6, $7, $7) RETURNING *',
+          [input.id, route.context_id, input.routeId, input.title, input.titleSource, input.status, input.now],
+        );
+        if (!result.rows[0]) return null;
+        await client.query(
+          'UPDATE contexts SET updated_at = $2 WHERE id = $1',
+          [result.rows[0].context_id, input.now],
+        );
+        return mapConversation(result.rows[0]);
+      });
+    },
+
+    async updateConversation(input: {
+      userId: string;
+      conversationId: string;
+      title?: string;
+      status?: 'active' | 'archived';
+      now: Date;
+    }): Promise<WorkflowConversation | null> {
+      return withTransaction(pool, async (client) => {
+        const routeResult = await client.query<{ id: string; context_id: string }>(
+          'SELECT r.id, r.context_id FROM workflow_routes r ' +
+          'JOIN contexts c ON c.id = r.context_id ' +
+          'JOIN workflow_threads t ON t.route_id = r.id AND t.context_id = r.context_id ' +
+          'WHERE t.id = $1 AND c.user_id = $2 FOR UPDATE OF r',
+          [input.conversationId, input.userId],
+        );
+        const route = routeResult.rows[0];
+        if (!route) return null;
+        const result = await client.query<ThreadRow>(
+          'UPDATE workflow_threads t SET title = COALESCE($2, t.title), ' +
+          "title_source = CASE WHEN $2 IS NULL THEN t.title_source ELSE 'user' END, " +
+          'status = COALESCE($3, t.status), ' +
+          'is_primary = CASE ' +
+            "WHEN $3 = 'archived' THEN false " +
+            "WHEN $3 = 'active' AND t.status = 'archived' THEN NOT EXISTS (" +
+              'SELECT 1 FROM workflow_threads existing ' +
+              'WHERE existing.route_id = $5 AND existing.id <> t.id ' +
+              "AND existing.status <> 'archived' AND existing.is_primary" +
+            ') ' +
+            'ELSE t.is_primary ' +
+          'END, updated_at = $4 ' +
+          'WHERE t.id = $1 AND t.route_id = $5 AND t.context_id = $6 RETURNING t.*',
+          [
+            input.conversationId,
+            input.title ?? null,
+            input.status ?? null,
+            input.now,
+            route.id,
+            route.context_id,
+          ],
+        );
+        if (!result.rows[0]) return null;
+        if (input.status === 'archived') {
+          await client.query(
+            'UPDATE workflow_threads candidate SET is_primary = true ' +
+            'WHERE candidate.id = (' +
+              'SELECT remaining.id FROM workflow_threads remaining ' +
+              'WHERE remaining.route_id = $1 ' +
+              "AND remaining.status <> 'archived' " +
+              'ORDER BY remaining.updated_at DESC, remaining.id LIMIT 1' +
+            ') AND NOT EXISTS (' +
+              'SELECT 1 FROM workflow_threads existing ' +
+              'WHERE existing.route_id = $1 ' +
+              "AND existing.status <> 'archived' AND existing.is_primary" +
+            ')',
+            [route.id],
+          );
+        }
+        await client.query(
+          'UPDATE contexts SET updated_at = $2 WHERE id = $1',
+          [result.rows[0].context_id, input.now],
+        );
+        return mapConversation(result.rows[0]);
+      });
     },
 
     async createThread(input: {
@@ -295,13 +453,21 @@ export function createDomainRepository(pool: DatabasePool) {
       now: Date;
     }): Promise<WorkflowThread | null> {
       return withTransaction(pool, async (client) => {
+        const routeResult = await client.query<{ context_id: string }>(
+          'SELECT r.context_id FROM workflow_routes r ' +
+          'JOIN contexts c ON c.id = r.context_id ' +
+          'WHERE r.id = $1 AND c.user_id = $2 FOR UPDATE OF r',
+          [input.routeId, input.userId],
+        );
+        const route = routeResult.rows[0];
+        if (!route) return null;
         const result = await client.query<ThreadRow>(
           'INSERT INTO workflow_threads ' +
-          '(id, context_id, route_id, stage_key, title, created_at, updated_at) ' +
-          'SELECT $1, r.context_id, r.id, $3, $4, $5, $5 ' +
-          'FROM workflow_routes r JOIN contexts c ON c.id = r.context_id ' +
-          'WHERE r.id = $2 AND c.user_id = $6 RETURNING *',
-          [input.id, input.routeId, input.stageKey, input.title, input.now, input.userId],
+          '(id, context_id, route_id, stage_key, title, title_source, is_primary, status, created_at, updated_at) ' +
+          "VALUES ($1, $2, $3, $4, $5, 'user', " +
+          "NOT EXISTS (SELECT 1 FROM workflow_threads existing WHERE existing.route_id = $3 AND existing.status <> 'archived'), " +
+          "'active', $6, $6) RETURNING *",
+          [input.id, route.context_id, input.routeId, input.stageKey, input.title, input.now],
         );
         if (!result.rows[0]) return null;
         await client.query(
@@ -320,15 +486,55 @@ export function createDomainRepository(pool: DatabasePool) {
       now: Date;
     }): Promise<WorkflowThread | null> {
       return withTransaction(pool, async (client) => {
+        const routeResult = await client.query<{ id: string; context_id: string }>(
+          'SELECT r.id, r.context_id FROM workflow_routes r ' +
+          'JOIN contexts c ON c.id = r.context_id ' +
+          'JOIN workflow_threads t ON t.route_id = r.id AND t.context_id = r.context_id ' +
+          'WHERE t.id = $1 AND c.user_id = $2 FOR UPDATE OF r',
+          [input.threadId, input.userId],
+        );
+        const route = routeResult.rows[0];
+        if (!route) return null;
         const result = await client.query<ThreadRow>(
           'UPDATE workflow_threads t SET title = COALESCE($2, t.title), ' +
-          'status = COALESCE($3, t.status), updated_at = $4 ' +
-          'WHERE t.id = $1 AND EXISTS (' +
-            'SELECT 1 FROM contexts c WHERE c.id = t.context_id AND c.user_id = $5' +
-          ') RETURNING t.*',
-          [input.threadId, input.title ?? null, input.status ?? null, input.now, input.userId],
+          "title_source = CASE WHEN $2 IS NULL THEN t.title_source ELSE 'user' END, " +
+          'status = COALESCE($3, t.status), ' +
+          'is_primary = CASE ' +
+            "WHEN $3 = 'archived' THEN false " +
+            "WHEN $3 IS NOT NULL AND $3 <> 'archived' AND t.status = 'archived' THEN NOT EXISTS (" +
+              'SELECT 1 FROM workflow_threads existing ' +
+              'WHERE existing.route_id = $5 AND existing.id <> t.id ' +
+              "AND existing.status <> 'archived' AND existing.is_primary" +
+            ') ' +
+            'ELSE t.is_primary ' +
+          'END, updated_at = $4 ' +
+          'WHERE t.id = $1 AND t.route_id = $5 AND t.context_id = $6 RETURNING t.*',
+          [
+            input.threadId,
+            input.title ?? null,
+            input.status ?? null,
+            input.now,
+            route.id,
+            route.context_id,
+          ],
         );
         if (!result.rows[0]) return null;
+        if (input.status === 'archived') {
+          await client.query(
+            'UPDATE workflow_threads candidate SET is_primary = true ' +
+            'WHERE candidate.id = (' +
+              'SELECT remaining.id FROM workflow_threads remaining ' +
+              'WHERE remaining.route_id = $1 ' +
+              "AND remaining.status <> 'archived' " +
+              'ORDER BY remaining.updated_at DESC, remaining.id LIMIT 1' +
+            ') AND NOT EXISTS (' +
+              'SELECT 1 FROM workflow_threads existing ' +
+              'WHERE existing.route_id = $1 ' +
+              "AND existing.status <> 'archived' AND existing.is_primary" +
+            ')',
+            [route.id],
+          );
+        }
         await client.query(
           'UPDATE contexts SET updated_at = $2 WHERE id = $1',
           [result.rows[0].context_id, input.now],
@@ -356,13 +562,17 @@ export function createDomainRepository(pool: DatabasePool) {
         );
         const source = sourceResult.rows[0];
         if (!source) return null;
+        const sourceSnapshot = normalizeCheckpointSnapshot(source.snapshot);
+        // Only explicit legacy compatibility stages enter the three-status
+        // projection table. Canonical Workflow statuses remain snapshot-owned.
+        const sourceStages = checkpointStages(sourceSnapshot);
         await client.query(
           'INSERT INTO workflow_routes ' +
           '(id, context_id, name, origin_checkpoint_id, created_at, updated_at) ' +
           'VALUES ($1, $2, $3, $4, $5, $5)',
           [input.routeId, input.contextId, input.routeName, source.id, input.now],
         );
-        for (const [position, stage] of source.snapshot.stages.entries()) {
+        for (const [position, stage] of sourceStages.entries()) {
           await client.query(
             'INSERT INTO route_stage_projections ' +
             '(route_id, stage_key, position, status, internal_state, updated_at) ' +
@@ -374,7 +584,7 @@ export function createDomainRepository(pool: DatabasePool) {
           'INSERT INTO workflow_checkpoints ' +
           '(id, context_id, route_id, version, stage_key, reason, snapshot, created_at) ' +
           "VALUES ($1, $2, $3, 0, $4, 'branch', $5, $6) RETURNING *",
-          [input.checkpointId, input.contextId, input.routeId, source.stage_key, source.snapshot, input.now],
+          [input.checkpointId, input.contextId, input.routeId, source.stage_key, sourceSnapshot, input.now],
         );
         const routeResult = await client.query<RouteRow>(
           'UPDATE workflow_routes SET head_checkpoint_id = $2 WHERE id = $1 RETURNING *',

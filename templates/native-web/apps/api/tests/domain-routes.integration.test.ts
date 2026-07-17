@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/auth/password.js';
 import { createAuthRepository } from '../src/auth/repository.js';
@@ -55,6 +55,11 @@ integrationDescribe('workflow domain routes', () => {
     await adminPool.query('DROP SCHEMA IF EXISTS ' + schema + ' CASCADE');
     await adminPool.query('CREATE SCHEMA ' + schema);
     await runMigrations({ pool, migrationsDir: join(dirname(fileURLToPath(import.meta.url)), '../../../db/migrations') });
+    await app.ready();
+  });
+
+  beforeEach(async () => {
+    await pool.query('TRUNCATE users CASCADE');
     for (const user of [
       { id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', username: 'owner' },
       { id: '10000000-0000-4000-8000-000000000002', email: 'other@example.test', username: 'other' },
@@ -70,7 +75,6 @@ integrationDescribe('workflow domain routes', () => {
         createdAt: new Date(),
       });
     }
-    await app.ready();
   });
 
   afterAll(async () => {
@@ -96,6 +100,115 @@ integrationDescribe('workflow domain routes', () => {
     expect(missingOrigin.statusCode).toBe(403);
   });
 
+  it('exposes Stage-free Conversation and metadata routes without causal writes', async () => {
+    const cookie = await login('owner');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/contexts',
+      headers: { cookie, origin },
+      payload: { title: 'Project' },
+    });
+    expect(created.statusCode).toBe(201);
+    const { context, route, checkpoint } = created.json();
+    expect((await pool.query(
+      'SELECT stage_key FROM workflow_checkpoints WHERE id = $1',
+      [checkpoint.id],
+    )).rows).toEqual([{ stage_key: null }]);
+    expect((await pool.query(
+      'SELECT count(*)::int AS count FROM route_stage_projections WHERE route_id = $1',
+      [route.id],
+    )).rows).toEqual([{ count: 0 }]);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/routes/${route.id}/conversations`,
+      headers: { cookie, origin },
+      payload: {},
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/routes/${route.id}/conversations`,
+      headers: { cookie, origin },
+      payload: {},
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({ titleSource: 'agent', status: 'initializing' });
+    expect(first.json()).not.toHaveProperty('stageKey');
+    expect(second.statusCode).toBe(201);
+
+    const causalBefore = await pool.query(`
+      SELECT
+        (SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints,
+        (SELECT count(*)::int FROM workflow_commands) AS commands,
+        (SELECT count(*)::int FROM memory_items) AS memories,
+        (SELECT count(*)::int FROM workflow_routes) AS routes
+    `);
+    const routesBefore = await pool.query(
+      'SELECT id, name, origin_checkpoint_id, head_checkpoint_id, created_at, updated_at FROM workflow_routes ORDER BY id',
+    );
+
+    const renamedContext = await app.inject({
+      method: 'PATCH',
+      url: `/api/contexts/${context.id}`,
+      headers: { cookie, origin },
+      payload: { title: '同名' },
+    });
+    expect(renamedContext.statusCode).toBe(200);
+    expect(renamedContext.json()).toMatchObject({ id: context.id, title: '同名' });
+
+    for (const conversationId of [first.json().id, second.json().id]) {
+      const renamed = await app.inject({
+        method: 'PATCH',
+        url: `/api/conversations/${conversationId}`,
+        headers: { cookie, origin },
+        payload: { title: '同名', status: 'active' },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(renamed.json()).toMatchObject({
+        id: conversationId,
+        title: '同名',
+        titleSource: 'user',
+        status: 'active',
+      });
+    }
+
+    const workspace = await app.inject({
+      method: 'GET',
+      url: `/api/routes/${route.id}/workspace?checkpoint=${checkpoint.id}`,
+      headers: { cookie },
+    });
+    expect(workspace.statusCode).toBe(200);
+    expect(workspace.json()).toMatchObject({
+      route: { id: route.id },
+      conversations: [
+        expect.objectContaining({ title: '同名' }),
+        expect.objectContaining({ title: '同名' }),
+      ],
+      selectedCheckpoint: { id: checkpoint.id },
+      headCheckpoint: { id: checkpoint.id },
+      isHistorical: false,
+      artifacts: [],
+    });
+    expect(workspace.json()).not.toHaveProperty('selectedStageKey');
+
+    expect((await pool.query(`
+      SELECT
+        (SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints,
+        (SELECT count(*)::int FROM workflow_commands) AS commands,
+        (SELECT count(*)::int FROM memory_items) AS memories,
+        (SELECT count(*)::int FROM workflow_routes) AS routes
+    `)).rows).toEqual(causalBefore.rows);
+    expect((await pool.query(
+      'SELECT id, name, origin_checkpoint_id, head_checkpoint_id, created_at, updated_at FROM workflow_routes ORDER BY id',
+    )).rows).toEqual(routesBefore.rows);
+    expect((await pool.query(
+      'SELECT title_source, stage_key FROM workflow_threads ORDER BY created_at, id',
+    )).rows).toEqual([
+      { title_source: 'user', stage_key: null },
+      { title_source: 'user', stage_key: null },
+    ]);
+  });
+
   it('persists the complete hierarchy and branches from history', async () => {
     const cookie = await login('owner');
     const created = await app.inject({
@@ -113,27 +226,17 @@ integrationDescribe('workflow domain routes', () => {
     });
     expect(contextWorkspace.json().routes).toEqual([expect.objectContaining({ id: route.id })]);
 
-    const firstThread = await app.inject({
-      method: 'POST', url: `/api/routes/${route.id}/threads`, headers: { cookie, origin },
-      payload: { stageKey: 'decide', title: 'Compare options' },
-    });
-    expect(firstThread.statusCode).toBe(201);
-    const secondThread = await app.inject({
-      method: 'POST', url: `/api/routes/${route.id}/threads`, headers: { cookie, origin },
-      payload: { stageKey: 'decide', title: 'Revise template' },
-    });
-    expect(secondThread.statusCode).toBe(201);
-
     const workspace = await app.inject({
       method: 'GET',
-      url: `/api/routes/${route.id}/workspace?stage=decide&checkpoint=${checkpoint.id}`,
+      url: `/api/routes/${route.id}/workspace?checkpoint=${checkpoint.id}`,
       headers: { cookie },
     });
     expect(workspace.statusCode).toBe(200);
     expect(workspace.json()).toMatchObject({
-      selectedStageKey: 'decide',
+      selectedCheckpoint: { id: checkpoint.id },
+      headCheckpoint: { id: checkpoint.id },
       isHistorical: false,
-      threads: [{ title: 'Revise template' }, { title: 'Compare options' }],
+      conversations: [],
     });
 
     const branch = await app.inject({
@@ -147,7 +250,7 @@ integrationDescribe('workflow domain routes', () => {
     });
   });
 
-  it('rejects unknown stages and hides cross-user resources', async () => {
+  it('rejects Stage workspace queries and hides cross-user resources', async () => {
     const ownerCookie = await login('owner');
     const otherCookie = await login('other');
     const created = await app.inject({
@@ -160,8 +263,13 @@ integrationDescribe('workflow domain routes', () => {
     });
     expect(invalidStage.statusCode).toBe(400);
     expect(invalidStage.json().error.code).toBe('INVALID_STAGE');
+    const invalidQuery = await app.inject({
+      method: 'GET', url: `/api/routes/${route.id}/workspace?stage=discover`, headers: { cookie: ownerCookie },
+    });
+    expect(invalidQuery.statusCode).toBe(400);
+    expect(invalidQuery.json().error.code).toBe('INVALID_REQUEST');
     const crossUser = await app.inject({
-      method: 'GET', url: `/api/routes/${route.id}/workspace?stage=discover`, headers: { cookie: otherCookie },
+      method: 'GET', url: `/api/routes/${route.id}/workspace`, headers: { cookie: otherCookie },
     });
     expect(crossUser.statusCode).toBe(404);
     expect(crossUser.json().error.code).toBe('NOT_FOUND');

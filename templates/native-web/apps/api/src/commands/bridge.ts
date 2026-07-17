@@ -2,11 +2,18 @@ import type { ProductManifest } from '@polar/native-web-product-sdk';
 import { z } from 'zod';
 import { readFile, realpath } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
-import type { RouteStageStatus, StageProjection } from '../domain/types.js';
+import type {
+  CheckpointSnapshot,
+  CheckpointWorkflowState,
+  RouteStageStatus,
+  StageProjection,
+  StageProjectionSnapshot,
+} from '../domain/types.js';
+import type { PublicWorkflowCommandInput } from './types.js';
 
 export type WorkflowCommandKind = 'message' | 'named_action' | 'resume_interrupt';
 
-export interface WorkflowBridgeInput {
+export interface LegacyWorkflowBridgeInput {
   commandId: string;
   userId: string;
   contextId: string;
@@ -23,23 +30,74 @@ export interface WorkflowBridgeInput {
   stages: StageProjection[];
 }
 
+export interface WorkflowV2BridgeInput {
+  commandId: string;
+  userId: string;
+  contextId: string;
+  routeId: string;
+  conversationId: string;
+  baseCheckpoint: {
+    id: string;
+    version: number;
+    snapshot: CheckpointSnapshot;
+  };
+  commandInput: PublicWorkflowCommandInput;
+  attachments: unknown[];
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  memory: unknown;
+}
+
+export type WorkflowBridgeInput = LegacyWorkflowBridgeInput | WorkflowV2BridgeInput;
+
 export interface WorkflowStageSignal {
   stageKey: string;
   status: RouteStageStatus;
   internalState: string;
 }
 
-export interface WorkflowBridgeResult {
+export interface ArtifactProposal {
+  filename: string;
+  mediaType: string;
+  body: Buffer;
+}
+
+export interface MemoryUpdate {
+  scope: 'user' | 'context';
+  key: string;
+  value: unknown;
+  expectedVersion?: number;
+  highImpact?: boolean;
+  confirmationPrompt?: string;
+  evidence?: Array<Record<string, unknown>>;
+  impactScope?: Record<string, unknown>;
+}
+
+export interface LegacyWorkflowBridgeResult {
   reply: string;
   stageSignals: WorkflowStageSignal[];
   workflowCursor: unknown | null;
   memoryProposals: unknown[];
   interrupt: { prompt: string; cursor: unknown } | null;
-  artifactProposals: Array<{ filename: string; mediaType: string; body: Buffer }>;
+  artifactProposals: ArtifactProposal[];
 }
 
+export interface WorkflowV2BridgeResult {
+  replyEvents: Array<{ type: 'delta' | 'message'; content: string }>;
+  checkpoint: { workflowState: CheckpointWorkflowState };
+  stageProjection?: StageProjectionSnapshot;
+  contextTitle?: string;
+  conversationTitle?: string;
+  memoryUpdates: MemoryUpdate[];
+  artifactProposals: ArtifactProposal[];
+  interrupt: { prompt: string; cursor: unknown } | null;
+  diagnostics: Record<string, unknown>;
+}
+
+export type WorkflowBridgeResult = LegacyWorkflowBridgeResult | WorkflowV2BridgeResult;
+
 export interface WorkflowBridge {
-  run(input: WorkflowBridgeInput): Promise<WorkflowBridgeResult>;
+  run(input: WorkflowV2BridgeInput): Promise<WorkflowV2BridgeResult>;
+  run(input: LegacyWorkflowBridgeInput): Promise<LegacyWorkflowBridgeResult>;
 }
 
 export class WorkflowBridgeError extends Error {
@@ -55,6 +113,12 @@ const stageSignalSchema = z.object({
   internal_state: z.string(),
 }).strict();
 
+const artifactProposalSchema = z.object({
+  filename: z.string().min(1).max(255),
+  media_type: z.string().min(3).max(200),
+  content_base64: z.string().min(1).max(35_000_000),
+}).strict();
+
 const responseSchema = z.object({
   ok: z.boolean(),
   reply: z.string().optional(),
@@ -62,16 +126,65 @@ const responseSchema = z.object({
   stage_signals: z.array(stageSignalSchema).optional(),
   workflow_cursor: z.unknown().optional(),
   memory_proposals: z.array(z.unknown()).optional(),
-  artifact_proposals: z.array(z.object({
-    filename: z.string().min(1).max(255),
-    media_type: z.string().min(3).max(200),
-    content_base64: z.string().min(1).max(35_000_000),
-  }).strict()).max(10).optional(),
+  artifact_proposals: z.array(artifactProposalSchema).max(10).optional(),
   memory_delta: z.object({
     session: z.record(z.string(), z.unknown()).optional(),
   }).passthrough().optional(),
   pdf_path: z.string().min(1).nullable().optional(),
 }).passthrough();
+
+const stageProjectionSchema = z.object({
+  revision: z.string().trim().min(1).max(200),
+  items: z.array(z.object({
+    key: z.string().trim().min(1).max(200),
+    label: z.string().trim().min(1).max(200),
+    status: z.string().trim().min(1).max(200),
+    checkpoint_id: z.string().uuid().optional(),
+    summary: z.string().max(2000).optional(),
+  }).strict()).max(1000),
+}).strict();
+
+const memoryUpdateSchema = z.object({
+  scope: z.enum(['user', 'context']),
+  key: z.string().trim().min(1).max(200),
+  value: z.unknown(),
+  expected_version: z.number().int().min(1).optional(),
+  high_impact: z.boolean().optional(),
+  confirmation_prompt: z.string().trim().min(1).max(2000).optional(),
+  evidence: z.array(z.record(z.string(), z.unknown())).max(100).optional(),
+  impact_scope: z.record(z.string(), z.unknown()).optional(),
+}).strict().refine((update) => Object.hasOwn(update, 'value'), {
+  message: 'memory update value is required',
+});
+
+const interruptSchema = z.object({
+  prompt: z.string().trim().min(1).max(20_000),
+  cursor: z.unknown(),
+}).strict().refine((interrupt) => Object.hasOwn(interrupt, 'cursor'), {
+  message: 'interrupt cursor is required',
+});
+
+const v2ResponseSchema = z.object({
+  contract_version: z.literal('2.0'),
+  reply_events: z.array(z.object({
+    type: z.enum(['delta', 'message']),
+    content: z.string().min(1).max(20_000),
+  }).strict()).max(1000),
+  checkpoint: z.object({
+    workflow_state: z.record(z.string(), z.unknown()),
+  }).strict(),
+  stage_projection: stageProjectionSchema.optional(),
+  context_title: z.string().trim().min(1).max(120).optional(),
+  conversation_title: z.string().trim().min(1).max(120).optional(),
+  memory_updates: z.array(memoryUpdateSchema).max(1000).default([]),
+  artifact_proposals: z.array(artifactProposalSchema).max(10).default([]),
+  interrupt: interruptSchema.nullable().default(null),
+  diagnostics: z.record(z.string(), z.unknown()).default({}),
+}).passthrough().superRefine((result, context) => {
+  if (result.reply_events.length === 0 && result.interrupt === null) {
+    context.addIssue({ code: 'custom', message: 'reply events or interrupt required' });
+  }
+});
 
 const publicMemoryProposalSchema = z.object({
   scope: z.enum(['user', 'context', 'route', 'stage', 'thread']),
@@ -121,7 +234,7 @@ async function readBoundedText(response: Response, signal: AbortSignal): Promise
 }
 
 function validateSignals(
-  input: WorkflowBridgeInput,
+  input: LegacyWorkflowBridgeInput,
   manifest: ProductManifest,
   rawSignals: Array<z.infer<typeof stageSignalSchema>>,
 ): WorkflowStageSignal[] {
@@ -177,6 +290,72 @@ function validateSignals(
   return normalized;
 }
 
+function normalizeArtifacts(
+  proposals: Array<z.infer<typeof artifactProposalSchema>>,
+): ArtifactProposal[] {
+  return proposals.map((proposal) => {
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(proposal.content_base64) ||
+        proposal.content_base64.length % 4 !== 0) {
+      fail('WORKFLOW_INVALID_ARTIFACT');
+    }
+    const body = Buffer.from(proposal.content_base64, 'base64');
+    if (body.byteLength === 0 || body.byteLength > 25 * 1024 * 1024 ||
+        body.toString('base64') !== proposal.content_base64) {
+      fail('WORKFLOW_INVALID_ARTIFACT');
+    }
+    return { filename: proposal.filename, mediaType: proposal.media_type, body };
+  });
+}
+
+function normalizeProjection(
+  projection: z.infer<typeof stageProjectionSchema> | undefined,
+): StageProjectionSnapshot | undefined {
+  if (!projection) return undefined;
+  const keys = new Set<string>();
+  const items = projection.items.map((item) => {
+    if (keys.has(item.key)) fail('WORKFLOW_INVALID_RESPONSE');
+    keys.add(item.key);
+    return {
+      key: item.key,
+      label: item.label,
+      status: item.status,
+      ...(item.checkpoint_id === undefined ? {} : { checkpointId: item.checkpoint_id }),
+      ...(item.summary === undefined ? {} : { summary: item.summary }),
+    };
+  });
+  return { revision: projection.revision, items };
+}
+
+function normalizeMemoryUpdates(
+  updates: Array<z.infer<typeof memoryUpdateSchema>>,
+): MemoryUpdate[] {
+  return updates.map((update) => ({
+    scope: update.scope,
+    key: update.key,
+    value: update.value,
+    ...(update.expected_version === undefined ? {} : { expectedVersion: update.expected_version }),
+    ...(update.high_impact === undefined ? {} : { highImpact: update.high_impact }),
+    ...(update.confirmation_prompt === undefined
+      ? {}
+      : { confirmationPrompt: update.confirmation_prompt }),
+    ...(update.evidence === undefined ? {} : { evidence: update.evidence }),
+    ...(update.impact_scope === undefined ? {} : { impactScope: update.impact_scope }),
+  }));
+}
+
+function publicDiagnostics(diagnostics: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (typeof diagnostics.workflow_revision === 'string' &&
+      diagnostics.workflow_revision.length > 0 && diagnostics.workflow_revision.length <= 200) {
+    result.workflow_revision = diagnostics.workflow_revision;
+  }
+  if (typeof diagnostics.duration_ms === 'number' && Number.isFinite(diagnostics.duration_ms) &&
+      diagnostics.duration_ms >= 0 && diagnostics.duration_ms <= 86_400_000) {
+    result.duration_ms = diagnostics.duration_ms;
+  }
+  return result;
+}
+
 export function createWorkflowBridge(options: {
   endpoint: string;
   workflowId: string;
@@ -187,9 +366,75 @@ export function createWorkflowBridge(options: {
 }): WorkflowBridge {
   const fetchImpl = options.fetch ?? fetch;
 
-  return {
-    async run(input) {
-      const signal = AbortSignal.timeout(options.timeoutMs);
+  async function request(commandId: string, body: unknown): Promise<unknown> {
+    const signal = AbortSignal.timeout(options.timeoutMs);
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(options.endpoint, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          'Idempotency-Key': commandId,
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+    } catch (error) {
+      if (isAbort(error)) fail('WORKFLOW_TIMEOUT');
+      fail('WORKFLOW_UNAVAILABLE');
+    }
+    if (!upstream.ok) fail('WORKFLOW_UNAVAILABLE');
+    try {
+      const text = await readBoundedText(upstream, signal);
+      return JSON.parse(text);
+    } catch (error) {
+      if (error instanceof WorkflowBridgeError) throw error;
+      if (signal.aborted || isAbort(error)) fail('WORKFLOW_TIMEOUT');
+      fail('WORKFLOW_INVALID_RESPONSE');
+    }
+  }
+
+  async function run(input: WorkflowV2BridgeInput): Promise<WorkflowV2BridgeResult>;
+  async function run(input: LegacyWorkflowBridgeInput): Promise<LegacyWorkflowBridgeResult>;
+  async function run(input: WorkflowBridgeInput): Promise<WorkflowBridgeResult> {
+      if ('commandInput' in input) {
+        const raw = await request(input.commandId, {
+          contract_version: '2.0',
+          command: {
+            id: input.commandId,
+            context_id: input.contextId,
+            route_id: input.routeId,
+            conversation_id: input.conversationId,
+            base_checkpoint_id: input.baseCheckpoint.id,
+            expected_checkpoint_version: input.baseCheckpoint.version,
+            input: input.commandInput,
+            attachments: input.attachments,
+          },
+          history: input.history,
+          memory: input.memory,
+          checkpoint_snapshot: input.baseCheckpoint.snapshot,
+          workflow_id: options.workflowId,
+        });
+        const parsed = v2ResponseSchema.safeParse(raw);
+        if (!parsed.success) fail('WORKFLOW_INVALID_RESPONSE');
+        const projection = normalizeProjection(parsed.data.stage_projection);
+        return {
+          replyEvents: parsed.data.reply_events,
+          checkpoint: { workflowState: parsed.data.checkpoint.workflow_state },
+          ...(projection === undefined ? {} : { stageProjection: projection }),
+          ...(parsed.data.context_title === undefined ? {} : { contextTitle: parsed.data.context_title }),
+          ...(parsed.data.conversation_title === undefined
+            ? {}
+            : { conversationTitle: parsed.data.conversation_title }),
+          memoryUpdates: normalizeMemoryUpdates(parsed.data.memory_updates),
+          artifactProposals: normalizeArtifacts(parsed.data.artifact_proposals),
+          interrupt: parsed.data.interrupt,
+          diagnostics: publicDiagnostics(parsed.data.diagnostics),
+        };
+      }
+
       const session: Record<string, unknown> = { thread_id: input.threadId };
       if (input.kind === 'resume_interrupt') {
         if (input.interruptCursor === undefined) fail('WORKFLOW_INVALID_STATE');
@@ -228,35 +473,7 @@ export function createWorkflowBridge(options: {
           ...(input.kind === 'resume_interrupt' ? { interrupt_id: input.interruptId } : {}),
         },
       };
-
-      let upstream: Response;
-      try {
-        upstream = await fetchImpl(options.endpoint, {
-          method: 'POST',
-          redirect: 'error',
-          headers: {
-            'content-type': 'application/json',
-            accept: 'application/json',
-            'Idempotency-Key': input.commandId,
-          },
-          body: JSON.stringify(body),
-          signal,
-        });
-      } catch (error) {
-        if (isAbort(error)) fail('WORKFLOW_TIMEOUT');
-        fail('WORKFLOW_UNAVAILABLE');
-      }
-      if (!upstream.ok) fail('WORKFLOW_UNAVAILABLE');
-
-      let raw: unknown;
-      try {
-        const text = await readBoundedText(upstream, signal);
-        raw = JSON.parse(text);
-      } catch (error) {
-        if (error instanceof WorkflowBridgeError) throw error;
-        if (signal.aborted || isAbort(error)) fail('WORKFLOW_TIMEOUT');
-        fail('WORKFLOW_INVALID_RESPONSE');
-      }
+      const raw = await request(input.commandId, body);
       const parsed = responseSchema.safeParse(raw);
       if (!parsed.success || typeof parsed.data.reply !== 'string' || !parsed.data.reply.trim()) {
         fail('WORKFLOW_INVALID_RESPONSE');
@@ -273,16 +490,7 @@ export function createWorkflowBridge(options: {
         const publicProposal = publicMemoryProposalSchema.safeParse(proposal);
         return publicProposal.success ? [publicProposal.data] : [];
       });
-      const artifactProposals = (parsed.data.artifact_proposals ?? []).map((proposal) => {
-        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(proposal.content_base64) || proposal.content_base64.length % 4 !== 0) {
-          fail('WORKFLOW_INVALID_ARTIFACT');
-        }
-        const body = Buffer.from(proposal.content_base64, 'base64');
-        if (body.byteLength === 0 || body.byteLength > 25 * 1024 * 1024 || body.toString('base64') !== proposal.content_base64) {
-          fail('WORKFLOW_INVALID_ARTIFACT');
-        }
-        return { filename: proposal.filename, mediaType: proposal.media_type, body };
-      });
+      const artifactProposals = normalizeArtifacts(parsed.data.artifact_proposals ?? []);
       if (parsed.data.pdf_path && options.artifactRoot) {
         try {
           const root = await realpath(resolve(options.artifactRoot));
@@ -304,6 +512,7 @@ export function createWorkflowBridge(options: {
         interrupt,
         artifactProposals,
       };
-    },
-  };
+  }
+
+  return { run };
 }

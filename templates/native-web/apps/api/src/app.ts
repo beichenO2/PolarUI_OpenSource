@@ -51,6 +51,7 @@ export function buildApp(options: {
     }
     if (
       request.url.startsWith('/api/commands') ||
+      request.url.startsWith('/api/workflow/commands') ||
       (request.url.startsWith('/api/threads') && request.url.includes('/commands'))
     ) {
       request.log.error(error);
@@ -59,6 +60,7 @@ export function buildApp(options: {
     if (
       request.url.startsWith('/api/contexts') ||
       request.url.startsWith('/api/routes') ||
+      request.url.startsWith('/api/conversations') ||
       request.url.startsWith('/api/threads')
     ) {
       request.log.error(error);

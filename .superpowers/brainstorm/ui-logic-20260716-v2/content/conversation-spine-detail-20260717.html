@@ -1,0 +1,128 @@
+<style>
+  .detail-lead { max-width: 980px; margin-bottom: 22px; }
+  .legend { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 20px; }
+  .legend span { padding:5px 8px; border-radius:999px; background:#e4ebe7; color:#204f3e; font-size:11px; }
+  .section-title { display:flex; justify-content:space-between; align-items:end; gap:18px; margin:28px 0 10px; }
+  .section-title p { color:#66736d; font-size:12px; }
+  .desk { display:grid; grid-template:42px 372px / 150px minmax(340px, 1fr) 250px; border:1px solid #9eaaa4; background:#fff; color:#24312c; box-shadow:0 10px 26px rgba(27,52,42,.08); overflow:hidden; }
+  .top { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; padding:0 14px; border-bottom:1px solid #ccd4cf; font-size:11px; font-weight:700; }
+  .top small { color:#77827d; font-weight:400; }
+  .nav { padding:14px 10px; background:#e8eeeb; border-right:1px solid #ccd4cf; font-size:9px; }
+  .nav h4 { margin:0 0 8px; font-size:9px; color:#6c7872; }
+  .nav .route { padding:7px; margin-bottom:14px; border:1px solid #b5c1bb; background:#fff; }
+  .nav .stage { padding:7px 6px; margin:3px 0; }
+  .nav .stage.on { background:#205844; color:#fff; font-weight:700; }
+  .conversation { position:relative; display:flex; flex-direction:column; min-width:0; background:#fcfdfc; }
+  .conv-head { display:flex; justify-content:space-between; align-items:center; padding:12px 16px 10px; border-bottom:1px solid #d6ddd9; }
+  .conv-head div:first-child { min-width:0; }
+  .crumb { color:#75817b; font-size:8px; margin-bottom:3px; }
+  .conv-head h3 { margin:0; font-size:16px; }
+  .conv-tools { display:flex; align-items:center; gap:5px; font-size:9px; }
+  .switcher { padding:5px 7px; border:1px solid #aebbb4; background:#fff; }
+  .plus { width:24px; height:24px; display:grid; place-items:center; border:1px solid #aebbb4; background:#fff; font-weight:700; }
+  .timeline { flex:1; padding:16px; font-size:10px; overflow:hidden; }
+  .msg { max-width:78%; margin:7px 0; padding:8px 10px; background:#edf1ef; line-height:1.45; }
+  .msg.me { margin-left:auto; background:#dce9e3; }
+  .agent-state { display:inline-flex; align-items:center; gap:5px; margin-top:5px; color:#52615a; font-size:8px; }
+  .agent-state::before { content:''; width:6px; height:6px; border-radius:50%; background:#b15a32; }
+  .composer { margin:0 16px 14px; padding:10px 10px 8px; border:1.5px solid #205844; background:#fff; box-shadow:0 5px 18px rgba(30,70,54,.10); }
+  .composer .hint { color:#68756f; font-size:10px; min-height:24px; }
+  .composer-foot { display:flex; justify-content:space-between; align-items:center; padding-top:6px; color:#7a8580; font-size:8px; }
+  .send { padding:5px 9px; background:#205844; color:#fff; font-weight:700; }
+  .stage-panel { background:#f4f6f5; border-left:1px solid #ccd4cf; padding:13px 12px; font-size:9px; }
+  .stage-panel-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .stage-panel-head h3 { margin:0; font-size:12px; }
+  .panel-card { padding:9px; margin-bottom:8px; border:1px solid #c6d0cb; background:#fff; }
+  .panel-card strong { display:block; margin-bottom:5px; color:#205844; }
+  .panel-card p { margin:0; color:#58665f; line-height:1.45; }
+  .panel-card .count { float:right; color:#8e5a3c; }
+  .quick { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .quick span { padding:4px 5px; border:1px solid #bdc8c2; color:#52615a; }
+  .empty-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:12px; }
+  .empty-state { position:relative; min-height:260px; border:1px solid #9eaaa4; background:#fff; color:#24312c; padding:26px; }
+  .empty-state .eyebrow { color:#6e7a74; font-size:9px; }
+  .empty-state h3 { margin:8px 0 6px; font-size:24px; }
+  .empty-state > p { color:#65716b; font-size:11px; max-width:420px; }
+  .empty-compose { margin-top:28px; padding:14px; border:2px solid #205844; box-shadow:0 8px 20px rgba(30,70,54,.10); color:#68756f; font-size:11px; }
+  .empty-compose::after { content:'发送'; float:right; padding:4px 8px; margin-top:-4px; background:#205844; color:#fff; font-size:9px; font-weight:700; }
+  .suggestions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .suggestions span { padding:5px 7px; border:1px solid #c4cdc8; color:#5d6963; font-size:9px; }
+  .empty-notes { border:1px solid #c4cdc8; background:#f4f6f5; padding:18px; color:#394640; }
+  .empty-notes h3 { font-size:14px; }
+  .empty-notes ol { margin:12px 0 0 18px; font-size:10px; line-height:1.65; }
+  .mobile-pair { display:grid; grid-template-columns:repeat(3, 184px); justify-content:center; gap:18px; }
+  .phone { position:relative; height:356px; border:1px solid #87958e; border-radius:18px; overflow:hidden; background:#fff; color:#24312c; font-size:8px; box-shadow:0 8px 20px rgba(27,52,42,.08); }
+  .phone-top { display:flex; justify-content:space-between; align-items:center; padding:12px 10px 8px; border-bottom:1px solid #ccd4cf; font-weight:700; }
+  .phone-stage { display:flex; justify-content:space-between; align-items:center; padding:9px 10px; background:#edf2ef; }
+  .phone-thread { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid #d6ddd9; font-weight:700; }
+  .phone-body { padding:10px; }
+  .phone .msg { font-size:8px; padding:7px; }
+  .phone-compose { position:absolute; left:8px; right:8px; bottom:9px; padding:9px; border:1.5px solid #205844; background:#fff; box-shadow:0 5px 16px rgba(30,70,54,.13); color:#6a766f; }
+  .phone-compose::after { content:'➤'; float:right; color:#205844; }
+  .phone-empty { padding:28px 12px 0; text-align:center; }
+  .phone-empty strong { display:block; font-size:14px; margin-bottom:5px; }
+  .phone-empty p { color:#67736d; line-height:1.45; }
+  .phone .suggestions { justify-content:center; }
+  .sheet { position:absolute; inset:34px 0 0; background:#f4f6f5; padding:12px 10px; }
+  .sheet-head { display:flex; justify-content:space-between; font-weight:700; margin-bottom:12px; }
+  .sheet .panel-card { font-size:8px; }
+  .placement { margin-top:22px; width:100%; border-collapse:collapse; font-size:12px; }
+  .placement th, .placement td { text-align:left; padding:9px 10px; border-bottom:1px solid #d6ddd9; }
+  .placement th { color:#65716b; font-size:11px; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media (max-width:900px) {
+    .desk { grid-template:42px 360px / 110px minmax(300px,1fr) 190px; }
+    .empty-grid { grid-template-columns:1fr; }
+    .mobile-pair { grid-template-columns:repeat(3, minmax(0, 184px)); gap:8px; }
+  }
+  @media (max-width:650px) {
+    .desk { grid-template:38px 330px / 72px minmax(230px,1fr); }
+    .stage-panel { display:none; }
+    .mobile-pair { grid-template-columns:1fr; }
+    .phone { width:184px; margin:auto; }
+    .decision { flex-direction:column; }
+  }
+</style>
+
+<div class="detail-lead">
+  <h2>A 方案细化：对话是运行主轴，Stage 是上下文工作台</h2>
+  <p class="subtitle">输入始终可见；Agent 接收自然语言后自行决定状态迁移。任务、结构化工作区和成果不抢占主入口，但始终可达。</p>
+</div>
+
+<div class="legend"><span>① Stage 身份</span><span>② 当前对话与多对话</span><span>③ 对话时间线</span><span>④ 常驻输入</span><span>⑤ Stage 工作台</span></div>
+
+<div class="section-title"><div><h3>桌面端 · 已有对话</h3></div><p>≥ 1200px：左导航 / 对话主轴 / Stage 工作台</p></div>
+<div class="desk">
+  <header class="top"><span>Native Workflow QA <small>路线工作空间</small></span><span>● 已同步　版本</span></header>
+  <aside class="nav"><h4>工作空间 / 路线</h4><div class="route">test1<br><small>路线 1 · 当前</small></div><h4>阶段</h4><div class="stage on">01　明确项目</div><div class="stage">02　推进实现</div><div class="stage">03　复核交付</div></aside>
+  <main class="conversation">
+    <header class="conv-head"><div><div class="crumb">test1 / 路线 1 / 版本 01</div><h3>明确项目</h3></div><div class="conv-tools"><span class="switcher">主对话⌄</span><span class="plus">＋</span></div></header>
+    <div class="timeline"><div class="msg me">我希望先明确目标、边界和验收标准。</div><div class="msg">我会先梳理三项约束，再决定是否需要推进到下一阶段。</div><div class="agent-state">Agent 正在整理当前 Stage 状态</div></div>
+    <div class="composer"><div class="hint">继续告诉 Agent…</div><div class="composer-foot"><span>附件　/　快捷意图</span><span class="send">发送</span></div></div>
+  </main>
+  <aside class="stage-panel"><div class="stage-panel-head"><h3>Stage 工作台</h3><span>展开 ↗</span></div><div class="panel-card"><strong>当前任务</strong><p>明确目标、边界和验收标准。</p><div class="quick"><span>补充约束</span><span>检查缺口</span></div></div><div class="panel-card"><strong>结构化工作区</strong><p>Manifest 组件：表单、卡片选择或文档。</p></div><div class="panel-card"><strong>成果 <span class="count">1</span></strong><p>项目定义 v1</p></div></aside>
+</div>
+
+<div class="section-title"><div><h3>空状态 · 不要求先新建讨论</h3></div><p>虚拟“主对话”已存在；首次发送时才原子创建 Thread + Command</p></div>
+<div class="empty-grid">
+  <div class="empty-state"><div class="eyebrow">test1 / 路线 1 / 明确项目</div><h3>从你想解决的问题开始</h3><p>Agent 会理解输入、调用 Workflow，并自行决定当前状态是否需要推进。</p><div class="empty-compose">告诉 Agent 你的目标、材料或问题…</div><div class="suggestions"><span>帮我明确项目目标</span><span>先分析现有材料</span><span>我还不确定从哪里开始</span></div></div>
+  <aside class="empty-notes"><h3>首次使用只剩一个动作</h3><ol><li>进入 Stage，输入框自动获得视觉焦点。</li><li>用户发送第一条输入。</li><li>系统静默创建“主对话”，不询问标题。</li><li>Agent 执行并返回回复、成果或状态变化。</li><li>标题可由 Agent 自动摘要，之后允许改名。</li></ol></aside>
+</div>
+
+<div class="section-title"><div><h3>移动端 · 单主轴 + 全屏工作台</h3></div><p>底部输入常驻安全区；Stage 工作台从顶部入口打开全屏层</p></div>
+<div class="mobile-pair">
+  <div class="phone"><div class="phone-top"><span>‹ 路线 1</span><span>版本</span></div><div class="phone-stage"><strong>明确项目</strong><span>工作台 · 1 ›</span></div><div class="phone-thread"><span>主对话⌄</span><span>＋</span></div><div class="phone-body"><div class="msg me">我想明确项目边界。</div><div class="msg">先从目标和约束开始。</div></div><div class="phone-compose">继续告诉 Agent…</div></div>
+  <div class="phone"><div class="phone-top"><span>‹ 路线 1</span><span>版本</span></div><div class="phone-stage"><strong>明确项目</strong><span>工作台 ›</span></div><div class="phone-thread"><span>主对话</span><span>＋</span></div><div class="phone-empty"><strong>从问题开始</strong><p>Agent 会自行控制 Workflow 状态。</p><div class="suggestions"><span>明确目标</span><span>分析材料</span></div></div><div class="phone-compose">告诉 Agent…</div></div>
+  <div class="phone"><div class="phone-top"><span>明确项目</span><span>关闭</span></div><div class="sheet"><div class="sheet-head"><span>Stage 工作台</span><span>版本 01</span></div><div class="panel-card"><strong>当前任务</strong><p>明确目标、边界和验收标准。</p></div><div class="panel-card"><strong>结构化工作区</strong><p>表单 / 选择 / 文档组件</p></div><div class="panel-card"><strong>成果 · 1</strong><p>项目定义 v1</p></div></div></div>
+</div>
+
+<table class="placement">
+  <thead><tr><th>常驻</th><th>按需折叠</th><th>进入抽屉 / 全屏层</th></tr></thead>
+  <tbody><tr><td>Stage 身份、当前对话、消息流、输入框、Agent 执行状态</td><td>快捷意图、空成果提示、低频 Stage 详情</td><td>移动端 Stage 工作台、对话管理、版本归档、工作空间导航</td></tr></tbody>
+</table>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-a-hierarchy" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可这个主次层级</h3><p>继续细化多对话与 Agent 状态反馈。</p></div></div>
+  <div class="option" data-choice="revise-a-hierarchy" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要调整</h3><p>告诉我哪一块应该更强、常驻或移动。</p></div></div>
+</div>

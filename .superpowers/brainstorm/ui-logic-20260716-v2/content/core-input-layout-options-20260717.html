@@ -1,0 +1,123 @@
+<style>
+  .layout-intro { max-width: 920px; margin-bottom: 22px; }
+  .layout-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .layout-card { cursor: pointer; border: 1px solid var(--border-color, #d7dcd8); border-radius: 10px; overflow: hidden; background: var(--card-bg, rgba(255,255,255,.55)); transition: 160ms ease; }
+  .layout-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(22,45,37,.10); }
+  .layout-card.selected { outline: 3px solid #205844; outline-offset: 2px; }
+  .layout-card.recommended::before { content: '推荐'; display: block; padding: 5px 10px; background: #205844; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+  .layout-preview { padding: 12px; background: #eef2ef; border-bottom: 1px solid #d7dcd8; }
+  .desktop { display: grid; grid-template: 22px 146px / 58px 1fr 84px; border: 1px solid #9aa9a1; background: #fff; color: #24312c; font-size: 7px; line-height: 1.25; overflow: hidden; }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; border-bottom: 1px solid #ccd4cf; font-weight: 700; }
+  .nav { padding: 6px 4px; background: #e5ece8; border-right: 1px solid #ccd4cf; }
+  .nav div { padding: 4px 3px; margin-bottom: 3px; }
+  .nav .on { background: #205844; color: #fff; }
+  .main, .side { min-width: 0; }
+  .main { position: relative; padding: 6px; }
+  .side { padding: 6px 5px; border-left: 1px solid #ccd4cf; background: #f7f8f7; }
+  .stagebar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 5px; border-bottom: 2px solid #205844; font-weight: 700; }
+  .threadbar { display: flex; gap: 3px; align-items: center; margin: 5px 0; color: #52615a; }
+  .threadbar b { color: #205844; }
+  .bubble { max-width: 84%; margin: 4px 0; padding: 4px 5px; background: #edf1ef; }
+  .bubble.me { margin-left: auto; background: #dce9e3; }
+  .composer { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 6px; border: 1.5px solid #205844; background: #fff; font-weight: 700; color: #65736d; }
+  .composer::after { content: '发送'; float: right; color: #205844; }
+  .mini-block { padding: 5px 4px; margin-bottom: 5px; border: 1px solid #ccd4cf; background: #fff; }
+  .mini-block strong { display: block; color: #205844; margin-bottom: 2px; }
+  .canvas { margin-top: 6px; padding: 7px 6px; border: 1px solid #ccd4cf; min-height: 57px; background: #fff; }
+  .dock { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 6px; border: 1.5px solid #205844; background: #fff; color: #65736d; font-weight: 700; }
+  .dock::after { content: '发送'; float: right; color: #205844; }
+  .tabs { display: flex; gap: 3px; padding: 5px 0; }
+  .tabs span { padding: 3px 4px; border-bottom: 1px solid #aebbb4; }
+  .tabs .on { color: #205844; border-bottom: 2px solid #205844; font-weight: 700; }
+  .phone-row { display: flex; justify-content: center; gap: 8px; margin-top: 9px; }
+  .phone { position: relative; width: 84px; height: 142px; border: 1px solid #84958c; border-radius: 9px; overflow: hidden; background: #fff; color: #24312c; font-size: 6px; }
+  .phone-head { display: flex; justify-content: space-between; padding: 6px 5px 4px; border-bottom: 1px solid #ccd4cf; font-weight: 700; }
+  .phone-body { padding: 5px; }
+  .phone .composer, .phone .dock { left: 4px; right: 4px; bottom: 4px; padding: 5px 4px; font-size: 6px; }
+  .phone-chip { padding: 3px 4px; margin-bottom: 4px; background: #e5ece8; color: #205844; }
+  .layout-copy { padding: 14px; }
+  .layout-copy h3 { margin-bottom: 5px; }
+  .layout-copy p { min-height: 60px; }
+  .layout-copy ul { margin: 10px 0 0 17px; color: #5c6862; font-size: 12px; }
+  .layout-copy li { margin: 4px 0; }
+  @media (max-width: 900px) { .layout-grid { grid-template-columns: 1fr; } .layout-copy p { min-height: auto; } }
+</style>
+
+<div class="layout-intro">
+  <h2>核心输入入口：三种可落地布局</h2>
+  <p class="subtitle">共同前提：进入 Stage 就能输入；首次发送静默创建主对话；每次输入都进入 Agent 状态机；额外对话不是路线分支。</p>
+</div>
+
+<div class="layout-grid cards">
+  <article class="layout-card recommended card" data-choice="a-conversation-spine" onclick="toggleSelect(this)">
+    <div class="layout-preview">
+      <div class="desktop">
+        <div class="top"><span>Native Workflow</span><span>已同步</span></div>
+        <div class="nav"><div>路线 1</div><div class="on">01 明确项目</div><div>02 推进实现</div><div>03 复核交付</div></div>
+        <main class="main">
+          <div class="stagebar"><span>明确项目</span><span>版本 01</span></div>
+          <div class="threadbar"><b>主对话</b><span>风险讨论</span><span>＋</span></div>
+          <div class="bubble me">我想先明确这个项目的边界。</div>
+          <div class="bubble">我会先整理目标与约束，然后决定是否推进状态。</div>
+          <div class="composer">继续告诉 Agent…</div>
+        </main>
+        <aside class="side"><div class="mini-block"><strong>当前任务</strong>明确目标、约束与成功标准</div><div class="mini-block"><strong>成果 0</strong>Agent 产生后自动出现</div></aside>
+      </div>
+      <div class="phone-row">
+        <div class="phone"><div class="phone-head"><span>明确项目</span><span>•••</span></div><div class="phone-body"><div class="phone-chip">主对话⌄ · 工作台 ›</div><div class="bubble me">明确项目边界。</div><div class="bubble">先从目标开始。</div></div><div class="composer">告诉 Agent…</div></div>
+      </div>
+    </div>
+    <div class="layout-copy">
+      <h3>A. 对话主轴 + Stage 侧栏</h3>
+      <p>桌面端把对话流放在中央，任务与成果常驻右侧；移动端对话占满主屏，任务和成果进入“工作台”抽屉。</p>
+      <ul><li>输入与上下文最连续</li><li>多对话只占一行标签</li><li>复杂文档需“展开工作台”</li></ul>
+    </div>
+  </article>
+
+  <article class="layout-card card" data-choice="b-stage-canvas-dock" onclick="toggleSelect(this)">
+    <div class="layout-preview">
+      <div class="desktop">
+        <div class="top"><span>Native Workflow</span><span>已同步</span></div>
+        <div class="nav"><div>路线 1</div><div class="on">01 明确项目</div><div>02 推进实现</div><div>03 复核交付</div></div>
+        <main class="main">
+          <div class="stagebar"><span>明确项目</span><span>对话记录 ›</span></div>
+          <div class="canvas"><b>当前任务</b><br><br>目标与约束工作区<br><br>Agent 生成的表单 / 选择 / 文档</div>
+          <div class="dock">输入以推进 Workflow…</div>
+        </main>
+        <aside class="side"><div class="mini-block"><strong>成果</strong>暂无正式成果</div><div class="mini-block"><strong>对话 1</strong>主对话</div></aside>
+      </div>
+      <div class="phone-row">
+        <div class="phone"><div class="phone-head"><span>明确项目</span><span>对话 ›</span></div><div class="phone-body"><div class="canvas">当前任务<br><br>Stage 工作区<br>表单 / 文档 / 选择</div></div><div class="dock">输入推进…</div></div>
+      </div>
+    </div>
+    <div class="layout-copy">
+      <h3>B. Stage 画布 + 常驻输入 Dock</h3>
+      <p>Stage 工作区仍是主画布，但输入框固定在底部；对话记录和多对话进入右侧面板或移动端全屏层。</p>
+      <ul><li>最适合表单、文档型 Workflow</li><li>改造成本较低</li><li>对话因果链仍被藏了一层</li></ul>
+    </div>
+  </article>
+
+  <article class="layout-card card" data-choice="c-mode-tabs" onclick="toggleSelect(this)">
+    <div class="layout-preview">
+      <div class="desktop">
+        <div class="top"><span>Native Workflow</span><span>已同步</span></div>
+        <div class="nav"><div>路线 1</div><div class="on">01 明确项目</div><div>02 推进实现</div><div>03 复核交付</div></div>
+        <main class="main" style="grid-column: span 2">
+          <div class="stagebar"><span>明确项目</span><span>版本 01</span></div>
+          <div class="tabs"><span class="on">对话</span><span>工作台</span><span>成果</span></div>
+          <div class="bubble me">我想明确项目边界。</div>
+          <div class="bubble">先从目标开始。</div>
+          <div class="composer">继续告诉 Agent…</div>
+        </main>
+      </div>
+      <div class="phone-row">
+        <div class="phone"><div class="phone-head"><span>明确项目</span><span>•••</span></div><div class="phone-body"><div class="tabs"><span class="on">对话</span><span>工作台</span><span>成果</span></div><div class="bubble me">明确边界。</div><div class="bubble">先从目标开始。</div></div><div class="composer">告诉 Agent…</div></div>
+      </div>
+    </div>
+    <div class="layout-copy">
+      <h3>C. 对话 / 工作台 / 成果三模式</h3>
+      <p>三者成为同级模式，默认进入对话；桌面与移动端结构一致，利用标签切换完整空间。</p>
+      <ul><li>响应式最简单</li><li>每个区域都能使用完整宽度</li><li>切换会割裂输入、状态与成果的联系</li></ul>
+    </div>
+  </article>
+</div>

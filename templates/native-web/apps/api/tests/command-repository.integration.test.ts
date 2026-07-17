@@ -31,6 +31,19 @@ const ids = {
   nextAssistantMessage: '70000000-0000-4000-8000-000000000004',
   interrupt: '80000000-0000-4000-8000-000000000001',
   nextInterrupt: '80000000-0000-4000-8000-000000000002',
+  startCommand: '60000000-0000-4000-8000-000000000010',
+  startResultCheckpoint: '40000000-0000-4000-8000-000000000010',
+  headCommand: '60000000-0000-4000-8000-000000000020',
+  headConversation: '50000000-0000-4000-8000-000000000020',
+  headResultCheckpoint: '40000000-0000-4000-8000-000000000020',
+  sourceHeadCheckpoint: '40000000-0000-4000-8000-000000000030',
+  historyCommand: '60000000-0000-4000-8000-000000000030',
+  historyResultCheckpoint: '40000000-0000-4000-8000-000000000031',
+  historyFailureCommand: '60000000-0000-4000-8000-000000000032',
+  attachmentObject: '90000000-0000-4000-8000-000000000010',
+  stagedAttachment: '91000000-0000-4000-8000-000000000010',
+  otherAttachmentObject: '90000000-0000-4000-8000-000000000011',
+  otherStagedAttachment: '91000000-0000-4000-8000-000000000011',
 };
 
 const stages = [
@@ -111,12 +124,829 @@ integrationDescribe('workflow command repository', () => {
     };
   }
 
+  function prepareInput(overrides: Record<string, unknown> = {}) {
+    return {
+      userId: ids.user,
+      commandId: ids.command,
+      contextId: ids.context,
+      routeId: ids.route,
+      conversationId: ids.thread,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      input: { type: 'message' as const, content: 'Collect the strongest evidence.' },
+      attachmentIds: [],
+      kind: 'message' as const,
+      content: 'Collect the strongest evidence.',
+      inputHash: 'unified-hash-v1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      ...overrides,
+    };
+  }
+
+  function finalizeInput(overrides: Record<string, unknown> = {}) {
+    return {
+      userMessageId: ids.userMessage,
+      assistantMessageId: ids.assistantMessage,
+      checkpointId: ids.nextCheckpoint,
+      headCheckpointIdAtClaim: ids.checkpoint,
+      reply: 'The evidence is converging.',
+      stageSignals: [],
+      workflowCursor: null,
+      memoryProposals: [],
+      interrupt: null,
+      attachmentIds: [],
+      ...overrides,
+    };
+  }
+
+  async function prepareUnified(overrides: Record<string, unknown> = {}) {
+    const prepared = await repository.prepareCommand(prepareInput(overrides));
+    expect(prepared.kind).toBe('claimed');
+    if (prepared.kind !== 'claimed') throw new Error('expected prepared command');
+    return prepared;
+  }
+
+  async function advanceSourceHead() {
+    await pool.query(
+      'INSERT INTO workflow_checkpoints ' +
+      '(id, context_id, route_id, parent_checkpoint_id, version, stage_key, reason, snapshot, created_at) ' +
+      "VALUES ($1, $2, $3, $4, 1, NULL, 'workflow_action', $5, $6)",
+      [
+        ids.sourceHeadCheckpoint,
+        ids.context,
+        ids.route,
+        ids.checkpoint,
+        { workflowState: { marker: 'source-head' }, memoryReferences: [], artifacts: [] },
+        new Date(now.getTime() + 100),
+      ],
+    );
+    await pool.query(
+      'UPDATE workflow_routes SET head_checkpoint_id = $2 WHERE id = $1',
+      [ids.route, ids.sourceHeadCheckpoint],
+    );
+  }
+
+  async function stageAttachment(input: {
+    userId: string;
+    objectId: string;
+    attachmentId: string;
+    sha256: string;
+    storageKey: string;
+  }) {
+    await pool.query(
+      'INSERT INTO asset_objects ' +
+      '(id, user_id, storage_key, sha256, byte_size, media_type, status, created_at) ' +
+      "VALUES ($1, $2, $3, $4, 4, 'text/plain', 'ready', $5)",
+      [input.objectId, input.userId, input.storageKey, input.sha256, now],
+    );
+    await pool.query(
+      'INSERT INTO staged_attachments (id, user_id, object_id, filename, created_at, updated_at) ' +
+      "VALUES ($1, $2, $3, 'notes.txt', $4, $4)",
+      [input.attachmentId, input.userId, input.objectId, now],
+    );
+  }
+
   async function claimMessage(overrides: Record<string, unknown> = {}) {
     const claimed = await repository.claimCommand(claimInput(overrides));
     expect(claimed.kind).toBe('claimed');
     if (claimed.kind !== 'claimed') throw new Error('expected claimed command');
     return claimed;
   }
+
+  it('prepares a zero-scope Start durably but hides every initializing row, then replays failure idempotently', async () => {
+    const startInput = prepareInput({
+      userId: ids.otherUser,
+      commandId: ids.startCommand,
+      contextId: undefined,
+      routeId: undefined,
+      conversationId: undefined,
+      baseCheckpointId: undefined,
+      expectedCheckpointVersion: undefined,
+      inputHash: 'start-hash-v1',
+    });
+    const prepared = await repository.prepareCommand(startInput);
+    expect(prepared.kind).toBe('claimed');
+    if (prepared.kind !== 'claimed' || prepared.execution.scope.mode !== 'start') {
+      throw new Error('expected Start preparation');
+    }
+    const scope = prepared.execution.scope;
+    expect(await repository.listThreadState(ids.otherUser, scope.provisionalConversationId)).toBeNull();
+    expect(await repository.listConversationState(ids.otherUser, scope.provisionalConversationId)).toBeNull();
+    expect(prepared.execution).toMatchObject({
+      contextId: scope.provisionalContextId,
+      routeId: scope.provisionalRouteId,
+      conversationId: scope.provisionalConversationId,
+      baseCheckpoint: { version: 0, stageKey: null, reason: 'bootstrap' },
+      headCheckpointId: prepared.execution.baseCheckpoint.id,
+      baseIsHead: true,
+    });
+    expect((await pool.query(
+      'SELECT title_source, status FROM contexts WHERE id = $1',
+      [scope.provisionalContextId],
+    )).rows[0]).toEqual({ title_source: 'agent', status: 'initializing' });
+    expect((await pool.query(
+      'SELECT status, head_checkpoint_id FROM workflow_routes WHERE id = $1',
+      [scope.provisionalRouteId],
+    )).rows[0]).toEqual({
+      status: 'initializing',
+      head_checkpoint_id: prepared.execution.baseCheckpoint.id,
+    });
+    expect((await pool.query(
+      'SELECT title_source, is_primary, status, stage_key FROM workflow_threads WHERE id = $1',
+      [scope.provisionalConversationId],
+    )).rows[0]).toEqual({
+      title_source: 'agent',
+      is_primary: true,
+      status: 'initializing',
+      stage_key: null,
+    });
+    expect((await pool.query(
+      'SELECT version, stage_key, reason FROM workflow_checkpoints WHERE id = $1',
+      [prepared.execution.baseCheckpoint.id],
+    )).rows[0]).toEqual({ version: 0, stage_key: null, reason: 'bootstrap' });
+    expect((await pool.query(
+      'SELECT status, context_id, source_route_id, source_thread_id FROM workflow_commands WHERE id = $1',
+      [ids.startCommand],
+    )).rows[0]).toEqual({
+      status: 'running',
+      context_id: scope.provisionalContextId,
+      source_route_id: scope.provisionalRouteId,
+      source_thread_id: scope.provisionalConversationId,
+    });
+
+    expect(await domain.listContexts(ids.otherUser)).toEqual([]);
+    expect(await domain.getContextWorkspace(ids.otherUser, scope.provisionalContextId)).toBeNull();
+    expect(await domain.getRouteWorkspace(ids.otherUser, scope.provisionalRouteId)).toBeNull();
+
+    await repository.failCommand(ids.startCommand, 'WORKFLOW_UNAVAILABLE', new Date(now.getTime() + 1000));
+    expect(await repository.listThreadState(ids.otherUser, scope.provisionalConversationId)).toBeNull();
+    expect(await repository.listConversationState(ids.otherUser, scope.provisionalConversationId)).toBeNull();
+    expect(await domain.listContexts(ids.otherUser)).toEqual([]);
+    expect(await domain.getContextWorkspace(ids.otherUser, scope.provisionalContextId)).toBeNull();
+    expect(await domain.getRouteWorkspace(ids.otherUser, scope.provisionalRouteId)).toBeNull();
+    expect((await pool.query(
+      'SELECT status FROM contexts WHERE id = $1',
+      [scope.provisionalContextId],
+    )).rows[0].status).toBe('initializing');
+
+    const replay = await repository.prepareCommand({
+      ...startInput,
+      now: new Date(now.getTime() + 2000),
+      leaseExpiresAt: new Date(now.getTime() + 32_000),
+    });
+    expect(replay.kind).toBe('replay');
+    if (replay.kind !== 'replay') throw new Error('expected terminal Start replay');
+    expect(replay.command).toMatchObject({ status: 'failed', errorCode: 'WORKFLOW_UNAVAILABLE' });
+    expect(await repository.prepareCommand({
+      ...startInput,
+      inputHash: 'changed-start-hash',
+      now: new Date(now.getTime() + 3000),
+      leaseExpiresAt: new Date(now.getTime() + 33_000),
+    })).toEqual({ kind: 'reused' });
+  });
+
+  it('serializes concurrent exact Start claims into one claim and one in-progress replay', async () => {
+    const startInput = prepareInput({
+      userId: ids.otherUser,
+      commandId: ids.startCommand,
+      contextId: undefined,
+      routeId: undefined,
+      conversationId: undefined,
+      baseCheckpointId: undefined,
+      expectedCheckpointVersion: undefined,
+      inputHash: 'concurrent-start-hash',
+    });
+
+    const results = await Promise.all([
+      repository.prepareCommand(startInput),
+      repository.prepareCommand(startInput),
+    ]);
+    expect(results.map((result) => result.kind).sort()).toEqual(['claimed', 'in_progress']);
+    const claimed = results.find((result) => result.kind === 'claimed');
+    if (!claimed || claimed.kind !== 'claimed' || claimed.execution.scope.mode !== 'start') {
+      throw new Error('expected exactly one claimed Start');
+    }
+
+    const counts = (await pool.query(
+      'SELECT ' +
+      '(SELECT count(*)::int FROM contexts WHERE user_id = $1) AS contexts, ' +
+      '(SELECT count(*)::int FROM workflow_routes route ' +
+        'JOIN contexts context ON context.id = route.context_id WHERE context.user_id = $1) AS routes, ' +
+      '(SELECT count(*)::int FROM workflow_threads conversation ' +
+        'JOIN contexts context ON context.id = conversation.context_id WHERE context.user_id = $1) AS conversations, ' +
+      '(SELECT count(*)::int FROM workflow_checkpoints checkpoint ' +
+        'JOIN contexts context ON context.id = checkpoint.context_id WHERE context.user_id = $1) AS checkpoints, ' +
+      '(SELECT count(*)::int FROM workflow_commands WHERE id = $2) AS commands, ' +
+      '(SELECT count(*)::int FROM workflow_command_events ' +
+        "WHERE command_id = $2 AND event_type = 'command.accepted') AS accepted_events",
+      [ids.otherUser, ids.startCommand],
+    )).rows[0];
+    expect(counts).toEqual({
+      contexts: 1,
+      routes: 1,
+      conversations: 1,
+      checkpoints: 1,
+      commands: 1,
+      accepted_events: 1,
+    });
+    expect(claimed.execution.scope).toMatchObject({
+      provisionalContextId: expect.any(String),
+      provisionalRouteId: expect.any(String),
+      provisionalConversationId: expect.any(String),
+    });
+  });
+
+  it('atomically publishes a successful Start with one result checkpoint and canonical messages', async () => {
+    const startInput = prepareInput({
+      userId: ids.otherUser,
+      commandId: ids.startCommand,
+      contextId: undefined,
+      routeId: undefined,
+      conversationId: undefined,
+      baseCheckpointId: undefined,
+      expectedCheckpointVersion: undefined,
+      inputHash: 'start-success-hash',
+    });
+    const prepared = await repository.prepareCommand(startInput);
+    expect(prepared.kind).toBe('claimed');
+    if (prepared.kind !== 'claimed' || prepared.execution.scope.mode !== 'start') {
+      throw new Error('expected Start preparation');
+    }
+    const scope = prepared.execution.scope;
+    const bootstrapId = prepared.execution.baseCheckpoint.id;
+
+    const committed = await repository.finalizeCommand(ids.startCommand, finalizeInput({
+      checkpointId: ids.startResultCheckpoint,
+      contextTitle: 'Agent Context title',
+      conversationTitle: 'Agent Conversation title',
+    }), new Date(now.getTime() + 1000));
+    expect(committed).toMatchObject({
+      status: 'succeeded',
+      routeId: scope.provisionalRouteId,
+      conversationId: scope.provisionalConversationId,
+      checkpointId: ids.startResultCheckpoint,
+    });
+    expect((await pool.query(
+      'SELECT title, title_source, status FROM contexts WHERE id = $1',
+      [scope.provisionalContextId],
+    )).rows[0]).toEqual({ title: 'Agent Context title', title_source: 'agent', status: 'active' });
+    expect((await pool.query(
+      'SELECT head_checkpoint_id, status FROM workflow_routes WHERE id = $1',
+      [scope.provisionalRouteId],
+    )).rows[0]).toEqual({ head_checkpoint_id: ids.startResultCheckpoint, status: 'active' });
+    expect((await pool.query(
+      'SELECT title, title_source, is_primary, status, stage_key FROM workflow_threads WHERE id = $1',
+      [scope.provisionalConversationId],
+    )).rows[0]).toEqual({
+      title: 'Agent Conversation title', title_source: 'agent', is_primary: true,
+      status: 'active', stage_key: null,
+    });
+    expect((await pool.query(
+      'SELECT parent_checkpoint_id, version, reason, stage_key FROM workflow_checkpoints WHERE id = $1',
+      [ids.startResultCheckpoint],
+    )).rows[0]).toEqual({
+      parent_checkpoint_id: bootstrapId, version: 1, reason: 'workflow_action', stage_key: null,
+    });
+    expect((await pool.query(
+      'SELECT role, sequence FROM workflow_messages WHERE thread_id = $1 ORDER BY sequence',
+      [scope.provisionalConversationId],
+    )).rows).toEqual([
+      { role: 'user', sequence: 1 }, { role: 'assistant', sequence: 2 },
+    ]);
+    expect((await pool.query(
+      'SELECT result_route_id, result_thread_id, result_checkpoint_id FROM workflow_commands WHERE id = $1',
+      [ids.startCommand],
+    )).rows[0]).toEqual({
+      result_route_id: scope.provisionalRouteId,
+      result_thread_id: scope.provisionalConversationId,
+      result_checkpoint_id: ids.startResultCheckpoint,
+    });
+    expect(await domain.listContexts(ids.otherUser)).toEqual([
+      expect.objectContaining({ id: scope.provisionalContextId, status: 'active' }),
+    ]);
+    expect(await domain.getRouteWorkspace(ids.otherUser, scope.provisionalRouteId)).toMatchObject({
+      route: { id: scope.provisionalRouteId, headCheckpointId: ids.startResultCheckpoint },
+      conversations: [expect.objectContaining({ id: scope.provisionalConversationId, status: 'active' })],
+    });
+  });
+
+  it('materializes a hidden primary Conversation for a head command and activates it with one result checkpoint', async () => {
+    await pool.query('DELETE FROM workflow_threads WHERE id = $1', [ids.thread]);
+    const prepared = await prepareUnified({
+      commandId: ids.headCommand,
+      conversationId: undefined,
+      inputHash: 'head-without-conversation',
+    });
+    expect(prepared.execution.scope).toEqual({
+      mode: 'head',
+      contextId: ids.context,
+      routeId: ids.route,
+      conversationId: null,
+    });
+    expect(prepared.execution.conversationId).toEqual(expect.any(String));
+    const provisionalConversationId = prepared.execution.conversationId!;
+    expect((await pool.query(
+      'SELECT title, title_source, is_primary, status, stage_key FROM workflow_threads WHERE id = $1',
+      [provisionalConversationId],
+    )).rows[0]).toMatchObject({
+      title_source: 'agent',
+      is_primary: true,
+      status: 'initializing',
+      stage_key: null,
+    });
+    expect((await domain.getRouteWorkspace(ids.user, ids.route))?.conversations).toEqual([]);
+
+    const committed = await repository.finalizeCommand(ids.headCommand, finalizeInput({
+      checkpointId: ids.headResultCheckpoint,
+      contextTitle: 'Agent must not replace this Context',
+      conversationTitle: 'Focused evidence',
+    }), new Date(now.getTime() + 1000));
+    expect(committed).toMatchObject({
+      status: 'succeeded',
+      routeId: ids.route,
+      conversationId: provisionalConversationId,
+      checkpointId: ids.headResultCheckpoint,
+    });
+    expect((await pool.query(
+      'SELECT title, title_source, is_primary, status FROM workflow_threads WHERE id = $1',
+      [provisionalConversationId],
+    )).rows[0]).toEqual({
+      title: 'Focused evidence',
+      title_source: 'agent',
+      is_primary: true,
+      status: 'active',
+    });
+    expect((await pool.query(
+      'SELECT title, title_source FROM contexts WHERE id = $1',
+      [ids.context],
+    )).rows[0]).toEqual({ title: 'Research project', title_source: 'user' });
+    expect((await pool.query(
+      'SELECT parent_checkpoint_id, version, reason FROM workflow_checkpoints WHERE id = $1',
+      [ids.headResultCheckpoint],
+    )).rows[0]).toEqual({
+      parent_checkpoint_id: ids.checkpoint,
+      version: 1,
+      reason: 'workflow_action',
+    });
+    expect((await pool.query(
+      'SELECT head_checkpoint_id FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0].head_checkpoint_id).toBe(ids.headResultCheckpoint);
+    expect((await pool.query(
+      'SELECT role, sequence FROM workflow_messages WHERE thread_id = $1 ORDER BY sequence',
+      [provisionalConversationId],
+    )).rows).toEqual([
+      { role: 'user', sequence: 1 },
+      { role: 'assistant', sequence: 2 },
+    ]);
+    expect((await pool.query(
+      'SELECT result_route_id, result_thread_id, result_checkpoint_id FROM workflow_commands WHERE id = $1',
+      [ids.headCommand],
+    )).rows[0]).toEqual({
+      result_route_id: ids.route,
+      result_thread_id: provisionalConversationId,
+      result_checkpoint_id: ids.headResultCheckpoint,
+    });
+  });
+
+  it('prepares history without source writes and atomically finalizes an equal active Route', async () => {
+    await advanceSourceHead();
+    const sourceBefore = (await pool.query(
+      'SELECT head_checkpoint_id, name, status, updated_at FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0];
+    const countsBefore = (await pool.query(
+      'SELECT ' +
+      '(SELECT count(*)::int FROM workflow_routes) AS routes, ' +
+      '(SELECT count(*)::int FROM workflow_threads) AS conversations, ' +
+      '(SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints, ' +
+      '(SELECT count(*)::int FROM workflow_messages) AS messages',
+    )).rows[0];
+
+    const prepared = await prepareUnified({
+      commandId: ids.historyCommand,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      inputHash: 'history-hash-v1',
+    });
+    expect(prepared.execution.scope).toEqual({
+      mode: 'history',
+      contextId: ids.context,
+      sourceRouteId: ids.route,
+      sourceCheckpointId: ids.checkpoint,
+    });
+    expect(prepared.execution.baseCheckpoint).toMatchObject({ id: ids.checkpoint, version: 0 });
+    expect((await pool.query(
+      'SELECT head_checkpoint_id, name, status, updated_at FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0]).toEqual(sourceBefore);
+    expect((await pool.query(
+      'SELECT ' +
+      '(SELECT count(*)::int FROM workflow_routes) AS routes, ' +
+      '(SELECT count(*)::int FROM workflow_threads) AS conversations, ' +
+      '(SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints, ' +
+      '(SELECT count(*)::int FROM workflow_messages) AS messages',
+    )).rows[0]).toEqual(countsBefore);
+
+    const committed = await repository.finalizeCommand(ids.historyCommand, finalizeInput({
+      checkpointId: ids.historyResultCheckpoint,
+      headCheckpointIdAtClaim: ids.sourceHeadCheckpoint,
+      conversationTitle: 'Historical continuation',
+    }), new Date(now.getTime() + 1000));
+    expect(committed.status).toBe('succeeded');
+    expect(committed.routeId).not.toBe(ids.route);
+    expect(committed.conversationId).not.toBe(ids.thread);
+    expect(committed.checkpointId).toBe(ids.historyResultCheckpoint);
+
+    expect((await pool.query(
+      'SELECT head_checkpoint_id, name, status, updated_at FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0]).toEqual(sourceBefore);
+    const branchRoute = (await pool.query(
+      'SELECT context_id, origin_checkpoint_id, head_checkpoint_id, status FROM workflow_routes WHERE id = $1',
+      [committed.routeId],
+    )).rows[0];
+    expect(branchRoute).toEqual({
+      context_id: ids.context,
+      origin_checkpoint_id: ids.checkpoint,
+      head_checkpoint_id: ids.historyResultCheckpoint,
+      status: 'active',
+    });
+    const branchCheckpoints = (await pool.query(
+      'SELECT id, parent_checkpoint_id, version, reason FROM workflow_checkpoints ' +
+      'WHERE route_id = $1 ORDER BY version',
+      [committed.routeId],
+    )).rows;
+    expect(branchCheckpoints).toEqual([
+      {
+        id: expect.any(String),
+        parent_checkpoint_id: null,
+        version: 0,
+        reason: 'branch',
+      },
+      {
+        id: ids.historyResultCheckpoint,
+        parent_checkpoint_id: branchCheckpoints[0]?.id,
+        version: 1,
+        reason: 'workflow_action',
+      },
+    ]);
+    expect((await pool.query(
+      'SELECT context_id, route_id, title_source, is_primary, status FROM workflow_threads WHERE id = $1',
+      [committed.conversationId],
+    )).rows[0]).toEqual({
+      context_id: ids.context,
+      route_id: committed.routeId,
+      title_source: 'agent',
+      is_primary: true,
+      status: 'active',
+    });
+    expect((await pool.query(
+      'SELECT role, sequence FROM workflow_messages WHERE thread_id = $1 ORDER BY sequence',
+      [committed.conversationId],
+    )).rows).toEqual([
+      { role: 'user', sequence: 1 },
+      { role: 'assistant', sequence: 2 },
+    ]);
+    expect((await pool.query(
+      'SELECT count(*)::int AS count FROM workflow_messages WHERE thread_id = $1',
+      [ids.thread],
+    )).rows[0].count).toBe(0);
+  });
+
+  it('does not create a history Route before success and leaves none behind after failure', async () => {
+    await advanceSourceHead();
+    const prepared = await prepareUnified({
+      commandId: ids.historyFailureCommand,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      inputHash: 'history-failure-hash',
+    });
+    expect(prepared.execution.scope.mode).toBe('history');
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_routes')).rows[0].count).toBe(1);
+
+    await repository.failCommand(
+      ids.historyFailureCommand,
+      'WORKFLOW_UNAVAILABLE',
+      new Date(now.getTime() + 1000),
+    );
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_routes')).rows[0].count).toBe(1);
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_threads')).rows[0].count).toBe(1);
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_checkpoints')).rows[0].count).toBe(2);
+    expect((await pool.query(
+      'SELECT head_checkpoint_id FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0].head_checkpoint_id).toBe(ids.sourceHeadCheckpoint);
+  });
+
+  it('rejects a stale expected version without moving the current head used for refresh', async () => {
+    await advanceSourceHead();
+    await expect(repository.prepareCommand(prepareInput({
+      commandId: ids.historyCommand,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 1,
+      inputHash: 'stale-version-hash',
+    }))).rejects.toEqual(expect.objectContaining({ code: 'CHECKPOINT_VERSION_CONFLICT' }));
+    expect((await pool.query(
+      'SELECT head_checkpoint_id FROM workflow_routes WHERE id = $1',
+      [ids.route],
+    )).rows[0].head_checkpoint_id).toBe(ids.sourceHeadCheckpoint);
+    expect((await domain.getRouteWorkspace(ids.user, ids.route))?.route.headCheckpointId)
+      .toBe(ids.sourceHeadCheckpoint);
+    expect((await pool.query(
+      'SELECT count(*)::int AS count FROM workflow_commands WHERE id = $1',
+      [ids.historyCommand],
+    )).rows[0].count).toBe(0);
+  });
+
+  it('loads immutable history by result-checkpoint causality with a conservative legacy fallback', async () => {
+    await claimMessage({
+      commandId: ids.nextCommand,
+      inputHash: 'legacy-before-selected-checkpoint',
+    });
+    await repository.finalizeMessage(ids.nextCommand, messageResult({
+      userMessageId: ids.nextUserMessage,
+      assistantMessageId: ids.nextAssistantMessage,
+      reply: 'Legacy message before the selected checkpoint.',
+    }), new Date(now.getTime() - 1));
+
+    await prepareUnified({ commandId: ids.command, inputHash: 'later-head-command' });
+    await repository.finalizeCommand(ids.command, finalizeInput({
+      checkpointId: ids.nextCheckpoint,
+    }), now);
+
+    const historical = await repository.prepareCommand(prepareInput({
+      commandId: ids.historyCommand,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      inputHash: 'immutable-history-hash',
+      now: new Date(now.getTime() + 1000),
+      leaseExpiresAt: new Date(now.getTime() + 31_000),
+    }));
+    expect(historical.kind).toBe('claimed');
+    if (historical.kind !== 'claimed') throw new Error('expected historical claim');
+    expect(historical.execution.scope.mode).toBe('history');
+    expect(historical.execution.history).toEqual([
+      { role: 'user', content: 'Collect the strongest evidence.' },
+      { role: 'assistant', content: 'Legacy message before the selected checkpoint.' },
+    ]);
+    expect(JSON.stringify(historical.execution.history)).not.toContain('The evidence is converging.');
+  });
+
+  it.each([
+    ['message', {}],
+    ['named intent', {
+      input: { type: 'named_intent', key: 'summarize', content: 'Summarize the evidence.' },
+      kind: 'named_action',
+      actionKey: 'summarize',
+      content: 'Summarize the evidence.',
+      inputHash: 'named-intent-hash',
+    }],
+  ])('records one result checkpoint for a successful %s and preserves user-owned titles', async (_label, overrides) => {
+    const prepared = await prepareUnified(overrides);
+    const committed = await repository.finalizeCommand(ids.command, finalizeInput({
+      contextTitle: 'Agent replacement Context',
+      conversationTitle: 'Agent replacement Conversation',
+    }), new Date(now.getTime() + 1000));
+    expect(committed).toMatchObject({
+      status: 'succeeded',
+      routeId: ids.route,
+      conversationId: ids.thread,
+      checkpointId: ids.nextCheckpoint,
+    });
+    expect(prepared.execution.scope.mode).toBe('head');
+    expect((await pool.query(
+      'SELECT parent_checkpoint_id, version, reason FROM workflow_checkpoints WHERE id = $1',
+      [ids.nextCheckpoint],
+    )).rows[0]).toEqual({
+      parent_checkpoint_id: ids.checkpoint,
+      version: 1,
+      reason: 'workflow_action',
+    });
+    expect((await pool.query(
+      'SELECT result_checkpoint_id FROM workflow_commands WHERE id = $1',
+      [ids.command],
+    )).rows[0].result_checkpoint_id).toBe(ids.nextCheckpoint);
+    expect((await pool.query(
+      'SELECT title, title_source FROM contexts WHERE id = $1',
+      [ids.context],
+    )).rows[0]).toEqual({ title: 'Research project', title_source: 'user' });
+    expect((await pool.query(
+      'SELECT title, title_source FROM workflow_threads WHERE id = $1',
+      [ids.thread],
+    )).rows[0]).toEqual({ title: 'Evidence thread', title_source: 'user' });
+  });
+
+  it('atomically persists Workflow-owned state, arbitrary projection statuses, and memory references', async () => {
+    await prepareUnified({ inputHash: 'workflow-owned-snapshot-v2' });
+    const legacyProjectionBefore = (await pool.query(
+      'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
+      'WHERE route_id = $1 ORDER BY position',
+      [ids.route],
+    )).rows;
+    const workflowState = {
+      fsm: { node: 'deliver', revision: 7 },
+      workflowPrivateState: { cursor: 'opaque-to-web' },
+    };
+    const stageProjection = {
+      revision: 'workflow-v7',
+      items: [
+        { key: 'understand', label: '理解问题', status: 'workflow-complete' },
+        {
+          key: 'deliver',
+          label: '交付',
+          status: 'waiting-for-human-review',
+          summary: '等待确认',
+          checkpointId: ids.checkpoint,
+        },
+      ],
+    };
+
+    await repository.finalizeCommand(ids.command, finalizeInput({
+      workflowState,
+      stageProjection,
+      memoryUpdates: [{
+        scope: 'context',
+        key: 'delivery_goal',
+        value: { target: 'ship' },
+        evidence: [{ kind: 'message', id: ids.userMessage, excerpt: 'ship' }],
+      }],
+    }), new Date(now.getTime() + 1000));
+
+    const snapshot = (await pool.query<{ snapshot: Record<string, unknown> }>(
+      'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
+      [ids.nextCheckpoint],
+    )).rows[0]!.snapshot;
+    const memory = (await pool.query<{
+      id: string;
+      current_version: number;
+      value: unknown;
+      source: Record<string, unknown>;
+      evidence: unknown[];
+    }>(
+      'SELECT item.id, item.current_version, version.value, version.source, version.evidence ' +
+      'FROM memory_items item JOIN memory_item_versions version ' +
+      'ON version.memory_id = item.id AND version.version = item.current_version ' +
+      "WHERE item.user_id = $1 AND item.scope = 'context' AND item.context_id = $2 " +
+      "AND item.memory_key = 'delivery_goal'",
+      [ids.user, ids.context],
+    )).rows[0]!;
+
+    expect(snapshot).toEqual({
+      workflowState,
+      stageProjection,
+      memoryReferences: [{ memoryId: memory.id, version: 1 }],
+      artifacts: [],
+    });
+    expect(memory).toMatchObject({
+      current_version: 1,
+      value: { target: 'ship' },
+      source: {
+        kind: 'workflow',
+        commandId: ids.command,
+        conversationId: ids.thread,
+        checkpointId: ids.nextCheckpoint,
+      },
+      evidence: [{ kind: 'message', id: ids.userMessage, excerpt: 'ship' }],
+    });
+    expect((await pool.query(
+      'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
+      'WHERE route_id = $1 ORDER BY position',
+      [ids.route],
+    )).rows).toEqual(legacyProjectionBefore);
+
+    await prepareUnified({
+      commandId: ids.thirdCommand,
+      baseCheckpointId: ids.nextCheckpoint,
+      expectedCheckpointVersion: 1,
+      inputHash: 'workflow-owned-snapshot-v2-unchanged-projection',
+      now: new Date(now.getTime() + 1100),
+      leaseExpiresAt: new Date(now.getTime() + 31_100),
+    });
+    await repository.finalizeCommand(ids.thirdCommand, finalizeInput({
+      userMessageId: '70000000-0000-4000-8000-000000000005',
+      assistantMessageId: '70000000-0000-4000-8000-000000000006',
+      checkpointId: ids.conflictCheckpoint,
+      headCheckpointIdAtClaim: ids.nextCheckpoint,
+      workflowState: { fsm: { node: 'deliver', revision: 8 } },
+    }), new Date(now.getTime() + 1200));
+    const nextSnapshot = (await pool.query<{ snapshot: Record<string, unknown> }>(
+      'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
+      [ids.conflictCheckpoint],
+    )).rows[0]!.snapshot;
+    expect(nextSnapshot.stageProjection).toEqual(stageProjection);
+    expect(nextSnapshot.memoryReferences).toEqual([{ memoryId: memory.id, version: 1 }]);
+  });
+
+  it('resolves an interrupt and records a result checkpoint for resume input', async () => {
+    await claimMessage();
+    await repository.finalizeMessage(ids.command, messageResult({
+      interrupt: { id: ids.interrupt, prompt: 'Approve?', cursor: { secret: 'cursor-1' } },
+    }), new Date(now.getTime() + 100));
+
+    const prepared = await prepareUnified({
+      commandId: ids.nextCommand,
+      input: { type: 'resume_interrupt', interruptId: ids.interrupt, content: 'Approved.' },
+      kind: 'resume_interrupt',
+      interruptId: ids.interrupt,
+      content: 'Approved.',
+      inputHash: 'unified-resume-hash',
+      now: new Date(now.getTime() + 200),
+      leaseExpiresAt: new Date(now.getTime() + 30_200),
+    });
+    expect(prepared.execution.interruptCursor).toEqual({ secret: 'cursor-1' });
+    const committed = await repository.finalizeCommand(ids.nextCommand, finalizeInput({
+      userMessageId: ids.nextUserMessage,
+      assistantMessageId: ids.nextAssistantMessage,
+      checkpointId: ids.nextCheckpoint,
+    }), new Date(now.getTime() + 1000));
+    expect(committed.checkpointId).toBe(ids.nextCheckpoint);
+    expect((await pool.query(
+      'SELECT result_checkpoint_id FROM workflow_commands WHERE id = $1',
+      [ids.nextCommand],
+    )).rows[0].result_checkpoint_id).toBe(ids.nextCheckpoint);
+    expect((await pool.query(
+      'SELECT status, resolution_command_id FROM workflow_interrupts WHERE id = $1',
+      [ids.interrupt],
+    )).rows[0]).toEqual({ status: 'resolved', resolution_command_id: ids.nextCommand });
+  });
+
+  it('adopts only owned staged attachments into the successful Command scope', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: 'c'.repeat(64),
+      storageKey: 'objects/task3-owned',
+    });
+    await prepareUnified({ attachmentIds: [ids.stagedAttachment], inputHash: 'attachment-hash' });
+    expect((await pool.query(
+      'SELECT status, adopted_command_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', adopted_command_id: null });
+
+    const committed = await repository.finalizeCommand(ids.command, finalizeInput({
+      attachmentIds: [ids.stagedAttachment],
+    }), new Date(now.getTime() + 1000));
+    expect((await pool.query(
+      'SELECT status, adopted_command_id, adopted_context_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({
+      status: 'adopted',
+      adopted_command_id: ids.command,
+      adopted_context_id: ids.context,
+    });
+    expect((await pool.query(
+      'SELECT user_id, object_id, context_id, route_id, thread_id, stage_key, filename ' +
+      'FROM workflow_attachments WHERE object_id = $1',
+      [ids.attachmentObject],
+    )).rows).toEqual([{
+      user_id: ids.user,
+      object_id: ids.attachmentObject,
+      context_id: ids.context,
+      route_id: committed.routeId,
+      thread_id: committed.conversationId,
+      stage_key: null,
+      filename: 'notes.txt',
+    }]);
+  });
+
+  it('keeps attachments pending on failure and hides attachments owned by another user', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: 'd'.repeat(64),
+      storageKey: 'objects/task3-pending',
+    });
+    await prepareUnified({ attachmentIds: [ids.stagedAttachment], inputHash: 'pending-attachment-hash' });
+    await repository.failCommand(ids.command, 'WORKFLOW_UNAVAILABLE', new Date(now.getTime() + 1000));
+    expect((await pool.query(
+      'SELECT status, adopted_command_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', adopted_command_id: null });
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_attachments')).rows[0].count).toBe(0);
+
+    await stageAttachment({
+      userId: ids.otherUser,
+      objectId: ids.otherAttachmentObject,
+      attachmentId: ids.otherStagedAttachment,
+      sha256: 'e'.repeat(64),
+      storageKey: 'objects/task3-other-user',
+    });
+    await expect(repository.prepareCommand(prepareInput({
+      commandId: ids.nextCommand,
+      attachmentIds: [ids.otherStagedAttachment],
+      inputHash: 'other-attachment-hash',
+      now: new Date(now.getTime() + 2000),
+      leaseExpiresAt: new Date(now.getTime() + 32_000),
+    }))).rejects.toEqual(expect.objectContaining({ code: 'COMMAND_SCOPE_INVALID' }));
+    expect((await pool.query(
+      'SELECT status, adopted_command_id FROM staged_attachments WHERE id = $1',
+      [ids.otherStagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', adopted_command_id: null });
+  });
 
   it('lists owned messages in sequence order and exposes only the public pending interrupt', async () => {
     await claimMessage();
@@ -217,6 +1047,19 @@ integrationDescribe('workflow command repository', () => {
       .toEqual({ kind: 'in_progress' });
   });
 
+  it('serializes concurrent exact legacy first claims in the shared command-id namespace', async () => {
+    const results = await Promise.all([
+      repository.claimCommand(claimInput()),
+      repository.claimCommand(claimInput()),
+    ]);
+    expect(results.map((result) => result.kind).sort()).toEqual(['claimed', 'in_progress']);
+    expect((await pool.query(
+      "SELECT count(*)::int AS count FROM workflow_command_events " +
+      "WHERE command_id = $1 AND event_type = 'command.accepted'",
+      [ids.command],
+    )).rows[0].count).toBe(1);
+  });
+
   it('reclaims an expired lease before workflow start and increases the attempt', async () => {
     await claimMessage({ leaseExpiresAt: new Date(now.getTime() + 1000) });
     const reclaimed = await repository.claimCommand(claimInput({
@@ -230,6 +1073,43 @@ integrationDescribe('workflow command repository', () => {
       "SELECT count(*)::int AS count FROM workflow_command_events WHERE command_id = $1 AND event_type = 'command.accepted'",
       [ids.command],
     )).rows[0].count).toBe(1);
+  });
+
+  it('reclaims the immutable accepted head scope and conflicts if that original head advanced', async () => {
+    const prepared = await repository.prepareCommand(prepareInput({
+      commandId: ids.headCommand,
+      inputHash: 'reclaim-head-hash',
+      leaseExpiresAt: new Date(now.getTime() + 100),
+    }));
+    expect(prepared.kind).toBe('claimed');
+    if (prepared.kind !== 'claimed') throw new Error('expected initial claim');
+    expect(prepared.execution.scope.mode).toBe('head');
+
+    await advanceSourceHead();
+    const reclaimed = await repository.prepareCommand(prepareInput({
+      commandId: ids.headCommand,
+      inputHash: 'reclaim-head-hash',
+      now: new Date(now.getTime() + 200),
+      leaseExpiresAt: new Date(now.getTime() + 30_200),
+    }));
+    expect(reclaimed.kind).toBe('claimed');
+    if (reclaimed.kind !== 'claimed') throw new Error('expected reclaimed command');
+    expect(reclaimed.command.attempt).toBe(2);
+    expect(reclaimed.execution.scope).toEqual({
+      mode: 'head', contextId: ids.context, routeId: ids.route, conversationId: ids.thread,
+    });
+
+    const committed = await repository.finalizeCommand(ids.headCommand, finalizeInput({
+      checkpointId: ids.headResultCheckpoint,
+      headCheckpointIdAtClaim: ids.sourceHeadCheckpoint,
+    }), new Date(now.getTime() + 300));
+    expect(committed).toMatchObject({
+      status: 'conflict', errorCode: 'CHECKPOINT_VERSION_CONFLICT', checkpointId: null,
+    });
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_routes')).rows[0].count).toBe(1);
+    expect((await pool.query(
+      'SELECT head_checkpoint_id FROM workflow_routes WHERE id = $1', [ids.route],
+    )).rows[0].head_checkpoint_id).toBe(ids.sourceHeadCheckpoint);
   });
 
   it('terminally fails an expired lease after workflow start instead of reclaiming it', async () => {

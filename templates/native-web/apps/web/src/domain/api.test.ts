@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createRouteFromVersion,
+  createConversation,
   createContext,
-  createThread,
   getContextWorkspace,
   getRouteWorkspace,
   listContexts,
-  updateThread,
+  renameContext,
+  updateConversation,
 } from './api';
 
 afterEach(() => {
@@ -27,11 +28,13 @@ describe('workflow domain web client', () => {
     vi.stubGlobal('fetch', fetchMock);
     await listContexts();
     await getContextWorkspace('context id');
-    await getRouteWorkspace('route id', 'future_stage');
+    await getRouteWorkspace('route id');
+    await getRouteWorkspace('route id', 'checkpoint/id');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/contexts',
       '/api/contexts/context%20id/workspace',
-      '/api/routes/route%20id/workspace?stage=future_stage',
+      '/api/routes/route%20id/workspace',
+      '/api/routes/route%20id/workspace?checkpoint=checkpoint%2Fid',
     ]);
   });
 
@@ -39,8 +42,9 @@ describe('workflow domain web client', () => {
     const fetchMock = vi.fn(() => response({ ok: true }, 201));
     vi.stubGlobal('fetch', fetchMock);
     await createContext('Project');
-    await createThread('route-1', { stageKey: 'discover', title: 'Topic' });
-    await updateThread('thread-1', { title: 'Renamed' });
+    await createConversation('route-1');
+    await renameContext('context-1', { title: 'Renamed context' });
+    await updateConversation('conversation-1', { title: 'Renamed', status: 'archived' });
     await createRouteFromVersion('context-1', { sourceCheckpointId: 'checkpoint-1', name: 'Route B' });
     expect(fetchMock.mock.calls.map(([url, init]) => ({
       url,
@@ -49,8 +53,9 @@ describe('workflow domain web client', () => {
       credentials: init?.credentials,
     }))).toEqual([
       { url: '/api/contexts', method: 'POST', body: { title: 'Project' }, credentials: 'same-origin' },
-      { url: '/api/routes/route-1/threads', method: 'POST', body: { stageKey: 'discover', title: 'Topic' }, credentials: 'same-origin' },
-      { url: '/api/threads/thread-1', method: 'PATCH', body: { title: 'Renamed' }, credentials: 'same-origin' },
+      { url: '/api/routes/route-1/conversations', method: 'POST', body: {}, credentials: 'same-origin' },
+      { url: '/api/contexts/context-1', method: 'PATCH', body: { title: 'Renamed context' }, credentials: 'same-origin' },
+      { url: '/api/conversations/conversation-1', method: 'PATCH', body: { title: 'Renamed', status: 'archived' }, credentials: 'same-origin' },
       { url: '/api/contexts/context-1/routes', method: 'POST', body: { sourceCheckpointId: 'checkpoint-1', name: 'Route B' }, credentials: 'same-origin' },
     ]);
   });

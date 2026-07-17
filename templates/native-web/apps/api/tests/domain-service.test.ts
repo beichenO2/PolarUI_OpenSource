@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ProductManifest } from '@polar/native-web-product-sdk';
-import { createDomainService, DomainError } from '../src/domain/service.js';
+import { createDomainService } from '../src/domain/service.js';
 import type { DomainRepository } from '../src/domain/repository.js';
 
 const manifest: ProductManifest = {
@@ -14,14 +14,51 @@ const manifest: ProductManifest = {
 };
 
 function setup(overrides: Partial<DomainRepository> = {}) {
+  const causalWrites = {
+    runWorkflow: vi.fn(),
+    createCheckpoint: vi.fn(),
+    createCommand: vi.fn(),
+    writeMemory: vi.fn(),
+    createRoute: vi.fn(),
+  };
   const repository = {
     createContext: vi.fn(async (input) => input),
     listContexts: vi.fn(async () => []),
     getContextWorkspace: vi.fn(async () => null),
     getRouteWorkspace: vi.fn(async () => null),
+    createConversation: vi.fn(async (input) => ({
+      id: input.id,
+      contextId: 'context-1',
+      routeId: input.routeId,
+      title: input.title,
+      titleSource: input.titleSource,
+      isPrimary: false,
+      status: input.status,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })),
+    renameContext: vi.fn(async (input) => ({
+      id: input.contextId,
+      title: input.title,
+      status: 'active',
+      createdAt: input.now,
+      updatedAt: input.now,
+    })),
+    updateConversation: vi.fn(async (input) => ({
+      id: input.conversationId,
+      contextId: 'context-1',
+      routeId: 'route-1',
+      title: input.title ?? 'Existing discussion',
+      titleSource: input.title === undefined ? 'agent' : 'user',
+      isPrimary: false,
+      status: input.status ?? 'active',
+      createdAt: input.now,
+      updatedAt: input.now,
+    })),
     createThread: vi.fn(async () => null),
     updateThread: vi.fn(async () => null),
     branchRoute: vi.fn(async () => null),
+    ...causalWrites,
     ...overrides,
   } as unknown as DomainRepository;
   const values = [
@@ -36,21 +73,18 @@ function setup(overrides: Partial<DomainRepository> = {}) {
     createId: () => values.shift()!,
     now: () => new Date('2026-07-15T16:00:00.000Z'),
   });
-  return { repository, service };
+  return { repository, service, causalWrites };
 }
 
 describe('workflow domain service', () => {
-  it('trims context titles and bootstraps manifest stage projections', async () => {
+  it('trims context titles and bootstraps without a selected Stage', async () => {
     const { repository, service } = setup();
     await service.createContext('user-1', { title: '  Research project  ' });
     expect(repository.createContext).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       title: 'Research project',
       routeName: '路线 1',
-      stages: [
-        { stageKey: 'discover', position: 0, status: 'active', internalState: 'start' },
-        { stageKey: 'decide', position: 1, status: 'not_started', internalState: 'waiting' },
-      ],
+      stages: [],
     }));
   });
 
@@ -60,106 +94,124 @@ describe('workflow domain service', () => {
       .rejects.toEqual(expect.objectContaining({ code: 'INVALID_REQUEST', statusCode: 400 }));
   });
 
-  it('rejects unknown stages before repository access', async () => {
-    const { repository, service } = setup();
-    await expect(service.getRouteWorkspace('user-1', 'route-1', { stageKey: 'missing' }))
-      .rejects.toBeInstanceOf(DomainError);
-    expect(repository.getRouteWorkspace).not.toHaveBeenCalled();
-  });
-
   it('returns not found for inaccessible resources', async () => {
-    const { service } = setup();
+    const { service } = setup({
+      createConversation: vi.fn(async () => null) as never,
+    });
     await expect(service.getContextWorkspace('user-1', 'context-1'))
       .rejects.toEqual(expect.objectContaining({ code: 'NOT_FOUND', statusCode: 404 }));
-    await expect(service.createThread('user-1', 'route-1', { stageKey: 'discover', title: 'Topic' }))
+    await expect(service.createConversation('user-1', 'route-1'))
       .rejects.toEqual(expect.objectContaining({ code: 'NOT_FOUND', statusCode: 404 }));
   });
 
-  it('renders historical and head stages from their respective checkpoint snapshots', async () => {
+  it('returns a Stage-independent immutable historical workspace', async () => {
+    const artifact = {
+      id: '60000000-0000-4000-8000-000000000001',
+      stage_key: null,
+      filename: 'historical.txt',
+      media_type: 'text/plain',
+      byte_size: 12,
+      sha256: 'a'.repeat(64),
+      created_at: '2026-07-15T15:00:00.000Z',
+    };
+    const selectedProjection = {
+      revision: 'historical-r1',
+      items: [{ key: 'unexpected_runtime_step', label: '运行时步骤', status: 'blocked' }],
+    };
     const repositoryWorkspace = {
       context: { id: 'context-1' },
       route: { id: 'route-1', headCheckpointId: 'head-1' },
-      stages: [
-        { stageKey: 'discover', position: 0, status: 'not_started', internalState: 'review' },
-        { stageKey: 'decide', position: 1, status: 'completed', internalState: 'ready' },
-      ],
+      conversations: [{ id: 'conversation-1', status: 'active' }],
       checkpoints: [
         {
           id: 'old-1',
-          snapshot: { stages: [
-            { stage_key: 'decide', status: 'not_started', internal_state: 'waiting' },
-            { stage_key: 'discover', status: 'active', internal_state: 'start' },
-          ] },
+          snapshot: {
+            workflowState: {},
+            stageProjection: selectedProjection,
+            memoryReferences: [],
+            artifacts: [artifact],
+          },
         },
         {
           id: 'head-1',
-          snapshot: { stages: [
-            { stage_key: 'discover', status: 'completed', internal_state: 'review' },
-            { stage_key: 'decide', status: 'active', internal_state: 'ready' },
-          ] },
+          snapshot: {
+            workflowState: {},
+            stageProjection: {
+              revision: 'head-r2',
+              items: [{ key: 'another_runtime_step', label: '另一运行步骤', status: 'done' }],
+            },
+            memoryReferences: [],
+            artifacts: [],
+          },
         },
       ],
-      threads: [],
     };
-    const { service } = setup({ getRouteWorkspace: vi.fn(async () => repositoryWorkspace) as never });
-    const historical = await service.getRouteWorkspace('user-1', 'route-1', {
-      stageKey: 'decide', checkpointId: 'old-1',
+    const getRouteWorkspace = vi.fn(async () => repositoryWorkspace);
+    const { repository, service, causalWrites } = setup({
+      getRouteWorkspace: getRouteWorkspace as never,
     });
-    const head = await service.getRouteWorkspace('user-1', 'route-1', { stageKey: 'decide' });
+    const historical = await service.getRouteWorkspace('user-1', 'route-1', {
+      checkpointId: 'old-1',
+    });
+    const head = await service.getRouteWorkspace('user-1', 'route-1', {});
 
-    expect(historical.selectedCheckpoint.id).toBe('old-1');
-    expect(historical.isHistorical).toBe(true);
-    expect(historical.route.headCheckpointId).toBe('head-1');
-    expect(historical.stages).toEqual([
-      {
-        stageKey: 'discover', position: 0, status: 'active', internalState: 'start',
-        label: '发现', componentKey: 'generic_chat',
-      },
-      {
-        stageKey: 'decide', position: 1, status: 'not_started', internalState: 'waiting',
-        label: '决策', componentKey: 'structured_form',
-      },
-    ]);
-    expect(head.selectedCheckpoint.id).toBe('head-1');
-    expect(head.isHistorical).toBe(false);
-    expect(head.stages.map(({ status, internalState }) => ({ status, internalState }))).toEqual([
-      { status: 'completed', internalState: 'review' },
-      { status: 'active', internalState: 'ready' },
-    ]);
+    expect(historical).toMatchObject({
+      route: { id: 'route-1', headCheckpointId: 'head-1' },
+      conversations: [{ id: 'conversation-1' }],
+      selectedCheckpoint: { id: 'old-1' },
+      headCheckpoint: { id: 'head-1' },
+      isHistorical: true,
+      stageProjection: selectedProjection,
+      artifacts: [artifact],
+    });
+    expect(head).toMatchObject({
+      selectedCheckpoint: { id: 'head-1' },
+      headCheckpoint: { id: 'head-1' },
+      isHistorical: false,
+      artifacts: [],
+    });
+    expect(getRouteWorkspace).toHaveBeenNthCalledWith(1, 'user-1', 'route-1');
+    expect(getRouteWorkspace).toHaveBeenNthCalledWith(2, 'user-1', 'route-1');
+    expect(repository.branchRoute).not.toHaveBeenCalled();
+    for (const write of Object.values(causalWrites)) expect(write).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['missing stage', [
-      { stage_key: 'discover', status: 'active', internal_state: 'start' },
-    ]],
-    ['unknown stage', [
-      { stage_key: 'discover', status: 'active', internal_state: 'start' },
-      { stage_key: 'missing', status: 'not_started', internal_state: 'waiting' },
-    ]],
-    ['duplicate stage', [
-      { stage_key: 'discover', status: 'active', internal_state: 'start' },
-      { stage_key: 'discover', status: 'not_started', internal_state: 'start' },
-    ]],
-    ['invalid status', [
-      { stage_key: 'discover', status: 'paused', internal_state: 'start' },
-      { stage_key: 'decide', status: 'not_started', internal_state: 'waiting' },
-    ]],
-    ['invalid internal state', [
-      { stage_key: 'discover', status: 'active', internal_state: 'unknown' },
-      { stage_key: 'decide', status: 'not_started', internal_state: 'waiting' },
-    ]],
-  ])('rejects a corrupt checkpoint snapshot with %s', async (_case, stages) => {
-    const repositoryWorkspace = {
-      context: { id: 'context-1' },
-      route: { id: 'route-1', headCheckpointId: 'head-1' },
-      stages: [],
-      checkpoints: [{ id: 'head-1', snapshot: { stages } }],
-      threads: [],
-    };
-    const { service } = setup({ getRouteWorkspace: vi.fn(async () => repositoryWorkspace) as never });
+  it('creates an initializing agent-titled Conversation without title or Stage input', async () => {
+    const createConversation = vi.fn(async (input) => ({ id: input.id }));
+    const { repository, service } = setup({ createConversation: createConversation as never });
+    await service.createConversation('user-1', 'route-1');
 
-    await expect(service.getRouteWorkspace('user-1', 'route-1', { stageKey: 'discover' }))
-      .rejects.toEqual(expect.objectContaining({ code: 'DOMAIN_STATE_INVALID', statusCode: 503 }));
+    expect(repository.createConversation).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      routeId: 'route-1',
+      titleSource: 'agent',
+      status: 'initializing',
+    }));
+    const input = createConversation.mock.calls[0]![0] as Record<string, unknown>;
+    expect(input).not.toHaveProperty('stageKey');
+  });
+
+  it('renames Context and updates Conversation metadata without causal writes', async () => {
+    const { repository, service, causalWrites } = setup();
+    await service.renameContext('user-1', 'context-1', { title: '  同名  ' });
+    await service.updateConversation('user-1', 'conversation-1', {
+      title: '  同名  ',
+      status: 'archived',
+    });
+
+    expect(repository.renameContext).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      contextId: 'context-1',
+      title: '同名',
+    }));
+    expect(repository.updateConversation).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      conversationId: 'conversation-1',
+      title: '同名',
+      status: 'archived',
+    }));
+    expect(repository.branchRoute).not.toHaveBeenCalled();
+    for (const write of Object.values(causalWrites)) expect(write).not.toHaveBeenCalled();
   });
 
   it('creates a named branch with fresh identifiers', async () => {

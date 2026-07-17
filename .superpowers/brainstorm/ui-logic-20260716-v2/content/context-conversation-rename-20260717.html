@@ -1,0 +1,51 @@
+<style>
+  .lead { max-width:920px; margin-bottom:22px; }
+  .rename-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .mock { min-height:330px; border:1px solid #aab5af; background:#fff; color:#24312c; overflow:hidden; box-shadow:0 8px 20px rgba(27,52,42,.07); }
+  .mock-head { display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #ccd4cf; font-size:10px; font-weight:700; }
+  .mock-body { padding:16px; }
+  .label { margin-bottom:8px; color:#6d7973; font-size:9px; }
+  .context-row, .thread-row { position:relative; display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid #bdc8c2; background:#f7f8f7; font-size:9px; }
+  .context-row strong, .thread-row strong { display:block; margin-bottom:3px; }
+  .context-row small, .thread-row small { color:#77827d; font-size:7px; }
+  .more { display:grid; place-items:center; width:26px; height:26px; border:1px solid #b4c0ba; background:#fff; font-weight:700; }
+  .menu { width:155px; margin:5px 0 15px auto; border:1px solid #aab5af; background:#fff; box-shadow:0 7px 16px rgba(24,48,38,.12); font-size:8px; }
+  .menu div { padding:8px; border-bottom:1px solid #e0e4e2; }
+  .menu div:first-child { color:#205844; font-weight:700; background:#e8efeb; }
+  .form { padding:12px; border:1px solid #9eaaa4; background:#f4f6f5; }
+  .form label { display:block; margin-bottom:5px; color:#59665f; font-size:8px; }
+  .input { padding:9px; border:1.5px solid #205844; background:#fff; font-size:9px; }
+  .actions { display:flex; justify-content:flex-end; gap:6px; margin-top:9px; }
+  .actions span { padding:6px 9px; border:1px solid #b4c0ba; font-size:8px; }
+  .actions .save { background:#205844; color:#fff; border-color:#205844; font-weight:700; }
+  .hint { margin-top:12px; color:#68746e; font-size:8px; line-height:1.5; }
+  .rules { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:22px; }
+  .rule { padding:11px; border-top:3px solid #205844; background:#edf2ef; color:#3d4b44; font-size:10px; line-height:1.5; }
+  .rule strong { display:block; margin-bottom:4px; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media(max-width:760px) { .rename-grid, .rules { grid-template-columns:1fr; } .decision { flex-direction:column; } }
+</style>
+
+<div class="lead">
+  <h2>Context 与 Conversation 都支持重命名</h2>
+  <p class="subtitle">默认名称由 Agent 从首轮意图自动生成；用户可以随时修改。名称只是显示元数据，不参与 Workflow 状态、记忆作用域或时间线身份。</p>
+</div>
+
+<div class="rename-grid">
+  <section class="mock"><header class="mock-head"><span>Context 重命名</span><span>桌面 / 移动一致</span></header><div class="mock-body"><div class="label">情景列表或当前情景标题</div><div class="context-row"><div><strong>Workflow 输入入口设计</strong><small>Agent 自动生成 · 情景记忆 5</small></div><span class="more">•••</span></div><div class="menu"><div>重命名情景</div><div>查看情景信息</div><div>归档情景</div></div><div class="form"><label>情景名称</label><div class="input">Workflow Web 核心交互设计</div><div class="actions"><span>取消</span><span class="save">保存</span></div></div><p class="hint">保存后左侧列表、页面标题和选择器同步更新；URL 与历史引用保持不变。</p></div></section>
+
+  <section class="mock"><header class="mock-head"><span>Conversation 重命名</span><span>切换器 / 当前对话</span></header><div class="mock-body"><div class="label">当前 Context 的对话切换器</div><div class="thread-row"><div><strong>Branch 语义</strong><small>Agent 自动生成 · 12 分钟前</small></div><span class="more">•••</span></div><div class="menu"><div>重命名对话</div><div>查看对话信息</div><div>归档对话</div></div><div class="form"><label>对话名称</label><div class="input">历史版本与时间线分叉</div><div class="actions"><span>取消</span><span class="save">保存</span></div></div><p class="hint">新对话无需先命名；首轮完成后自动命名。用户重命名后，Agent 不再擅自覆盖手动名称。</p></div></section>
+</div>
+
+<div class="rules">
+  <div class="rule"><strong>不触发 Workflow</strong>重命名不会执行 Agent、状态迁移或 Manifest action。</div>
+  <div class="rule"><strong>不产生 Branch</strong>即使正在浏览历史，修改名称也只是元数据操作。</div>
+  <div class="rule"><strong>允许重名</strong>身份由稳定 ID 决定，名称只服务于人的识别。</div>
+  <div class="rule"><strong>尊重手动名称</strong>用户改名后标记为手动，后续自动摘要不得覆盖。</div>
+</div>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-rename-interaction" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可重命名交互</h3><p>将其写入最终产品/UI 设计文档。</p></div></div>
+  <div class="option" data-choice="revise-rename-interaction" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要调整入口</h3><p>指出重命名应该更直接或放在其他位置。</p></div></div>
+</div>

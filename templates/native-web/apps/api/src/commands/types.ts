@@ -1,10 +1,47 @@
 import type {
+  CheckpointWorkflowState,
   RouteStageStatus,
   StageProjection,
+  StageProjectionSnapshot,
   WorkflowCheckpoint,
 } from '../domain/types.js';
 
 export type WorkflowCommandKind = 'message' | 'named_action' | 'resume_interrupt';
+export type PublicWorkflowCommandInput =
+  | { type: 'message'; content: string }
+  | { type: 'named_intent'; key: string; content?: string }
+  | { type: 'resume_interrupt'; interruptId: string; content: string };
+
+export interface PublicCommandInput {
+  commandId: string;
+  contextId?: string;
+  routeId?: string;
+  conversationId?: string;
+  baseCheckpointId?: string;
+  expectedCheckpointVersion?: number;
+  input: PublicWorkflowCommandInput;
+  attachmentIds: string[];
+}
+
+export type CommandScope =
+  | {
+    mode: 'start';
+    provisionalContextId: string;
+    provisionalRouteId: string;
+    provisionalConversationId: string;
+  }
+  | {
+    mode: 'head';
+    contextId: string;
+    routeId: string;
+    conversationId: string | null;
+  }
+  | {
+    mode: 'history';
+    contextId: string;
+    sourceRouteId: string;
+    sourceCheckpointId: string;
+  };
 export type WorkflowCommandStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'conflict';
 export type WorkflowCommandEventType =
   | 'command.accepted'
@@ -18,7 +55,7 @@ export interface WorkflowCommand {
   contextId: string;
   sourceRouteId: string;
   sourceThreadId: string;
-  stageKey: string;
+  stageKey: string | null;
   baseCheckpointId: string;
   expectedCheckpointVersion: number;
   kind: WorkflowCommandKind;
@@ -51,7 +88,7 @@ export interface WorkflowMessage {
   contextId: string;
   routeId: string;
   threadId: string;
-  stageKey: string;
+  stageKey: string | null;
   role: 'user' | 'assistant';
   content: string;
   sequence: number;
@@ -79,6 +116,34 @@ export interface CommandExecutionContext {
   stages: StageProjection[];
   interruptCursor?: unknown;
 }
+
+export interface UnifiedCommandExecutionContext extends Omit<CommandExecutionContext, 'stageKey'> {
+  scope: CommandScope;
+  conversationId: string | null;
+  stageKey: string | null;
+  memory?: {
+    user: unknown[];
+    context: unknown[];
+  };
+}
+
+export interface PrepareCommandInput extends PublicCommandInput {
+  userId: string;
+  kind: WorkflowCommandKind;
+  actionKey?: string;
+  interruptId?: string;
+  content: string;
+  inputHash: string;
+  now: Date;
+  leaseExpiresAt: Date;
+}
+
+export type PrepareCommandResult =
+  | { kind: 'claimed'; command: WorkflowCommand; execution: UnifiedCommandExecutionContext }
+  | { kind: 'replay'; command: WorkflowCommand; events: WorkflowCommandEvent[] }
+  | { kind: 'reused' }
+  | { kind: 'in_progress' }
+  | { kind: 'interrupt_claimed' };
 
 export interface ClaimCommandInput {
   userId: string;
@@ -135,6 +200,28 @@ export interface FinalizeActionIds {
   assistantMessageId: string;
   checkpointId: string;
   headCheckpointIdAtClaim: string;
+}
+
+export interface FinalizeCommandInput {
+  userMessageId: string;
+  assistantMessageId: string;
+  checkpointId: string;
+  headCheckpointIdAtClaim: string;
+  reply: string;
+  stageSignals: WorkflowStageSignal[];
+  workflowCursor: unknown | null;
+  memoryProposals: unknown[];
+  interrupt: PendingInterruptInput | null;
+  attachmentIds: string[];
+  contextTitle?: string;
+  conversationTitle?: string;
+  workflowState?: CheckpointWorkflowState;
+  stageProjection?: StageProjectionSnapshot;
+  memoryUpdates?: unknown[];
+}
+
+export interface UnifiedCommandCommitResult extends Omit<CommandCommitResult, 'threadId'> {
+  conversationId: string;
 }
 
 export interface CommandCommitResult {

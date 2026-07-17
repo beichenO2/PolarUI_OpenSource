@@ -9,6 +9,7 @@ import type { NativeWebConfig } from '../config.js';
 
 const uuid = z.string().uuid();
 const paramsSchema = z.object({ threadId: uuid }).strict();
+const conversationParamsSchema = z.object({ conversationId: uuid }).strict();
 const commandParamsSchema = z.object({ commandId: uuid }).strict();
 const actionKey = z.string().regex(/^[a-z][a-z0-9_]*$/);
 const common = {
@@ -27,6 +28,28 @@ const commandBodySchema = z.discriminatedUnion('kind', [
     content: z.string().min(1).max(20_000),
   }).strict(),
 ]);
+const publicCommandBodySchema = z.object({
+  commandId: uuid,
+  contextId: uuid.optional(),
+  routeId: uuid.optional(),
+  conversationId: uuid.optional(),
+  baseCheckpointId: uuid.optional(),
+  expectedCheckpointVersion: z.number().int().nonnegative().optional(),
+  input: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('message'), content: z.string().min(1).max(20_000) }).strict(),
+    z.object({
+      type: z.literal('named_intent'),
+      key: actionKey,
+      content: z.string().max(20_000).optional(),
+    }).strict(),
+    z.object({
+      type: z.literal('resume_interrupt'),
+      interruptId: uuid,
+      content: z.string().min(1).max(20_000),
+    }).strict(),
+  ]),
+  attachmentIds: z.array(uuid).max(100),
+}).strict();
 
 function parse<T>(schema: z.ZodType<T>, value: unknown, reply: FastifyReply): T | null {
   const parsed = schema.safeParse(value);
@@ -108,13 +131,56 @@ export async function registerCommandRoutes(
     return state;
   });
 
+  app.get('/api/conversations/:conversationId/messages', async (request, reply) => {
+    const sessionUser = await user(request, reply);
+    if (!sessionUser) return;
+    const params = parse(conversationParamsSchema, request.params, reply);
+    if (!params) return;
+    const state = await commandRepository.listConversationState(
+      sessionUser.id,
+      params.conversationId,
+    );
+    if (!state) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+    return state;
+  });
+
+  app.post('/api/workflow/commands', async (request, reply) => {
+    const sessionUser = await mutationUser(request, reply);
+    if (!sessionUser) return;
+    const body = parse(publicCommandBodySchema, request.body, reply);
+    if (!body) return;
+    const receipt = await commandService.createCommand(sessionUser.id, body);
+    setImmediate(() => { void commandService.executeCommand(receipt.commandId); });
+    return reply.code(202).send({ commandId: receipt.commandId, eventUrl: receipt.eventUrl });
+  });
+
   app.post('/api/threads/:threadId/commands', async (request, reply) => {
     const sessionUser = await mutationUser(request, reply);
     if (!sessionUser) return;
     const params = parse(paramsSchema, request.params, reply);
     const body = parse(commandBodySchema, request.body, reply);
     if (!params || !body) return;
-    const receipt = await commandService.createCommand(sessionUser.id, params.threadId, body);
+    const input = body.kind === 'message'
+      ? { type: 'message' as const, content: body.content }
+      : body.kind === 'named_action'
+        ? {
+          type: 'named_intent' as const,
+          key: body.actionKey,
+          ...(body.content.length === 0 ? {} : { content: body.content }),
+        }
+        : {
+          type: 'resume_interrupt' as const,
+          interruptId: body.interruptId,
+          content: body.content,
+        };
+    const receipt = await commandService.createCommand(sessionUser.id, {
+      commandId: body.commandId,
+      conversationId: params.threadId,
+      baseCheckpointId: body.baseCheckpointId,
+      expectedCheckpointVersion: body.expectedCheckpointVersion,
+      input,
+      attachmentIds: [],
+    });
     setImmediate(() => { void commandService.executeCommand(receipt.commandId); });
     return reply.code(202).send({ commandId: receipt.commandId, eventUrl: receipt.eventUrl });
   });

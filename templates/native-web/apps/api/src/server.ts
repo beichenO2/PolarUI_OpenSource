@@ -29,14 +29,21 @@ const config = loadConfig();
 const pool = createPool(config.databaseUrl);
 await runMigrations({ pool, migrationsDir: join(root, 'db/migrations') });
 const mailer = createSmtpVerificationMailer(config.smtp);
+const authRepository = createAuthRepository(pool);
 const authService = createAuthService({
-  repository: createAuthRepository(pool),
+  repository: authRepository,
   mailer,
   pepper: config.authPepper,
   productName: manifest.product?.name ?? 'Polar Workflow',
   verificationTtlSeconds: config.verificationTtlSeconds,
   sessionTtlSeconds: config.sessionTtlSeconds,
 });
+if (manifest.demo_login) {
+  const demoUser = await authService.ensureVerifiedDemoUser(manifest.demo_login);
+  if (!demoUser.ok) {
+    throw new Error(`Demo login provisioning failed: ${demoUser.code}`);
+  }
+}
 const domainService = createDomainService({
   repository: createDomainRepository(pool),
   manifest,

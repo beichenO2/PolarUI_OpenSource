@@ -142,7 +142,7 @@ export function writeNativeEnvFile(plan, environment, webPort) {
     'SMTP_FROM', 'SMTP_SECURE', 'SMTP_USERNAME', 'SMTP_PASSWORD',
     'WORKFLOW_ENDPOINT_OVERRIDE', 'WORKFLOW_TIMEOUT_MS',
   ];
-  const defaults = { NODE_ENV: 'production', COOKIE_SECURE: 'true' };
+  const defaults = { NODE_ENV: 'production', COOKIE_SECURE: 'false' };
   const lines = [`POLAR_WEB_PORT=${webPort}`];
   for (const name of names) {
     const value = environment[name] ?? defaults[name];

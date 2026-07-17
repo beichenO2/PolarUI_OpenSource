@@ -20,6 +20,12 @@ const stageSchema = z.object({
   actions: z.array(actionSchema),
 }).strict();
 
+const demoLoginSchema = z.object({
+  email: z.string().email(),
+  username: z.string().min(3).max(32),
+  password: z.string().min(10).max(128),
+}).strict();
+
 const manifestSchema = z.object({
   contract_version: z.literal('1.0'),
   product: z.object({
@@ -32,13 +38,21 @@ const manifestSchema = z.object({
     id: z.string().min(1),
     endpoint: z.string().url(),
   }).strict(),
-  stages: z.array(stageSchema).min(1),
+  demo_login: demoLoginSchema.optional(),
+  intents: z.array(actionSchema).max(100).default([]),
+  stages: z.array(stageSchema).max(100).default([]),
 }).strict();
 
 export type ProductManifest = z.infer<typeof manifestSchema>;
 
 export function parseProductManifest(input: unknown): ProductManifest {
   const parsed = manifestSchema.parse(input);
+  const intentKeys = new Set<string>();
+  for (const intent of parsed.intents) {
+    if (intentKeys.has(intent.key)) throw new Error(`duplicate intent key: ${intent.key}`);
+    intentKeys.add(intent.key);
+  }
+
   const stageKeys = new Set<string>();
   for (const stage of parsed.stages) {
     if (stageKeys.has(stage.key)) throw new Error(`duplicate stage key: ${stage.key}`);

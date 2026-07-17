@@ -1,0 +1,94 @@
+<style>
+  .principle { max-width:900px; margin-bottom:22px; }
+  .principle strong { color:#205844; }
+  .flow { display:grid; grid-template-columns:1fr 54px 1fr 54px 1fr; align-items:stretch; gap:8px; }
+  .step { min-height:330px; border:1px solid #a6b1ab; background:#fff; color:#24312c; overflow:hidden; box-shadow:0 8px 20px rgba(27,52,42,.07); }
+  .step-head { display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #d4dbd7; font-size:10px; font-weight:700; }
+  .step-body { padding:20px 16px; }
+  .brand { display:flex; align-items:center; gap:7px; font-weight:700; }
+  .brand::before { content:'P'; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#205844; color:#fff; }
+  .welcome { padding-top:42px; text-align:center; }
+  .welcome .kicker { color:#6f7b75; font-size:9px; letter-spacing:.08em; }
+  .welcome h3 { margin:8px 0; font-size:22px; }
+  .welcome p { color:#68746e; font-size:10px; line-height:1.45; }
+  .big-input { margin:24px auto 0; max-width:360px; padding:13px 12px 10px; border:2px solid #205844; text-align:left; color:#65716b; font-size:10px; box-shadow:0 8px 18px rgba(30,70,54,.10); }
+  .input-foot { display:flex; justify-content:space-between; align-items:center; padding-top:16px; color:#7b8580; font-size:8px; }
+  .send { padding:5px 8px; background:#205844; color:#fff; font-weight:700; }
+  .secondary { margin-top:12px; color:#6f7b75; font-size:9px; }
+  .arrow { display:grid; place-items:center; color:#205844; font-size:25px; font-weight:700; }
+  .thinking { display:grid; place-items:center; height:270px; text-align:center; }
+  .pulse { width:42px; height:42px; display:grid; place-items:center; margin:auto; border:2px solid #b9c6c0; border-top-color:#205844; border-radius:50%; color:#205844; font-size:8px; }
+  .thinking h3 { margin:16px 0 6px; font-size:15px; }
+  .thinking p { color:#68746e; font-size:10px; line-height:1.5; }
+  .thinking ul { margin:14px auto 0; width:max-content; text-align:left; color:#52615a; font-size:9px; line-height:1.7; }
+  .workspace { display:grid; grid-template-columns:72px 1fr; min-height:287px; }
+  .nav { padding:10px 6px; background:#e7edea; border-right:1px solid #ccd4cf; font-size:7px; }
+  .nav strong { display:block; margin-bottom:7px; }
+  .nav div { padding:5px 4px; margin-bottom:4px; }
+  .nav .on { background:#205844; color:#fff; }
+  .chat { position:relative; padding:12px; }
+  .crumb { color:#738079; font-size:7px; }
+  .chat h3 { margin:4px 0 10px; font-size:14px; }
+  .bubble { max-width:82%; padding:7px 8px; margin:6px 0; background:#edf1ef; font-size:8px; line-height:1.4; }
+  .bubble.me { margin-left:auto; background:#dce9e3; }
+  .rename { padding:6px 7px; margin-top:8px; border-left:2px solid #b15a32; background:#f4f6f5; color:#59665f; font-size:7px; }
+  .composer { position:absolute; left:12px; right:12px; bottom:11px; padding:8px; border:1.5px solid #205844; color:#68746e; font-size:8px; }
+  .composer::after { content:'发送'; float:right; color:#205844; font-weight:700; }
+  .data-flow { margin-top:24px; display:grid; grid-template-columns:repeat(5, 1fr); gap:0; }
+  .data-node { position:relative; padding:13px 10px; border:1px solid #c8d1cc; background:#f6f8f7; color:#35433c; font-size:10px; text-align:center; }
+  .data-node + .data-node { border-left:0; }
+  .data-node + .data-node::before { content:'›'; position:absolute; left:-4px; top:50%; transform:translateY(-50%); color:#205844; font-size:16px; font-weight:700; z-index:1; }
+  .data-node strong { display:block; margin-bottom:4px; color:#205844; }
+  .rules { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:20px; }
+  .rule { padding:13px; border-top:3px solid #205844; background:#edf2ef; color:#39463f; font-size:11px; line-height:1.5; }
+  .rule strong { display:block; margin-bottom:5px; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media (max-width:900px) { .flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); height:34px; } .data-flow, .rules { grid-template-columns:1fr; } .data-node + .data-node { border-left:1px solid #c8d1cc; border-top:0; } .data-node + .data-node::before { content:'⌄'; top:-8px; left:50%; transform:translateX(-50%); } }
+  @media (max-width:620px) { .decision { flex-direction:column; } }
+</style>
+
+<div class="principle">
+  <h2>零 Context 也能直接输入</h2>
+  <p class="subtitle"><strong>领域约束：</strong>每条 Workflow 输入必须属于一个 Context。<br><strong>交互原则：</strong>用户不需要先创建或命名 Context；第一条输入本身就足够让系统建立它。</p>
+</div>
+
+<div class="flow">
+  <section class="step">
+    <header class="step-head"><span class="brand">Native Workflow</span><span>已有工作空间⌄</span></header>
+    <div class="step-body welcome"><div class="kicker">开始新的工作</div><h3>你现在想处理什么？</h3><p>可以直接描述问题、目标或贴入材料。<br>不需要先理解“工作空间”和“路线”。</p><div class="big-input">例如：我想重新设计 Workflow 的核心输入入口<div class="input-foot"><span>附件　/　语音</span><span class="send">发送</span></div></div><div class="secondary">＋ 手动新建工作空间　·　导入历史</div></div>
+  </section>
+
+  <div class="arrow">→</div>
+
+  <section class="step">
+    <header class="step-head"><span>正在开始</span><span>可取消</span></header>
+    <div class="step-body thinking"><div><div class="pulse">Agent</div><h3>正在理解并建立工作情景</h3><p>系统不会弹出命名表单，也不会要求选择 Stage。</p><ul><li>识别这项工作的 Context</li><li>建立初始 Route 与版本</li><li>进入 Manifest 的初始 Stage</li><li>创建主对话并执行第一条 Input</li></ul></div></div>
+  </section>
+
+  <div class="arrow">→</div>
+
+  <section class="step">
+    <header class="step-head"><span class="brand">Native Workflow</span><span>已同步</span></header>
+    <div class="workspace"><aside class="nav"><strong>工作空间</strong><div>Workflow 输入入口设计</div><strong>阶段</strong><div class="on">01 明确方案</div><div>02 推进实现</div><div>03 复核交付</div></aside><main class="chat"><div class="crumb">Workflow 输入入口设计 / 路线 1</div><h3>明确方案</h3><div class="bubble me">我想重新设计 Workflow 的核心输入入口。</div><div class="bubble">我已经把这项工作归为“Workflow 输入入口设计”，接下来先明确对话、Stage 和成果的主次关系。</div><div class="rename">Context 名称由 Agent 根据首轮意图生成，用户之后可以随时改名。</div><div class="composer">继续告诉 Agent…</div></main></div>
+  </section>
+</div>
+
+<div class="data-flow">
+  <div class="data-node"><strong>第一条 Input</strong>用户只描述要处理的事</div>
+  <div class="data-node"><strong>Start Command</strong>一个入口请求承载初始化</div>
+  <div class="data-node"><strong>建立领域对象</strong>Context + Route + Version + Thread</div>
+  <div class="data-node"><strong>Agent 执行</strong>理解情景并控制状态机</div>
+  <div class="data-node"><strong>进入工作台</strong>回复、成果、Stage 状态同步出现</div>
+</div>
+
+<div class="rules">
+  <div class="rule"><strong>不暴露临时 Context</strong>界面保持“正在开始”，首轮完成后直接显示 Agent 生成的情景名称。</div>
+  <div class="rule"><strong>失败不丢 Input</strong>初始化或执行失败时保留原文，提供重试，不留下用户看得见的半成品工作空间。</div>
+  <div class="rule"><strong>手动创建仍存在</strong>适合用户明确要先命名、导入材料或规划多个工作空间，但绝不是默认路径。</div>
+</div>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-zero-context-entry" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可：先 Input，后自动建立 Context</h3><p>继续细化多对话和 Agent 状态反馈。</p></div></div>
+  <div class="option" data-choice="revise-zero-context-entry" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要调整初始化方式</h3><p>告诉我首轮应该展示或隐藏哪些过程。</p></div></div>
+</div>

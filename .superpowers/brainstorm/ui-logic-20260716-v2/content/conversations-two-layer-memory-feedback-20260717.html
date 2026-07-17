@@ -1,0 +1,126 @@
+<style>
+  .lead { max-width:960px; margin-bottom:22px; }
+  .memory-flow { display:grid; grid-template-columns:1fr 54px 1fr; gap:10px; align-items:stretch; }
+  .source { display:grid; place-items:center; min-height:190px; padding:16px; border:1px solid #aab5af; background:#fff; color:#2f3d36; text-align:center; }
+  .source strong { display:block; margin-bottom:7px; font-size:14px; }
+  .source p { margin:0; color:#68746e; font-size:10px; line-height:1.5; }
+  .arrow { display:grid; place-items:center; color:#205844; font-size:23px; font-weight:700; }
+  .layers { display:grid; gap:9px; }
+  .layer { padding:13px; border:1px solid #b9c4be; background:#fff; color:#35423b; }
+  .layer-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:7px; }
+  .layer-head strong { color:#205844; }
+  .scope { padding:3px 6px; background:#e2ece7; color:#205844; font-size:8px; }
+  .prompt { padding:8px; background:#f2f5f3; color:#546159; font:9px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .layer small { display:block; margin-top:6px; color:#78837e; font-size:8px; }
+  .section-title { margin:29px 0 10px; display:flex; justify-content:space-between; align-items:end; gap:12px; }
+  .section-title p { color:#66736d; font-size:11px; }
+  .desk { display:grid; grid-template:42px 420px / 150px minmax(390px,1fr) 286px; border:1px solid #9eaaa4; background:#fff; color:#24312c; box-shadow:0 10px 26px rgba(27,52,42,.08); overflow:hidden; }
+  .top { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; padding:0 14px; border-bottom:1px solid #ccd4cf; font-size:10px; font-weight:700; }
+  .nav { padding:12px 9px; background:#e8eeeb; border-right:1px solid #ccd4cf; font-size:8px; }
+  .nav-head { display:flex; justify-content:space-between; margin-bottom:7px; color:#64716a; font-weight:700; }
+  .context { padding:8px 7px; margin-bottom:5px; border:1px solid #bdc8c2; background:#fff; }
+  .context.on { border-color:#205844; }
+  .context strong, .context small { display:block; }
+  .context small { margin-top:3px; color:#78837e; }
+  .new-context { margin-top:8px; padding:7px; border:1px dashed #9faca5; text-align:center; color:#65716b; }
+  .conversation { position:relative; display:flex; flex-direction:column; min-width:0; }
+  .conv-head { display:flex; justify-content:space-between; align-items:center; padding:11px 14px; border-bottom:1px solid #d6ddd9; }
+  .conv-head h3 { margin:0 0 2px; font-size:15px; }
+  .conv-head small { color:#6f7b75; font-size:8px; }
+  .conv-switch { position:relative; display:flex; gap:5px; font-size:8px; }
+  .switch-button, .new-button { padding:6px 7px; border:1px solid #b5c1bb; background:#fff; }
+  .new-button { color:#205844; font-weight:700; }
+  .switch-menu { position:absolute; right:0; top:30px; z-index:3; width:190px; border:1px solid #aab5af; background:#fff; box-shadow:0 8px 20px rgba(24,48,38,.13); }
+  .switch-title { padding:7px 8px; color:#6d7973; font-size:7px; border-bottom:1px solid #d8dedb; }
+  .thread { padding:8px; border-bottom:1px solid #e0e4e2; }
+  .thread.on { background:#e7efeb; }
+  .thread strong, .thread small { display:block; }
+  .thread strong { margin-bottom:2px; font-size:8px; }
+  .thread small { color:#78837e; font-size:7px; }
+  .thread-new { padding:8px; color:#205844; font-weight:700; }
+  .timeline { flex:1; padding:16px; font-size:9px; }
+  .msg { max-width:78%; margin:7px 0; padding:8px 9px; background:#edf1ef; line-height:1.45; }
+  .msg.me { margin-left:auto; background:#dce9e3; }
+  .run { display:flex; align-items:center; gap:6px; margin:10px auto; width:max-content; padding:5px 8px; background:#f3f5f4; color:#68746e; font-size:8px; }
+  .run i { width:6px; height:6px; border-radius:50%; background:#b15a32; }
+  .artifact { padding:8px 9px; max-width:80%; border:1px solid #bdc8c2; background:#fff; font-size:8px; }
+  .artifact strong { display:block; color:#205844; margin-bottom:3px; }
+  .composer { margin:0 14px 13px; padding:10px; border:1.5px solid #205844; box-shadow:0 5px 17px rgba(30,70,54,.10); color:#69756f; font-size:9px; }
+  .composer-foot { display:flex; justify-content:space-between; margin-top:12px; color:#7b8580; font-size:7px; }
+  .composer-foot b { padding:4px 7px; background:#205844; color:#fff; }
+  .side { background:#f4f6f5; border-left:1px solid #ccd4cf; padding:10px; font-size:8px; }
+  .side-tabs { display:flex; gap:3px; margin-bottom:8px; }
+  .side-tabs span { flex:1; padding:6px 3px; border-bottom:1px solid #acb8b2; text-align:center; }
+  .side-tabs .on { color:#205844; border-bottom:2px solid #205844; font-weight:700; }
+  .memory-scope-tabs { display:flex; gap:4px; margin-bottom:7px; }
+  .memory-scope-tabs span { padding:5px 7px; border:1px solid #bdc8c2; }
+  .memory-scope-tabs .on { border-color:#205844; background:#e2ece7; color:#205844; font-weight:700; }
+  .memory-card { padding:8px; margin-bottom:6px; border:1px solid #c5cfca; background:#fff; }
+  .memory-card strong { display:block; margin-bottom:4px; font-size:8px; }
+  .memory-card p { margin:0 0 5px; color:#4f5c55; line-height:1.4; }
+  .meta { display:flex; justify-content:space-between; gap:6px; color:#7b8580; font-size:6.5px; }
+  .impact { margin-top:5px; padding-top:5px; border-top:1px solid #e0e4e2; color:#205844; font-size:7px; }
+  .manage { padding:7px; border:1px solid #b9c4be; text-align:center; color:#205844; font-weight:700; }
+  .feedback-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .feedback { min-height:150px; padding:12px; border:1px solid #b9c4be; background:#fff; color:#35423b; font-size:9px; }
+  .feedback strong { display:block; margin-bottom:9px; color:#205844; font-size:10px; }
+  .feedback p { margin:0; line-height:1.5; color:#58655e; }
+  .feedback .mini { margin-top:10px; padding:8px; background:#f1f4f2; }
+  .feedback .mini.warn { border-left:3px solid #9c5c3e; }
+  .feedback .mini.error { border-left:3px solid #9a4942; }
+  .feedback .mini.art { border-left:3px solid #205844; }
+  .placement { width:100%; border-collapse:collapse; margin-top:20px; font-size:11px; }
+  .placement th, .placement td { padding:9px 10px; border-bottom:1px solid #d6ddd9; text-align:left; }
+  .placement th { color:#65716b; font-size:10px; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media(max-width:1000px) { .desk { grid-template:42px 400px / 110px minmax(350px,1fr) 220px; } .feedback-grid { grid-template-columns:1fr 1fr; } }
+  @media(max-width:700px) { .memory-flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); height:34px; } .desk { display:none; } .feedback-grid { grid-template-columns:1fr; } .decision { flex-direction:column; } }
+</style>
+
+<div class="lead">
+  <h2>最终交互骨架：多对话 + 两层记忆 + Agent 运行反馈</h2>
+  <p class="subtitle">对话负责交互，Context 负责复用，Workflow 负责 FSM。Web 只把两层记忆和局部对话历史组装给 Workflow，不把 Conversation 或 Checkpoint 伪装成额外记忆层。</p>
+</div>
+
+<div class="memory-flow">
+  <section class="source"><div><strong>Input + Conversation</strong><p>当前用户输入、局部对话历史和 Workflow 输出，为两类记忆提取提供证据。</p></div></section>
+  <div class="arrow">→</div>
+  <div class="layers">
+    <section class="layer"><div class="layer-head"><strong>用户记忆</strong><span class="scope">跨所有情景</span></div><div class="prompt">“是对用户的建模，能揭示用户的习惯、特点、taste”</div><small>例如：偏好直接讨论产品原则；不喜欢人为状态机操作。</small></section>
+    <section class="layer"><div class="layer-head"><strong>情景记忆</strong><span class="scope">仅当前 Context</span></div><div class="prompt">“是对本情景的建模，是本情景的本质信息；对之后处理具体问题有持续性帮助或约束”</div><small>例如：本情景中 Stage 只是 Workflow 的只读投影。</small></section>
+  </div>
+</div>
+
+<div class="section-title"><div><h3>桌面端主界面</h3></div><p>对话始终是主轴；记忆默认展示“本情景”，可切换“关于你”</p></div>
+<div class="desk">
+  <header class="top"><span>Native Workflow <small>交互与记忆工作台</small></span><span>● 已同步　版本</span></header>
+  <aside class="nav"><div class="nav-head"><span>情景</span><span>＋</span></div><div class="context on"><strong>Workflow 输入入口设计</strong><small>情景记忆 5 · 对话 3</small></div><div class="context"><strong>发布流程复核</strong><small>情景记忆 8 · 对话 2</small></div><div class="new-context">直接输入新问题</div></aside>
+  <main class="conversation"><header class="conv-head"><div><h3>Workflow 输入入口设计</h3><small>路线 1 · 当前版本 06</small></div><div class="conv-switch"><span class="switch-button">主对话⌄</span><span class="new-button">＋</span><div class="switch-menu"><div class="switch-title">本情景的对话</div><div class="thread on"><strong>主对话</strong><small>刚刚 · 当前路线</small></div><div class="thread"><strong>Branch 语义</strong><small>12 分钟前 · 当前路线</small></div><div class="thread"><strong>Stage 动态适配</strong><small>25 分钟前 · 当前路线</small></div><div class="thread-new">＋ 开始新对话</div></div></div></header><div class="timeline"><div class="msg me">记忆应该分成用户记忆和情景记忆。</div><div class="msg">明白。我会用两个明确的提取目标分别建模，并保留来源、时间、版本和影响范围。</div><div class="run"><i></i><span>Workflow 正在更新记忆与状态投影</span></div><div class="artifact"><strong>成果已更新</strong>核心输入模型 · 版本 06</div></div><div class="composer"><div>继续输入问题、材料或指令…</div><div class="composer-foot"><span>附件　/　快捷意图</span><b>发送</b></div></div></main>
+  <aside class="side"><div class="side-tabs"><span class="on">记忆</span><span>成果</span><span>运行</span></div><div class="memory-scope-tabs"><span class="on">本情景 · 5</span><span>关于你 · 3</span></div><div class="memory-card"><strong>Stage 是 Workflow 的只读投影</strong><p>Web 不通过 Stage 控制输入或状态。</p><div class="meta"><span>来源：主对话</span><span>v3 · 刚刚</span></div><div class="impact">影响范围：当前情景的全部路线与对话</div></div><div class="memory-card"><strong>Stage 数量必须动态适配</strong><p>允许 0、少量或大量 Stage。</p><div class="meta"><span>来源：Stage 动态适配</span><span>v1 · 25 分钟前</span></div><div class="impact">影响范围：当前情景</div></div><div class="manage">管理全部情景记忆</div></aside>
+</div>
+
+<div class="section-title"><div><h3>多对话规则</h3></div><p>保留能力，但从不成为首次输入门槛</p></div>
+<table class="placement">
+  <thead><tr><th>场景</th><th>系统行为</th><th>记忆组装</th></tr></thead>
+  <tbody><tr><td>首次进入、没有对话</td><td>直接显示虚拟主对话与输入框；首次发送静默创建</td><td>用户记忆 + 自动建立的情景记忆</td></tr><tr><td>点击“＋”开始新对话</td><td>立即进入空对话，不询问标题；首轮后由 Agent 自动命名</td><td>用户记忆 + 情景记忆 + 新对话局部历史</td></tr><tr><td>切换已有对话</td><td>恢复该对话的局部历史与草稿</td><td>共享两层记忆，隔离局部消息</td></tr><tr><td>从历史 Checkpoint 输入</td><td>自动创建新路线与新对话，记录来源</td><td>使用分叉锚点与可用公共记忆执行 Workflow</td></tr></tbody>
+</table>
+
+<div class="section-title"><div><h3>Agent / Workflow 反馈</h3></div><p>反馈嵌入对话因果链，不另建控制台作为主入口</p></div>
+<div class="feedback-grid">
+  <div class="feedback"><strong>执行中</strong><p>在对话中显示简洁运行状态；有 Stage Projection 时可显示当前投影，但不能操作。</p><div class="mini">● Workflow 正在执行<br>当前投影：动态标签</div></div>
+  <div class="feedback"><strong>需要用户补充</strong><p>Workflow Interrupt 作为内联卡片出现，输入框进入对应回复模式。</p><div class="mini warn">需要确认：这条偏好是否应进入用户记忆？</div></div>
+  <div class="feedback"><strong>失败与恢复</strong><p>错误贴近触发它的 Input；保留原文和草稿，提供重试。</p><div class="mini error">执行失败 · 输入已保留<br>重试</div></div>
+  <div class="feedback"><strong>成果与状态变化</strong><p>先在对话中显示因果事件，同时同步到成果和运行侧栏。</p><div class="mini art">成果已更新 · 版本 06<br>Workflow 投影已变化</div></div>
+</div>
+
+<div class="section-title"><div><h3>内容放置原则</h3></div></div>
+<table class="placement">
+  <thead><tr><th>始终常驻</th><th>二级但可见</th><th>抽屉 / 详情页</th></tr></thead>
+  <tbody><tr><td>当前 Context、当前对话、消息流、输入框、执行状态</td><td>桌面端双层记忆摘要、成果数量、Workflow 状态投影</td><td>移动端记忆/成果/运行侧层、完整对话管理、版本归档、记忆来源与版本详情</td></tr></tbody>
+</table>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-conversation-memory-feedback" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可最终交互骨架</h3><p>可以整理为正式产品/UI 设计文档。</p></div></div>
+  <div class="option" data-choice="revise-conversation-memory-feedback" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要继续调整</h3><p>指出多对话、记忆或运行反馈中的问题。</p></div></div>
+</div>

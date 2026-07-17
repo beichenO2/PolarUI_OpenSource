@@ -4,13 +4,14 @@ export class DomainApiError extends Error {
   }
 }
 
+export type PublicScopeStatus = 'initializing' | 'active' | 'archived';
 export type StageStatus = 'not_started' | 'active' | 'completed';
-export type ThreadStatus = 'active' | 'archived';
+export type ThreadStatus = PublicScopeStatus;
 
 export interface WorkflowContext {
   id: string;
   title: string;
-  status: 'active' | 'archived';
+  status: PublicScopeStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,7 +25,7 @@ export interface WorkflowRoute {
     routeId: string;
     routeName: string;
     version: number;
-    stageKey: string;
+    stageKey: string | null;
   } | null;
   headCheckpointId: string;
   createdAt: string;
@@ -37,7 +38,27 @@ export interface StageProjection {
   status: StageStatus;
   internalState: string;
   label: string;
-  componentKey: string;
+}
+
+export interface StageProjectionSnapshot {
+  revision: string;
+  items: Array<{
+    key: string;
+    label: string;
+    status: string;
+    checkpointId?: string;
+    summary?: string;
+  }>;
+}
+
+export interface CheckpointArtifact {
+  id: string;
+  stage_key: string | null;
+  filename: string;
+  media_type: string;
+  byte_size: number;
+  sha256: string;
+  created_at: string;
 }
 
 export interface WorkflowCheckpoint {
@@ -46,19 +67,14 @@ export interface WorkflowCheckpoint {
   routeId: string;
   parentCheckpointId: string | null;
   version: number;
-  stageKey: string;
+  stageKey: string | null;
   reason: 'bootstrap' | 'branch' | 'workflow_action';
   snapshot: {
-    stages: Array<{ stage_key: string; status: StageStatus; internal_state: string }>;
-    artifacts?: Array<{
-      id: string;
-      stage_key: string;
-      filename: string;
-      media_type: string;
-      byte_size: number;
-      sha256: string;
-      created_at: string;
-    }>;
+    workflowState: Record<string, unknown>;
+    stageProjection?: StageProjectionSnapshot;
+    memoryReferences: Array<{ memoryId: string; version: number }>;
+    artifacts: CheckpointArtifact[];
+    stages?: Array<{ stage_key: string; status: StageStatus; internal_state: string }>;
   };
   createdAt: string;
 }
@@ -74,6 +90,18 @@ export interface WorkflowThread {
   updatedAt: string;
 }
 
+export interface WorkflowConversation {
+  id: string;
+  contextId: string;
+  routeId: string;
+  title: string;
+  titleSource: 'agent' | 'user';
+  isPrimary: boolean;
+  status: PublicScopeStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ContextWorkspace {
   context: WorkflowContext;
   routes: WorkflowRoute[];
@@ -82,12 +110,13 @@ export interface ContextWorkspace {
 export interface RouteWorkspace {
   context: WorkflowContext;
   route: WorkflowRoute;
-  stages: StageProjection[];
   checkpoints: WorkflowCheckpoint[];
-  threads: WorkflowThread[];
-  selectedStageKey: string;
+  conversations: WorkflowConversation[];
   selectedCheckpoint: WorkflowCheckpoint;
+  headCheckpoint: WorkflowCheckpoint;
   isHistorical: boolean;
+  artifacts: CheckpointArtifact[];
+  stageProjection?: StageProjectionSnapshot;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -112,13 +141,31 @@ export const createContext = (title: string) => request<{
 export const getContextWorkspace = (contextId: string) =>
   request<ContextWorkspace>(`/api/contexts/${encodeURIComponent(contextId)}/workspace`);
 
-export function getRouteWorkspace(routeId: string, stageKey: string) {
-  const query = new URLSearchParams({ stage: stageKey });
-  return request<RouteWorkspace>(
-    `/api/routes/${encodeURIComponent(routeId)}/workspace?${query.toString()}`,
+export const getRouteWorkspace = (routeId: string, checkpointId?: string) =>
+  request<RouteWorkspace>(
+    `/api/routes/${encodeURIComponent(routeId)}/workspace${
+      checkpointId ? `?checkpoint=${encodeURIComponent(checkpointId)}` : ''
+    }`,
   );
-}
 
+export const renameContext = (contextId: string, input: { title: string }) =>
+  request<WorkflowContext>(`/api/contexts/${encodeURIComponent(contextId)}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  });
+
+export const createConversation = (routeId: string) =>
+  request<WorkflowConversation>(`/api/routes/${encodeURIComponent(routeId)}/conversations`, {
+    method: 'POST', body: '{}',
+  });
+
+export const updateConversation = (
+  conversationId: string,
+  input: { title?: string; status?: 'active' | 'archived' },
+) => request<WorkflowConversation>(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+  method: 'PATCH', body: JSON.stringify(input),
+});
+
+/** @deprecated Transitional Stage/Thread client retained until Task 7 replaces App state. */
 export const createThread = (routeId: string, input: { stageKey: string; title: string }) =>
   request<WorkflowThread>(`/api/routes/${encodeURIComponent(routeId)}/threads`, {
     method: 'POST', body: JSON.stringify(input),

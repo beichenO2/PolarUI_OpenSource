@@ -310,3 +310,281 @@ describe('workflow bridge', () => {
     expect(JSON.stringify(error)).not.toContain('super-secret');
   });
 });
+
+const stageIndependentManifest = {
+  contract_version: '1.0',
+  product: { id: 'demo', name: 'Demo', context_label: '项目', route_label: '路线' },
+  workflow: { id: 'demo-flow', endpoint: 'http://workflow.test/run' },
+  intents: [{ key: 'summarize', label: '总结当前结论' }],
+} as ProductManifest;
+
+const v2BaseInput = {
+  commandId: baseInput.commandId,
+  userId: baseInput.userId,
+  contextId: baseInput.contextId,
+  routeId: baseInput.routeId,
+  conversationId: baseInput.threadId,
+  baseCheckpoint: {
+    id: '10000000-0000-4000-8000-000000000006',
+    version: 2,
+    snapshot: {
+      workflowState: { fsm: 'understand' },
+      stageProjection: {
+        revision: 'workflow-v6',
+        items: [{ key: 'understand', label: '理解问题', status: 'active' }],
+      },
+      memoryReferences: [],
+      artifacts: [],
+    },
+  },
+  commandInput: { type: 'message' as const, content: 'help me decide' },
+  attachments: ['10000000-0000-4000-8000-000000000007'],
+  history: baseInput.history,
+  memory: {
+    user: [{ key: 'tone', value: 'concise', version: 3 }],
+    context: [{ key: 'goal', value: 'ship', version: 2 }],
+  },
+};
+
+function workflowV2Response(overrides: Record<string, unknown> = {}) {
+  return {
+    contract_version: '2.0',
+    reply_events: [{ type: 'message', content: 'done' }],
+    checkpoint: { workflow_state: { fsm: 'deliver' } },
+    memory_updates: [],
+    artifact_proposals: [],
+    interrupt: null,
+    diagnostics: {},
+    ...overrides,
+  };
+}
+
+function setupV2(fetchImpl = vi.fn(async () => response(workflowV2Response()))) {
+  return {
+    fetchImpl,
+    bridge: createWorkflowBridge({
+      endpoint: 'http://workflow.test/run/demo/flow.json',
+      workflowId: 'demo-flow',
+      manifest: stageIndependentManifest,
+      timeoutMs: 500,
+      fetch: fetchImpl as typeof fetch,
+    }),
+  };
+}
+
+function projectionItems(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    key: `phase_${index}`,
+    label: `阶段 ${index + 1}`,
+    status: index === 0 ? 'waiting-for-evidence' : `workflow-status-${index}`,
+    ...(index === 0 ? { checkpoint_id: v2BaseInput.baseCheckpoint.id } : {}),
+    ...(index === 1 ? { summary: '由 Workflow 自行定义的状态' } : {}),
+  }));
+}
+
+describe('workflow bridge v2', () => {
+  it('sends the Stage-independent v2 Command envelope without stage_key or setStage', async () => {
+    const { bridge, fetchImpl } = setupV2();
+
+    await bridge.run(v2BaseInput);
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    expect(body).toEqual({
+      contract_version: '2.0',
+      command: {
+        id: v2BaseInput.commandId,
+        context_id: v2BaseInput.contextId,
+        route_id: v2BaseInput.routeId,
+        conversation_id: v2BaseInput.conversationId,
+        base_checkpoint_id: v2BaseInput.baseCheckpoint.id,
+        expected_checkpoint_version: v2BaseInput.baseCheckpoint.version,
+        input: v2BaseInput.commandInput,
+        attachments: v2BaseInput.attachments,
+      },
+      history: v2BaseInput.history,
+      memory: v2BaseInput.memory,
+      checkpoint_snapshot: v2BaseInput.baseCheckpoint.snapshot,
+      workflow_id: 'demo-flow',
+    });
+    expect(JSON.stringify(body)).not.toContain('stage_key');
+    expect(JSON.stringify(body)).not.toContain('setStage');
+  });
+
+  it('accepts a normal message that moves the Workflow-owned projection and normalizes the full result', async () => {
+    const stageProjection = {
+      revision: 'workflow-v7',
+      items: [
+        {
+          key: 'understand', label: '理解问题', status: 'completed',
+          checkpoint_id: v2BaseInput.baseCheckpoint.id,
+        },
+        { key: 'deliver', label: '交付', status: 'active', summary: '正在生成结果' },
+      ],
+    };
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response({
+      reply_events: [
+        { type: 'delta', content: '正在生成' },
+        { type: 'message', content: '结果已生成' },
+      ],
+      checkpoint: { workflow_state: { fsm: 'deliver', iteration: 7 } },
+      stage_projection: stageProjection,
+      context_title: '发布计划',
+      conversation_title: '首轮交付',
+      memory_updates: [{ scope: 'context', key: 'goal', value: 'ship' }],
+      diagnostics: { workflow_revision: 'workflow-v7', duration_ms: 31 },
+    }))));
+
+    const result = await bridge.run(v2BaseInput);
+
+    expect(result).toMatchObject({
+      replyEvents: [
+        { type: 'delta', content: '正在生成' },
+        { type: 'message', content: '结果已生成' },
+      ],
+      checkpoint: { workflowState: { fsm: 'deliver', iteration: 7 } },
+      stageProjection: {
+        revision: 'workflow-v7',
+        items: [
+          {
+            key: 'understand', label: '理解问题', status: 'completed',
+            checkpointId: v2BaseInput.baseCheckpoint.id,
+          },
+          { key: 'deliver', label: '交付', status: 'active', summary: '正在生成结果' },
+        ],
+      },
+      contextTitle: '发布计划',
+      conversationTitle: '首轮交付',
+      memoryUpdates: [{ scope: 'context', key: 'goal', value: 'ship' }],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: { workflow_revision: 'workflow-v7', duration_ms: 31 },
+    });
+  });
+
+  it.each([0, 1, 4, 7])('accepts a self-describing projection with %i items', async (count) => {
+    const items = projectionItems(count);
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response({
+      stage_projection: { revision: 'workflow-v1', items },
+    }))));
+
+    await expect(bridge.run({
+      ...v2BaseInput,
+      baseCheckpoint: {
+        ...v2BaseInput.baseCheckpoint,
+        snapshot: {
+          ...v2BaseInput.baseCheckpoint.snapshot,
+          stageProjection: { revision: 'workflow-v99', items: [] },
+        },
+      },
+    })).resolves.toMatchObject({
+      stageProjection: {
+        revision: 'workflow-v1',
+        items: items.map((item) => ({
+          key: item.key,
+          label: item.label,
+          status: item.status,
+          ...('checkpoint_id' in item ? { checkpointId: item.checkpoint_id } : {}),
+          ...('summary' in item ? { summary: item.summary } : {}),
+        })),
+      },
+    });
+  });
+
+  it('passes a named intent to Workflow without consulting any Stage definition', async () => {
+    const { bridge, fetchImpl } = setupV2(vi.fn(async () => response(workflowV2Response({
+      stage_projection: {
+        revision: 'workflow-v8',
+        items: [{ key: 'done', label: '已总结', status: 'workflow-complete' }],
+      },
+    }))));
+
+    await expect(bridge.run({
+      ...v2BaseInput,
+      commandInput: { type: 'named_intent', key: 'summarize' },
+    })).resolves.toMatchObject({
+      stageProjection: {
+        revision: 'workflow-v8',
+        items: [{ key: 'done', label: '已总结', status: 'workflow-complete' }],
+      },
+    });
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    expect(body.command.input).toEqual({ type: 'named_intent', key: 'summarize' });
+    expect(JSON.stringify(body)).not.toContain('stage_key');
+  });
+
+  it('accepts an interrupt-only result with no synthetic reply event', async () => {
+    const cursor = { kind: 'confirmation', token: 'private-cursor' };
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response({
+      reply_events: [],
+      interrupt: { prompt: '请确认高影响变更', cursor },
+    }))));
+
+    await expect(bridge.run(v2BaseInput)).resolves.toMatchObject({
+      replyEvents: [],
+      interrupt: { prompt: '请确认高影响变更', cursor },
+      checkpoint: { workflowState: { fsm: 'deliver' } },
+    });
+  });
+
+  it.each([
+    ['a memory update with no value', { memory_updates: [{ scope: 'context', key: 'goal' }] }],
+    ['an interrupt with no private cursor', { interrupt: { prompt: '请确认' } }],
+    ['neither reply events nor an interrupt', { reply_events: [], interrupt: null }],
+  ])('rejects %s', async (_label, overrides) => {
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response(overrides))));
+
+    await expect(bridge.run(v2BaseInput)).rejects.toEqual(
+      expect.objectContaining({ code: 'WORKFLOW_INVALID_RESPONSE' }),
+    );
+  });
+
+  it.each([
+    ['duplicate keys', {
+      revision: 'workflow-v7',
+      items: [
+        { key: 'same', label: '一', status: 'active' },
+        { key: 'same', label: '二', status: 'queued' },
+      ],
+    }],
+    ['missing label', {
+      revision: 'workflow-v7',
+      items: [{ key: 'missing_label', status: 'active' }],
+    }],
+    ['invalid checkpoint id', {
+      revision: 'workflow-v7',
+      items: [{ key: 'bad_checkpoint', label: '坏锚点', status: 'active', checkpoint_id: 'not-a-uuid' }],
+    }],
+    ['more than 1000 items', {
+      revision: 'workflow-v7',
+      items: projectionItems(1001),
+    }],
+  ])('rejects malformed projections with %s', async (_label, stageProjection) => {
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response({
+      stage_projection: stageProjection,
+    }))));
+
+    await expect(bridge.run(v2BaseInput)).rejects.toEqual(
+      expect.objectContaining({ code: 'WORKFLOW_INVALID_RESPONSE' }),
+    );
+  });
+
+  it('returns only allowlisted public diagnostics', async () => {
+    const { bridge } = setupV2(vi.fn(async () => response(workflowV2Response({
+      diagnostics: {
+        workflow_revision: 'workflow-v7',
+        duration_ms: 31,
+        endpoint: 'http://private.workflow/run',
+        token: 'super-secret',
+        stack: 'private stack',
+        cursor: { private: true },
+      },
+    }))));
+
+    const result = await bridge.run(v2BaseInput);
+
+    expect(result.diagnostics).toEqual({ workflow_revision: 'workflow-v7', duration_ms: 31 });
+    expect(JSON.stringify(result)).not.toContain('private.workflow');
+    expect(JSON.stringify(result)).not.toContain('super-secret');
+    expect(JSON.stringify(result)).not.toContain('private stack');
+  });
+});

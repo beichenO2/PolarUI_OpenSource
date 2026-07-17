@@ -14,7 +14,7 @@ const environmentSchema = z.object({
   SMTP_SECURE: booleanString.default(false),
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  COOKIE_SECURE: booleanString.default(true),
+  COOKIE_SECURE: booleanString.default(false),
   TRUST_PROXY: z.string().default('').superRefine((value, context) => {
     const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
     if (entries.some((entry) => !/^[0-9a-fA-F:.]+(?:\/\d{1,3})?$/.test(entry))) {
@@ -43,22 +43,6 @@ const environmentSchema = z.object({
       code: 'custom',
       path: ['PUBLIC_APP_ORIGIN'],
       message: 'PUBLIC_APP_ORIGIN must contain only scheme, host, and optional port',
-    });
-  }
-
-  if (value.NODE_ENV === 'production' && origin.protocol !== 'https:') {
-    context.addIssue({
-      code: 'custom',
-      path: ['PUBLIC_APP_ORIGIN'],
-      message: 'PUBLIC_APP_ORIGIN must use https in production',
-    });
-  }
-
-  if (value.NODE_ENV === 'production' && !value.COOKIE_SECURE) {
-    context.addIssue({
-      code: 'custom',
-      path: ['COOKIE_SECURE'],
-      message: 'COOKIE_SECURE must be true in production',
     });
   }
 

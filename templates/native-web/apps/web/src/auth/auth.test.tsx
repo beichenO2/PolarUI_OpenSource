@@ -15,6 +15,15 @@ const manifest: PublicProductManifest = {
   ],
 };
 
+const demoManifest = {
+  ...manifest,
+  demo_login: {
+    email: 'demo@native-web.test',
+    username: 'demo',
+    password: 'Demo-Workflow-2026!',
+  },
+} as PublicProductManifest;
+
 const user = { id: 'user-1', email: 'reader@example.test', username: 'reader' };
 const context = {
   id: '20000000-0000-4000-8000-000000000001', title: 'Research', status: 'active',
@@ -69,6 +78,15 @@ describe('native identity UI', () => {
     expect(await screen.findByRole('heading', { name: '重新进入工作区' })).toBeInTheDocument();
     expect(screen.getByLabelText('邮箱或用户名')).toHaveAttribute('autocomplete', 'username');
     expect(localStorage.getItem('polar-native:identity-demo:return-path')).toBe('/stages/discover?thread=branch-a');
+  });
+
+  it('prefills the configured demo account so login is one click', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({ error: { code: 'UNAUTHENTICATED' } }, 401)));
+
+    render(<AuthGate manifest={demoManifest} />);
+
+    expect(await screen.findByLabelText('邮箱或用户名')).toHaveValue('demo');
+    expect(screen.getByLabelText('密码')).toHaveValue('Demo-Workflow-2026!');
   });
 
   it('registers with email, username, and password without persisting credentials', async () => {

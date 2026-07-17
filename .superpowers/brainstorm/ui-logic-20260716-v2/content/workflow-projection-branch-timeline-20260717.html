@@ -1,0 +1,109 @@
+<style>
+  .lead { max-width:950px; margin-bottom:20px; }
+  .formula { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:14px 0 25px; font-size:12px; }
+  .formula span { padding:8px 10px; border:1px solid #bdc8c2; background:#fff; color:#35433c; }
+  .formula b { color:#205844; }
+  .timeline { position:relative; padding:22px 20px 22px 86px; border:1px solid #aab5af; background:#fff; color:#24312c; overflow:hidden; }
+  .timeline::before { content:''; position:absolute; left:145px; right:55px; top:82px; height:2px; background:#86968e; }
+  .route-label { position:absolute; left:18px; font-size:10px; font-weight:700; color:#205844; }
+  .route-a { top:75px; }
+  .route-b { top:211px; }
+  .route-row { position:relative; display:grid; grid-template-columns:repeat(4,1fr); gap:24px; align-items:start; min-height:136px; margin-left:50px; }
+  .node { position:relative; z-index:2; text-align:center; font-size:9px; }
+  .dot { display:grid; place-items:center; width:34px; height:34px; margin:0 auto 7px; border:2px solid #74867d; border-radius:50%; background:#fff; font-size:8px; font-weight:700; }
+  .node.current .dot { border-color:#205844; background:#205844; color:#fff; }
+  .node.past .dot { border-color:#9c5c3e; background:#f3e7e1; color:#7c4228; }
+  .node strong { display:block; margin-bottom:3px; }
+  .node small { display:block; color:#6e7a74; line-height:1.35; }
+  .branch-line { position:absolute; left:41.5%; top:82px; width:2px; height:136px; background:#9c5c3e; transform:rotate(31deg); transform-origin:top; }
+  .branch-line::after { content:'从 K2 继续'; position:absolute; left:9px; top:57px; width:max-content; padding:3px 5px; background:#f3e7e1; color:#7c4228; font-size:8px; transform:rotate(-31deg); }
+  .route-row.b { min-height:80px; }
+  .route-row.b::before { content:''; position:absolute; left:13%; right:11%; top:17px; height:2px; background:#205844; }
+  .route-row.b .node:first-child { grid-column:2; }
+  .route-row.b .node:nth-child(2) { grid-column:3; }
+  .route-row.b .node:nth-child(3) { grid-column:4; }
+  .meaning { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px; }
+  .meaning div { padding:11px; border-top:3px solid #205844; background:#edf2ef; color:#3d4b44; font-size:10px; line-height:1.5; }
+  .meaning strong { display:block; margin-bottom:4px; }
+  .layout-title { margin:30px 0 10px; display:flex; justify-content:space-between; align-items:end; gap:12px; }
+  .layout-title p { color:#66736d; font-size:11px; }
+  .state-grid { display:grid; grid-template-columns:1fr 44px 1fr; gap:10px; align-items:stretch; }
+  .screen { border:1px solid #9eaaa4; background:#fff; color:#24312c; overflow:hidden; min-height:345px; box-shadow:0 8px 20px rgba(27,52,42,.07); }
+  .screen-head { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #ccd4cf; font-size:9px; font-weight:700; }
+  .history-banner { padding:9px 12px; background:#f3e7e1; color:#704029; border-bottom:1px solid #d5b6a7; font-size:9px; line-height:1.45; }
+  .screen-body { padding:15px; }
+  .projection-head { display:flex; justify-content:space-between; align-items:start; margin-bottom:13px; }
+  .projection-head h3 { margin:3px 0; font-size:18px; }
+  .projection-head small { color:#6f7b75; }
+  .badge { padding:5px 7px; border:1px solid #ba8c76; color:#75462f; font-size:8px; }
+  .snapshot { padding:12px; border:1px solid #c8d1cc; background:#f7f8f7; font-size:9px; line-height:1.55; }
+  .snapshot strong { display:block; margin-bottom:6px; color:#205844; }
+  .output { margin-top:9px; padding:10px; border:1px solid #c8d1cc; font-size:9px; }
+  .output strong { display:block; margin-bottom:5px; }
+  .branch-compose { margin-top:14px; padding:10px; border:1.5px solid #9c5c3e; background:#fff; color:#6d615b; font-size:9px; }
+  .branch-compose::after { content:'从这里继续'; float:right; padding:4px 7px; margin-top:-4px; background:#9c5c3e; color:#fff; font-weight:700; }
+  .arrow { display:grid; place-items:center; color:#205844; font-size:24px; font-weight:700; }
+  .new-banner { padding:9px 12px; background:#dfeae5; color:#205844; border-bottom:1px solid #b8ccc2; font-size:9px; }
+  .chat-row { padding:8px 9px; margin:7px 0; background:#edf1ef; font-size:9px; line-height:1.45; }
+  .chat-row.me { margin-left:18%; background:#dce9e3; }
+  .projection-event { margin:11px auto; width:max-content; max-width:90%; padding:5px 8px; background:#f3f5f4; color:#69756f; font-size:8px; text-align:center; }
+  .normal-compose { margin-top:20px; padding:10px; border:1.5px solid #205844; color:#68746e; font-size:9px; }
+  .normal-compose::after { content:'发送'; float:right; color:#205844; font-weight:700; }
+  .rules { margin-top:22px; border-collapse:collapse; width:100%; font-size:11px; }
+  .rules th, .rules td { padding:9px 10px; text-align:left; border-bottom:1px solid #d5dcd8; }
+  .rules th { color:#65716b; font-size:10px; }
+  .yes { color:#205844; font-weight:700; }
+  .no { color:#874a31; font-weight:700; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media(max-width:900px) { .meaning { grid-template-columns:1fr 1fr; } .state-grid { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); height:36px; } }
+  @media(max-width:620px) { .timeline { padding-left:20px; overflow-x:auto; } .timeline > * { min-width:640px; } .meaning { grid-template-columns:1fr; } .decision { flex-direction:column; } }
+</style>
+
+<div class="lead">
+  <h2>Branch 基石：Stage 是 Checkpoint 投影，修改历史就是新时间线</h2>
+  <p class="subtitle">Workflow 状态沿 Checkpoint 追加。Stage 只帮助人理解某个 Checkpoint；真正的分叉锚点永远是不可变的 Checkpoint，而不是 Stage 名称。</p>
+</div>
+
+<div class="formula"><span>Workflow</span><b>→</b><span>Checkpoint 链</span><b>→</b><span>Stage Projection</span><b>→</b><span>历史 Input</span><b>→</b><span>新 Route / 新时间线</span></div>
+
+<div class="timeline">
+  <div class="route-label route-a">路线 A</div>
+  <div class="route-row">
+    <div class="node"><div class="dot">K1</div><strong>版本 01</strong><small>投影：明确项目</small></div>
+    <div class="node past"><div class="dot">K2</div><strong>版本 02</strong><small>投影：方案确认<br>用户回到这里</small></div>
+    <div class="node"><div class="dot">K3</div><strong>版本 03</strong><small>投影：推进实现</small></div>
+    <div class="node current"><div class="dot">K4</div><strong>版本 04</strong><small>投影：复核交付<br>当前路线头</small></div>
+  </div>
+  <div class="branch-line"></div>
+  <div class="route-label route-b">路线 B</div>
+  <div class="route-row b">
+    <div class="node current"><div class="dot">B3</div><strong>新版本 03</strong><small>Agent 重新执行</small></div>
+    <div class="node"><div class="dot">B4</div><strong>新版本 04</strong><small>新的状态演进</small></div>
+    <div class="node"><div class="dot">…</div><strong>继续</strong><small>独立时间线</small></div>
+  </div>
+</div>
+
+<div class="meaning">
+  <div><strong>浏览不分叉</strong>点击过去的 Stage Projection，只进入对应 Checkpoint 的只读快照。</div>
+  <div><strong>Input 才分叉</strong>在历史快照上发送任何 Workflow Input，先建立新 Route，再执行 Agent。</div>
+  <div><strong>历史不改写</strong>路线 A 的 K1–K4 永远保持原样，成果和状态都不可覆盖。</div>
+  <div><strong>路线地位相同</strong>路线 B 不是特殊“派生路线”，只保留来源 K2 作为溯源信息。</div>
+</div>
+
+<div class="layout-title"><div><h3>交互过程：历史快照 → 首条 Input → 新时间线</h3></div><p>不增加“先命名路线”的门槛</p></div>
+<div class="state-grid">
+  <section class="screen"><header class="screen-head"><span>路线 A / 版本 02</span><span>返回当前版本</span></header><div class="history-banner"><strong>正在查看历史投影</strong><br>此版本不可修改；从这里输入会创建一条新时间线，原路线不受影响。</div><div class="screen-body"><div class="projection-head"><div><small>Workflow 状态投影</small><h3>方案确认</h3><small>2026-07-15 14:20</small></div><span class="badge">只读</span></div><div class="snapshot"><strong>当时的公共记忆</strong>目标：让 Input 成为核心入口<br>约束：Stage-first 工作台</div><div class="output"><strong>当时的成果</strong>方案定义 v2</div><div class="branch-compose">把“Stage-first”约束删除，重新生成方案…</div></div></section>
+  <div class="arrow">→</div>
+  <section class="screen"><header class="screen-head"><span>新路线 / 来源：路线 A · 版本 02</span><span>版本</span></header><div class="new-banner"><strong>已从历史版本开始新时间线</strong>　路线名称由 Agent 自动生成，稍后可改名。</div><div class="screen-body"><div class="chat-row me">把“Stage-first”约束删除，重新生成方案。</div><div class="chat-row">已基于版本 02 重新执行。Stage 仅作为 Workflow 投影，Web UI 改为交互与记忆工作台。</div><div class="projection-event">Workflow 生成新 Checkpoint B3 · 状态投影已更新</div><div class="normal-compose">继续输入…</div></div></section>
+</div>
+
+<table class="rules">
+  <thead><tr><th>用户行为</th><th>是否 Branch</th><th>系统行为</th></tr></thead>
+  <tbody><tr><td>查看过去 Stage、成果或记忆</td><td class="no">否</td><td>打开对应 Checkpoint 的只读投影</td></tr><tr><td>下载、复制历史成果</td><td class="no">否</td><td>保持原路线不变</td></tr><tr><td>在历史投影中发送 Input</td><td class="yes">是</td><td>从该 Checkpoint 自动创建新 Route，再交给 Workflow 执行</td></tr><tr><td>在当前路线头发送 Input</td><td class="no">否</td><td>沿当前 Route 追加新 Checkpoint</td></tr></tbody>
+</table>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-projection-branch" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可这套 Branch 语义</h3><p>历史只读；历史 Input 自动创建同等地位的新时间线。</p></div></div>
+  <div class="option" data-choice="revise-projection-branch" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要调整分叉时机</h3><p>指出哪些历史操作应当或不应当创建新时间线。</p></div></div>
+</div>

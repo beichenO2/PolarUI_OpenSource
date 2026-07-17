@@ -32,7 +32,7 @@ export function AuthGate({ manifest }: { manifest: PublicProductManifest }) {
     if (path === '/verify-email' && verificationEmail) {
       return <VerifyEmailPage email={verificationEmail} onVerified={() => navigate('/login')} />;
     }
-    return <LoginPage onNavigate={navigate} onLogin={(nextUser) => {
+    return <LoginPage demoLogin={manifest.demo_login} onNavigate={navigate} onLogin={(nextUser) => {
       setUser(nextUser); navigate(takeReturnPath(manifest.product.id));
     }} />;
   }

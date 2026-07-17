@@ -477,6 +477,7 @@ test('native deployment env forwards the workflow runtime override and timeout',
     WORKFLOW_TIMEOUT_MS: '1000',
   }, 13930);
   const env = readFileSync(plan.envFilePath, 'utf8');
+  assert.match(env, /^COOKIE_SECURE=false$/m);
   assert.match(env, /^WORKFLOW_ENDPOINT_OVERRIDE=http:\/\/host\.docker\.internal:13925\/run$/m);
   assert.match(env, /^WORKFLOW_TIMEOUT_MS=1000$/m);
   rmSync(root, { recursive: true, force: true });

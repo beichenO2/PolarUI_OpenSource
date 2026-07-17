@@ -1,0 +1,107 @@
+<style>
+  .lead { max-width:960px; margin-bottom:22px; }
+  .contract { display:grid; grid-template-columns:1fr 50px 1fr; gap:10px; align-items:stretch; }
+  .box { padding:14px; border:1px solid #aab5af; background:#fff; color:#2f3d36; }
+  .box h3 { margin:0 0 10px; font-size:14px; }
+  .code { margin:0; padding:12px; background:#edf2ef; color:#314039; font:10px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; }
+  .arrow { display:grid; place-items:center; color:#205844; font-size:24px; font-weight:700; }
+  .box ul { margin:0 0 0 18px; color:#526159; font-size:10px; line-height:1.7; }
+  .section-title { margin:28px 0 10px; display:flex; justify-content:space-between; align-items:end; gap:12px; }
+  .section-title p { color:#67736d; font-size:11px; }
+  .cases { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .case { border:1px solid #aab5af; background:#fff; color:#24312c; overflow:hidden; }
+  .case-head { display:flex; justify-content:space-between; padding:10px 11px; background:#e8eeeb; border-bottom:1px solid #ccd4cf; font-size:10px; font-weight:700; }
+  .case-body { min-height:260px; padding:12px; }
+  .context-line { margin-bottom:9px; color:#68756e; font-size:8px; }
+  .run-panel { padding:10px; border:1px solid #c6d0cb; background:#f7f8f7; }
+  .run-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:9px; }
+  .run-head strong { color:#205844; }
+  .empty-stage { padding:36px 10px; text-align:center; color:#66736d; font-size:9px; line-height:1.55; }
+  .single { display:flex; align-items:center; gap:8px; padding:10px; border-left:3px solid #205844; background:#e2ece7; font-size:9px; }
+  .single i, .stage i { width:7px; height:7px; border-radius:50%; background:#205844; flex:0 0 auto; }
+  .stage-list { position:relative; }
+  .stage-list::before { content:''; position:absolute; left:8px; top:9px; bottom:9px; width:1px; background:#aab7b0; }
+  .stage { position:relative; display:grid; grid-template-columns:17px 1fr auto; align-items:center; gap:5px; min-height:34px; padding:4px 0; font-size:8px; }
+  .stage i { position:relative; z-index:1; width:7px; height:7px; margin-left:5px; background:#9aa8a1; }
+  .stage.done i { background:#205844; }
+  .stage.now { color:#205844; font-weight:700; }
+  .stage.now i { width:11px; height:11px; margin-left:3px; border:2px solid #205844; background:#fff; }
+  .stage small { color:#7a8580; }
+  .compact { display:grid; gap:7px; }
+  .current-card { padding:10px; border:1.5px solid #205844; background:#e2ece7; }
+  .current-card small { display:block; margin-bottom:3px; color:#637068; font-size:8px; }
+  .current-card strong { font-size:11px; }
+  .summary-row { display:flex; justify-content:space-between; align-items:center; padding:7px 8px; border:1px solid #c6d0cb; background:#fff; font-size:8px; }
+  .mini-dots { display:flex; gap:3px; align-items:center; }
+  .mini-dots i { width:5px; height:5px; border-radius:50%; background:#aab5af; }
+  .mini-dots i.done { background:#205844; }
+  .mini-dots i.now { width:8px; height:8px; border:2px solid #205844; background:#fff; }
+  .view-all { padding:7px; border:1px solid #b8c3bd; text-align:center; color:#205844; font-size:8px; font-weight:700; }
+  .case-note { margin-top:10px; color:#66736d; font-size:8px; line-height:1.45; }
+  .scale-table { margin-top:20px; width:100%; border-collapse:collapse; font-size:11px; }
+  .scale-table th, .scale-table td { padding:9px 10px; border-bottom:1px solid #d6ddd9; text-align:left; }
+  .scale-table th { color:#65716b; font-size:10px; }
+  .history { display:grid; grid-template-columns:1fr 60px 1fr; align-items:center; gap:10px; margin-top:22px; }
+  .snapshot { padding:13px; border:1px solid #c6d0cb; background:#fff; color:#3d4b44; font-size:10px; }
+  .snapshot strong { display:block; margin-bottom:7px; color:#205844; }
+  .snapshot .strip { display:flex; gap:4px; flex-wrap:wrap; }
+  .snapshot .strip span { padding:5px 6px; border:1px solid #bdc8c2; }
+  .history .arrow { font-size:11px; text-align:center; }
+  .history .arrow::after { content:'定义变化'; }
+  .principles { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:22px; }
+  .principles div { padding:11px; border-top:3px solid #205844; background:#edf2ef; color:#3d4b44; font-size:10px; line-height:1.5; }
+  .principles strong { display:block; margin-bottom:4px; }
+  .decision { display:flex; gap:12px; margin-top:22px; }
+  .decision .option { flex:1; }
+  @media(max-width:900px) { .cases { grid-template-columns:1fr; } .case-body { min-height:auto; } .principles { grid-template-columns:1fr 1fr; } }
+  @media(max-width:620px) { .contract, .history { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); height:34px; } .history .arrow::after { content:'定义变化 ↓'; } .principles { grid-template-columns:1fr; } .decision { flex-direction:column; } }
+</style>
+
+<div class="lead">
+  <h2>Stage Projection 必须对 Workflow 定义零假设</h2>
+  <p class="subtitle">Web 不知道应该有几个 Stage，也不知道它们叫什么。它只接收一个带顺序、状态与历史锚点的投影数组，并按密度自动选择展示方式。</p>
+</div>
+
+<div class="contract">
+  <section class="box"><h3>Workflow / Bridge 返回</h3><pre class="code">stage_projection: {
+  revision: "workflow-v7",
+  items: [
+    {
+      key, label, status,
+      checkpoint_id,
+      summary?
+    }
+  ]
+}</pre></section>
+  <div class="arrow">→</div>
+  <section class="box"><h3>Web 通用渲染器只负责</h3><ul><li>保持 Workflow 给出的顺序与文字</li><li>根据 items 数量切换显示密度</li><li>当前项突出、其余项降权</li><li>历史项链接精确 checkpoint_id</li><li>不提供 setStage 或任何状态写入</li></ul></section>
+</div>
+
+<div class="section-title"><div><h3>同一个 Web，适配三种 Workflow</h3></div><p>Stage 数量不影响对话和记忆主界面</p></div>
+<div class="cases">
+  <section class="case"><header class="case-head"><span>Workflow A</span><span>0–1 个 Stage</span></header><div class="case-body"><div class="context-line">情景 / 主对话 / 运行</div><div class="run-panel"><div class="run-head"><strong>Workflow 运行</strong><span>正在执行</span></div><div class="single"><i></i><span>处理请求 <small>· 当前</small></span></div></div><div class="empty-stage">如果 items 为空，整个 Stage 区域直接隐藏。<br>只保留 Agent 运行状态，不制造空导航。</div><p class="case-note">适合一次性任务、极短流水线或不希望暴露 Stage 的 Workflow。</p></div></section>
+
+  <section class="case"><header class="case-head"><span>Workflow B</span><span>2–6 个 Stage</span></header><div class="case-body"><div class="context-line">情景 / 主对话 / 运行</div><div class="run-panel"><div class="run-head"><strong>Workflow 投影</strong><span>3 / 5</span></div><div class="stage-list"><div class="stage done"><i></i><span>接收输入</span><small>已完成</small></div><div class="stage done"><i></i><span>组织上下文</span><small>已完成</small></div><div class="stage now"><i></i><span>执行任务</span><small>当前</small></div><div class="stage"><i></i><span>验证结果</span><small>等待</small></div><div class="stage"><i></i><span>完成</span><small>等待</small></div></div></div><p class="case-note">数量少时完整展示；名称和顺序全部来自 Workflow。</p></div></section>
+
+  <section class="case"><header class="case-head"><span>Workflow C</span><span>7–30+ 个 Stage</span></header><div class="case-body"><div class="context-line">情景 / 主对话 / 运行</div><div class="run-panel"><div class="run-head"><strong>Workflow 投影</strong><span>8 / 18</span></div><div class="compact"><div class="summary-row"><span>已完成 7</span><div class="mini-dots"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i></div></div><div class="current-card"><small>当前 · 8 / 18</small><strong>Workflow 返回的当前标签</strong></div><div class="summary-row"><span>下一项</span><span>Workflow 返回的下一标签</span></div><div class="view-all">查看全部 18 个 Stage</div></div></div><p class="case-note">数量多时只常驻“当前 + 邻近 + 汇总”，完整列表进入可滚动抽屉。</p></div></section>
+</div>
+
+<table class="scale-table">
+  <thead><tr><th>投影数量</th><th>默认展示</th><th>完整历史</th></tr></thead>
+  <tbody><tr><td>0</td><td>隐藏 Stage 模块</td><td>仍可通过版本归档查看 Checkpoint</td></tr><tr><td>1</td><td>单个运行状态块</td><td>点击进入对应 Checkpoint</td></tr><tr><td>2–6</td><td>完整纵向列表</td><td>历史项直接打开只读投影</td></tr><tr><td>7+</td><td>完成数量 + 当前项 + 下一项</td><td>“查看全部”打开纵向时间线抽屉</td></tr></tbody>
+</table>
+
+<div class="section-title"><div><h3>Workflow 定义变化不会改写历史</h3></div><p>每个 Checkpoint 保存当时完整的 Stage Projection 快照</p></div>
+<div class="history"><div class="snapshot"><strong>Checkpoint K4 · workflow-v7</strong><div class="strip"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span></div></div><div class="arrow"></div><div class="snapshot"><strong>Checkpoint K5 · workflow-v8</strong><div class="strip"><span>准备</span><span>执行</span><span>完成</span></div></div></div>
+
+<div class="principles">
+  <div><strong>数量完全动态</strong>少一个、多十个都不影响页面主结构。</div>
+  <div><strong>文字完全动态</strong>Web 不内置“明确项目”等业务名称。</div>
+  <div><strong>历史自描述</strong>旧 Checkpoint 自带旧投影，不依赖当前 Workflow 定义。</div>
+  <div><strong>只读仍成立</strong>点击历史 Stage 只定位 Checkpoint；Input 才创建新时间线。</div>
+</div>
+
+<div class="decision options">
+  <div class="option" data-choice="approve-adaptive-stage-projection" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>认可这种动态适配</h3><p>Stage 为 0、少量或大量时，Web 都无需定制。</p></div></div>
+  <div class="option" data-choice="revise-adaptive-stage-projection" onclick="toggleSelect(this)"><div class="letter">↺</div><div class="content"><h3>需要调整密度规则</h3><p>指出哪种数量下应该换一种展示方式。</p></div></div>
+</div>
