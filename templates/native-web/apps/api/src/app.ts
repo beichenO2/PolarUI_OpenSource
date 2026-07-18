@@ -13,7 +13,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerCommandRoutes } from './routes/commands.js';
 import { registerDomainRoutes } from './routes/domain.js';
 import { registerAssetRoutes } from './routes/assets.js';
-import type { MemoryRepository } from './memory/repository.js';
+import type { MemoryService } from './memory/service.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import type { ArchiveRepository } from './archive/repository.js';
 import { registerArchiveRoutes } from './routes/archive.js';
@@ -27,7 +27,7 @@ export function buildApp(options: {
   commandService?: CommandService;
   commandRepository?: CommandRepository;
   assetService?: AssetService;
-  memoryRepository?: MemoryRepository;
+  memoryService?: MemoryService;
   archiveRepository?: ArchiveRepository;
   readiness?: { check(): Promise<boolean> };
 }) {
@@ -65,6 +65,10 @@ export function buildApp(options: {
     ) {
       request.log.error(error);
       return reply.code(503).send({ error: { code: 'DOMAIN_SERVICE_UNAVAILABLE' } });
+    }
+    if (request.url.startsWith('/api/memory')) {
+      request.log.error(error);
+      return reply.code(503).send({ error: { code: 'MEMORY_SERVICE_UNAVAILABLE' } });
     }
     return reply.send(error);
   });
@@ -111,11 +115,11 @@ export function buildApp(options: {
         assetService: options.assetService,
       });
     }
-    if (options.memoryRepository) {
+    if (options.memoryService) {
       app.register(registerMemoryRoutes, {
         config: options.config,
         authService: options.authService,
-        memoryRepository: options.memoryRepository,
+        memoryService: options.memoryService,
       });
     }
     if (options.archiveRepository) {

@@ -2,17 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ProductManifest } from '@polar/native-web-product-sdk';
 import type {
   WorkflowBridge,
-  WorkflowBridgeResult,
   WorkflowV2BridgeInput,
   WorkflowV2BridgeResult,
 } from './bridge.js';
 import type { AssetService } from '../assets/service.js';
+import type { MemoryRepository } from '../memory/repository.js';
+import type { MemoryUpdate } from '../memory/types.js';
 import { WorkflowBridgeError } from './bridge.js';
 import type { CommandRepository } from './repository.js';
 import { CommandRepositoryError } from './types.js';
 import type {
   CommandExecutionContext,
   FinalizeCommandInput,
+  PendingInterruptInput,
   PrepareCommandInput,
   PrepareCommandResult,
   PublicCommandInput,
@@ -84,6 +86,11 @@ type UnifiedCommandRepository = CommandRepository & {
     result: FinalizeCommandInput,
     now: Date,
   ): Promise<UnifiedCommandCommitResult>;
+  persistInterrupt(
+    commandId: string,
+    interrupt: PendingInterruptInput,
+    now: Date,
+  ): Promise<unknown>;
 };
 
 export class CommandServiceError extends Error {
@@ -93,15 +100,43 @@ export class CommandServiceError extends Error {
   }
 }
 
-function isWorkflowV2Result(result: WorkflowBridgeResult): result is WorkflowV2BridgeResult {
-  return 'replyEvents' in result;
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
-function runUnifiedBridge(
+function isWorkflowV2Result(result: unknown): result is WorkflowV2BridgeResult {
+  if (!isPlainObject(result) ||
+      !Array.isArray(result.replyEvents) ||
+      result.replyEvents.some((event) =>
+        !isPlainObject(event) ||
+        (event.type !== 'delta' && event.type !== 'message') ||
+        typeof event.content !== 'string') ||
+      !isPlainObject(result.checkpoint) ||
+      !Object.hasOwn(result.checkpoint, 'workflowState') ||
+      !isPlainObject(result.checkpoint.workflowState) ||
+      !Array.isArray(result.memoryUpdates) ||
+      !Array.isArray(result.artifactProposals) ||
+      !isPlainObject(result.diagnostics) ||
+      !Object.hasOwn(result, 'interrupt')) {
+    return false;
+  }
+  if (result.interrupt === null) return true;
+  return isPlainObject(result.interrupt) &&
+    typeof result.interrupt.prompt === 'string' &&
+    Object.hasOwn(result.interrupt, 'cursor');
+}
+
+async function runUnifiedBridge(
   bridge: WorkflowBridge,
   input: WorkflowV2BridgeInput,
-): Promise<WorkflowBridgeResult> {
-  return bridge.run(input);
+): Promise<WorkflowV2BridgeResult> {
+  const result: unknown = await bridge.run(input);
+  if (!isWorkflowV2Result(result)) {
+    throw new WorkflowBridgeError('WORKFLOW_INVALID_RESPONSE');
+  }
+  return result;
 }
 
 function replyFromEvents(
@@ -255,6 +290,7 @@ export function createCommandService(options: {
   repository: CommandRepository;
   bridge: WorkflowBridge;
   manifest: ProductManifest;
+  memoryRepository?: Pick<MemoryRepository, 'detectConflict'>;
   createId?: () => string;
   now?: () => Date;
   leaseDurationMs?: number;
@@ -405,43 +441,64 @@ export function createCommandService(options: {
           conversationId,
           baseCheckpoint: prepared.execution.baseCheckpoint,
           commandInput: prepared.input.input,
+          ...(prepared.execution.interruptCursor === undefined
+            ? {}
+            : { interruptCursor: prepared.execution.interruptCursor }),
           attachments: prepared.input.attachmentIds,
           history: prepared.execution.history,
           memory: prepared.execution.memory ?? { user: [], context: [] },
         });
-        const isV2 = isWorkflowV2Result(result);
-        const reply = isV2
-          ? replyFromEvents(result.replyEvents, result.interrupt?.prompt)
-          : result.reply;
+        const reply = replyFromEvents(result.replyEvents, result.interrupt?.prompt);
+        const memoryUpdates = result.memoryUpdates as MemoryUpdate[];
+        if (memoryUpdates.length > 0 && !options.memoryRepository) {
+          throw new WorkflowBridgeError('WORKFLOW_INVALID_RESPONSE');
+        }
+        for (const update of memoryUpdates) {
+          const conflict = await options.memoryRepository!.detectConflict({
+            userId: prepared.execution.userId,
+            contextId: prepared.execution.contextId,
+            update,
+          });
+          if (update.highImpact || conflict) {
+            await unifiedRepository.persistInterrupt(commandId, {
+              id: createId(),
+              prompt: update.confirmationPrompt?.trim() || '确认保存这项记忆更新？',
+              cursor: {
+                kind: 'memory_confirmation',
+                update,
+                current: conflict?.current,
+              },
+            }, now());
+            return;
+          }
+        }
         const committed = await unifiedRepository.finalizeCommand(commandId, {
           userMessageId: createId(),
           assistantMessageId: createId(),
           checkpointId: createId(),
           headCheckpointIdAtClaim: prepared.execution.headCheckpointId,
           reply,
-          stageSignals: isV2 ? [] : result.stageSignals,
-          workflowCursor: isV2 ? null : result.workflowCursor,
-          memoryProposals: isV2 ? [] : result.memoryProposals,
-          ...(isV2 ? {
-            workflowState: result.checkpoint.workflowState,
-            ...(result.stageProjection === undefined
-              ? {}
-              : { stageProjection: result.stageProjection }),
-            memoryUpdates: result.memoryUpdates,
-            ...(result.contextTitle === undefined ? {} : { contextTitle: result.contextTitle }),
-            ...(result.conversationTitle === undefined
-              ? {}
-              : { conversationTitle: result.conversationTitle }),
-          } : {}),
+          stageSignals: [],
+          workflowCursor: null,
+          memoryProposals: [],
+          workflowState: result.checkpoint.workflowState,
+          ...(result.stageProjection === undefined
+            ? {}
+            : { stageProjection: result.stageProjection }),
+          ...(result.contextTitle === undefined ? {} : { contextTitle: result.contextTitle }),
+          ...(result.conversationTitle === undefined
+            ? {}
+            : { conversationTitle: result.conversationTitle }),
           interrupt: result.interrupt ? {
             id: createId(),
             prompt: result.interrupt.prompt,
             cursor: result.interrupt.cursor,
           } : null,
           attachmentIds: prepared.input.attachmentIds,
+          memoryUpdates,
         }, now());
-        if (committed.status === 'succeeded' && options.assetService) {
-          for (const artifact of result.artifactProposals ?? []) {
+        if (committed.status === 'succeeded' && committed.checkpointId && options.assetService) {
+          for (const artifact of result.artifactProposals) {
             await options.assetService.saveArtifact(prepared.execution.userId, commandId, {
               contextId: prepared.execution.contextId,
               routeId: committed.routeId,

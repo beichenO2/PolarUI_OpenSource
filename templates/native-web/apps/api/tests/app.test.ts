@@ -30,7 +30,10 @@ describe('native API', () => {
   });
 
   it('rejects an invalid manifest at startup', () => {
-    expect(() => buildApp({ manifest: { ...manifest, stages: [] }, staticRoot: null })).toThrow();
+    expect(() => buildApp({
+      manifest: { ...manifest, workflow: { ...manifest.workflow, endpoint: 'not-a-url' } },
+      staticRoot: null,
+    })).toThrow();
   });
 
   it('sanitizes unexpected authentication service failures', async () => {

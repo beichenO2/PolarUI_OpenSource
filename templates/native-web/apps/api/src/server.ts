@@ -18,6 +18,7 @@ import { createAssetRepository } from './assets/repository.js';
 import { createAssetService } from './assets/service.js';
 import { createLocalObjectStore } from './assets/storage.js';
 import { createMemoryRepository } from './memory/repository.js';
+import { createMemoryService } from './memory/service.js';
 import { createArchiveRepository } from './archive/repository.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -49,12 +50,17 @@ const domainService = createDomainService({
   manifest,
 });
 const commandRepository = createCommandRepository(pool);
+const memoryRepository = createMemoryRepository(pool);
+const memoryService = createMemoryService({
+  repository: memoryRepository,
+});
 const assetService = createAssetService({
   repository: createAssetRepository(pool),
   store: createLocalObjectStore(config.objectStoreDirectory),
 });
 const commandService = createCommandService({
   repository: commandRepository,
+  memoryRepository,
   bridge: createWorkflowBridge({
     endpoint: config.workflowEndpointOverride ?? manifest.workflow.endpoint,
     workflowId: manifest.workflow.id,
@@ -75,7 +81,7 @@ const app = buildApp({
   commandService,
   commandRepository,
   assetService,
-  memoryRepository: createMemoryRepository(pool),
+  memoryService,
   archiveRepository: createArchiveRepository(pool),
   readiness: {
     async check() {

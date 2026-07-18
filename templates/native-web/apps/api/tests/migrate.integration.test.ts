@@ -46,6 +46,25 @@ async function runLegacyMigrations(pool: ReturnType<typeof createPool>) {
   }
 }
 
+async function runCoreInputMigrations(pool: ReturnType<typeof createPool>) {
+  const directory = await mkdtemp(join(tmpdir(), 'polar-native-core-input-migrations-'));
+  try {
+    await Promise.all([
+      '0001_identity.sql',
+      '0002_workflow_domain.sql',
+      '0003_workflow_commands.sql',
+      '0004_assets_memory_archive.sql',
+      '0005_core_input_memory.sql',
+    ].map((fileName) => copyFile(
+      join(migrationsDir, fileName),
+      join(directory, fileName),
+    )));
+    await runMigrations({ pool, migrationsDir: directory });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 async function createWorkflowFixture(pool: ReturnType<typeof createPool>) {
   const ids = {
     user: randomUUID(),
@@ -144,7 +163,7 @@ integrationDescribe('identity migrations', () => {
       'SELECT version, checksum FROM schema_migrations ORDER BY version',
     );
     expect(applied.rows.at(-1)).toMatchObject({
-      version: '0005_core_input_memory',
+      version: '0006_workflow_interrupt_cursor',
     });
     expect(applied.rows).toEqual([
       expect.objectContaining({
@@ -165,6 +184,10 @@ integrationDescribe('identity migrations', () => {
       }),
       expect.objectContaining({
         version: '0005_core_input_memory',
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+      expect.objectContaining({
+        version: '0006_workflow_interrupt_cursor',
         checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
       }),
     ]);
@@ -232,6 +255,29 @@ integrationDescribe('identity migrations', () => {
       [schemaName],
     );
     expect(originColumn.rows).toEqual([{ is_nullable: 'YES' }]);
+  });
+
+  it('upgrades an existing core-input schema by removing the object-only interrupt cursor constraint', async () => {
+    await runCoreInputMigrations(pool);
+
+    const before = await pool.query(
+      'SELECT 1 FROM pg_constraint ' +
+        "WHERE conrelid = 'workflow_interrupts'::regclass " +
+        "AND conname = 'workflow_interrupts_cursor_valid'",
+    );
+    expect(before.rows).toHaveLength(1);
+
+    await runMigrations({ pool, migrationsDir });
+
+    const after = await pool.query(
+      'SELECT 1 FROM pg_constraint ' +
+        "WHERE conrelid = 'workflow_interrupts'::regclass " +
+        "AND conname = 'workflow_interrupts_cursor_valid'",
+    );
+    expect(after.rows).toEqual([]);
+    expect((await pool.query(
+      'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1',
+    )).rows[0]).toEqual({ version: '0006_workflow_interrupt_cursor' });
   });
 
   it('migrates complete legacy causal rows and supports an initializing zero-Stage flow', async () => {

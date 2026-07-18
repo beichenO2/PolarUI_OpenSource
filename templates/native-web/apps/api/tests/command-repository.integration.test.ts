@@ -6,6 +6,7 @@ import { createAssetRepository } from '../src/assets/repository.js';
 import { createPool } from '../src/db/pool.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createDomainRepository } from '../src/domain/repository.js';
+import { createMemoryRepository } from '../src/memory/repository.js';
 
 const configuredDatabaseUrl = process.env.TEST_DATABASE_URL;
 const databaseUrl = configuredDatabaseUrl ?? 'postgresql://localhost/polar_test_unconfigured';
@@ -58,6 +59,7 @@ integrationDescribe('workflow command repository', () => {
   const pool = createPool(url.toString());
   const domain = createDomainRepository(pool);
   const repository = createCommandRepository(pool);
+  const memoryRepository = createMemoryRepository(pool);
   const assets = createAssetRepository(pool);
   const now = new Date('2026-07-16T08:00:00.000Z');
 
@@ -738,7 +740,7 @@ integrationDescribe('workflow command repository', () => {
     )).rows[0]).toEqual({ title: 'Evidence thread', title_source: 'user' });
   });
 
-  it('atomically persists Workflow-owned state, arbitrary projection statuses, and memory references', async () => {
+  it('atomically persists Workflow-owned state and exact arbitrary projections without mutating legacy Stage rows', async () => {
     await prepareUnified({ inputHash: 'workflow-owned-snapshot-v2' });
     const legacyProjectionBefore = (await pool.query(
       'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
@@ -766,49 +768,17 @@ integrationDescribe('workflow command repository', () => {
     await repository.finalizeCommand(ids.command, finalizeInput({
       workflowState,
       stageProjection,
-      memoryUpdates: [{
-        scope: 'context',
-        key: 'delivery_goal',
-        value: { target: 'ship' },
-        evidence: [{ kind: 'message', id: ids.userMessage, excerpt: 'ship' }],
-      }],
     }), new Date(now.getTime() + 1000));
 
     const snapshot = (await pool.query<{ snapshot: Record<string, unknown> }>(
       'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
       [ids.nextCheckpoint],
     )).rows[0]!.snapshot;
-    const memory = (await pool.query<{
-      id: string;
-      current_version: number;
-      value: unknown;
-      source: Record<string, unknown>;
-      evidence: unknown[];
-    }>(
-      'SELECT item.id, item.current_version, version.value, version.source, version.evidence ' +
-      'FROM memory_items item JOIN memory_item_versions version ' +
-      'ON version.memory_id = item.id AND version.version = item.current_version ' +
-      "WHERE item.user_id = $1 AND item.scope = 'context' AND item.context_id = $2 " +
-      "AND item.memory_key = 'delivery_goal'",
-      [ids.user, ids.context],
-    )).rows[0]!;
-
     expect(snapshot).toEqual({
       workflowState,
       stageProjection,
-      memoryReferences: [{ memoryId: memory.id, version: 1 }],
+      memoryReferences: [],
       artifacts: [],
-    });
-    expect(memory).toMatchObject({
-      current_version: 1,
-      value: { target: 'ship' },
-      source: {
-        kind: 'workflow',
-        commandId: ids.command,
-        conversationId: ids.thread,
-        checkpointId: ids.nextCheckpoint,
-      },
-      evidence: [{ kind: 'message', id: ids.userMessage, excerpt: 'ship' }],
     });
     expect((await pool.query(
       'SELECT stage_key, position, status, internal_state FROM route_stage_projections ' +
@@ -836,7 +806,203 @@ integrationDescribe('workflow command repository', () => {
       [ids.conflictCheckpoint],
     )).rows[0]!.snapshot;
     expect(nextSnapshot.stageProjection).toEqual(stageProjection);
-    expect(nextSnapshot.memoryReferences).toEqual([{ memoryId: memory.id, version: 1 }]);
+    expect(nextSnapshot.memoryReferences).toEqual([]);
+  });
+
+  it('keeps a conflicting memory update inactive until database-cursor resume confirms the current version', async () => {
+    const initial = await memoryRepository.appendWorkflowVersion({
+      userId: ids.user,
+      contextId: ids.context,
+      commandId: '60000000-0000-4000-8000-000000000090',
+      conversationId: ids.thread,
+      checkpointId: ids.checkpoint,
+      update: {
+        scope: 'context',
+        key: 'goal',
+        value: 'draft',
+        evidence: [],
+        impactScope: { contextIds: [ids.context] },
+      },
+      now,
+    });
+    await prepareUnified({ inputHash: 'memory-conflict-origin' });
+    const conflictingUpdate = {
+      scope: 'context' as const,
+      key: 'goal',
+      value: 'silently-overwritten',
+      expectedVersion: 9,
+      confirmationPrompt: '确认覆盖当前目标？',
+    };
+    const privateCursor = {
+      kind: 'memory_confirmation',
+      token: 'postgres-only',
+      update: conflictingUpdate,
+      current: { id: initial.id, version: 1, value: 'draft' },
+    };
+
+    await repository.persistInterrupt(ids.command, {
+      id: ids.interrupt,
+      prompt: '确认覆盖当前目标？',
+      cursor: privateCursor,
+    }, new Date(now.getTime() + 100));
+
+    expect(await memoryRepository.list(ids.user, {
+      scope: 'context', contextId: ids.context,
+    })).toEqual([expect.objectContaining({ id: initial.id, value: 'draft', version: 1 })]);
+    expect(await memoryRepository.listVersions(ids.user, initial.id)).toHaveLength(1);
+    const publicState = await repository.listConversationState(ids.user, ids.thread);
+    expect(publicState?.pendingInterrupt).toMatchObject({
+      id: ids.interrupt,
+      prompt: '确认覆盖当前目标？',
+    });
+    expect(JSON.stringify(publicState)).not.toContain('postgres-only');
+    expect(JSON.stringify(publicState)).not.toContain('silently-overwritten');
+
+    const resumed = await prepareUnified({
+      commandId: ids.nextCommand,
+      input: { type: 'resume_interrupt', interruptId: ids.interrupt, content: '确认更新' },
+      kind: 'resume_interrupt',
+      interruptId: ids.interrupt,
+      content: '确认更新',
+      inputHash: 'memory-conflict-resume',
+      now: new Date(now.getTime() + 200),
+      leaseExpiresAt: new Date(now.getTime() + 30_200),
+    });
+    expect(resumed.execution.interruptCursor).toEqual(privateCursor);
+    expect(await memoryRepository.listVersions(ids.user, initial.id)).toHaveLength(1);
+
+    await repository.finalizeCommand(ids.nextCommand, finalizeInput({
+      userMessageId: ids.nextUserMessage,
+      assistantMessageId: ids.nextAssistantMessage,
+      checkpointId: ids.nextCheckpoint,
+      memoryUpdates: [{
+        scope: 'context',
+        key: 'goal',
+        value: 'confirmed',
+        expectedVersion: 1,
+        evidence: [{ kind: 'interrupt', id: ids.interrupt }],
+        impactScope: { contextIds: [ids.context] },
+      }],
+    }), new Date(now.getTime() + 300));
+
+    expect(await memoryRepository.list(ids.user, {
+      scope: 'context', contextId: ids.context,
+    })).toEqual([expect.objectContaining({
+      id: initial.id,
+      value: 'confirmed',
+      status: 'active',
+      version: 2,
+    })]);
+    const storedVersion = (await pool.query(
+      'SELECT source FROM memory_item_versions WHERE memory_id = $1 AND version = 2',
+      [initial.id],
+    )).rows[0];
+    expect(storedVersion.source).toMatchObject({
+      kind: 'workflow',
+      commandId: ids.nextCommand,
+      conversationId: ids.thread,
+      checkpointId: ids.nextCheckpoint,
+    });
+    const snapshot = (await pool.query(
+      'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
+      [ids.nextCheckpoint],
+    )).rows[0].snapshot;
+    expect(snapshot.memoryReferences).toContainEqual({ memoryId: initial.id, version: 2 });
+    expect((await pool.query(
+      'SELECT status, resolution_command_id FROM workflow_interrupts WHERE id = $1',
+      [ids.interrupt],
+    )).rows[0]).toEqual({ status: 'resolved', resolution_command_id: ids.nextCommand });
+  });
+
+  it('atomically converts a post-detection memory race into a private pending interrupt', async () => {
+    const initial = await memoryRepository.appendWorkflowVersion({
+      userId: ids.user,
+      contextId: ids.context,
+      commandId: '60000000-0000-4000-8000-000000000091',
+      conversationId: ids.thread,
+      checkpointId: ids.checkpoint,
+      update: {
+        scope: 'context',
+        key: 'goal',
+        value: 'draft',
+        evidence: [],
+        impactScope: { contextIds: [ids.context] },
+      },
+      now,
+    });
+    await prepareUnified({ inputHash: 'memory-race-origin' });
+    const staleUpdate = {
+      scope: 'context' as const,
+      key: 'goal',
+      value: 'stale-finalize-value',
+      expectedVersion: 1,
+      confirmationPrompt: '确认覆盖刚更新的目标？',
+    };
+
+    await expect(memoryRepository.detectConflict({
+      userId: ids.user,
+      contextId: ids.context,
+      update: staleUpdate,
+    })).resolves.toBeNull();
+    await memoryRepository.revise(ids.user, initial.id, {
+      value: 'concurrent-value',
+      expectedVersion: 1,
+      evidence: [],
+    }, new Date(now.getTime() + 50));
+    const before = (await pool.query(
+      'SELECT ' +
+      '(SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints, ' +
+      '(SELECT count(*)::int FROM workflow_messages) AS messages',
+    )).rows[0];
+
+    const committed = await repository.finalizeCommand(ids.command, finalizeInput({
+      memoryUpdates: [staleUpdate],
+    }), new Date(now.getTime() + 100));
+
+    expect(committed).toMatchObject({
+      status: 'succeeded',
+      checkpointId: null,
+      userMessageId: null,
+      assistantMessageId: null,
+    });
+    expect(await memoryRepository.list(ids.user, {
+      scope: 'context', contextId: ids.context,
+    })).toEqual([expect.objectContaining({
+      id: initial.id,
+      value: 'concurrent-value',
+      version: 2,
+    })]);
+    expect(await memoryRepository.listVersions(ids.user, initial.id)).toHaveLength(2);
+    expect((await pool.query(
+      'SELECT ' +
+      '(SELECT count(*)::int FROM workflow_checkpoints) AS checkpoints, ' +
+      '(SELECT count(*)::int FROM workflow_messages) AS messages',
+    )).rows[0]).toEqual(before);
+
+    const interrupt = (await pool.query(
+      'SELECT id, prompt, workflow_cursor FROM workflow_interrupts ' +
+      "WHERE originating_command_id = $1 AND status = 'pending'",
+      [ids.command],
+    )).rows[0];
+    expect(interrupt).toMatchObject({
+      prompt: staleUpdate.confirmationPrompt,
+      workflow_cursor: {
+        kind: 'memory_confirmation',
+        update: staleUpdate,
+        current: { id: initial.id, value: 'concurrent-value', version: 2 },
+      },
+    });
+    expect((await pool.query(
+      'SELECT status, result_checkpoint_id FROM workflow_commands WHERE id = $1',
+      [ids.command],
+    )).rows[0]).toEqual({ status: 'succeeded', result_checkpoint_id: null });
+    const publicState = await repository.listConversationState(ids.user, ids.thread);
+    expect(publicState?.pendingInterrupt).toMatchObject({
+      id: interrupt.id,
+      prompt: staleUpdate.confirmationPrompt,
+    });
+    expect(JSON.stringify(publicState)).not.toContain('stale-finalize-value');
+    expect(JSON.stringify(publicState)).not.toContain('concurrent-value');
   });
 
   it('resolves an interrupt and records a result checkpoint for resume input', async () => {
@@ -870,6 +1036,40 @@ integrationDescribe('workflow command repository', () => {
       'SELECT status, resolution_command_id FROM workflow_interrupts WHERE id = $1',
       [ids.interrupt],
     )).rows[0]).toEqual({ status: 'resolved', resolution_command_id: ids.nextCommand });
+  });
+
+  it.each([
+    ['primitive', 'opaque-primitive-cursor'],
+    ['array', ['opaque-cursor', { step: 2 }]],
+  ])('persists and reloads a %s Workflow interrupt cursor without changing its JSON value', async (_label, cursor) => {
+    await prepareUnified({ inputHash: `cursor-${_label}-origin` });
+    await repository.finalizeCommand(ids.command, finalizeInput({
+      interrupt: {
+        id: ids.interrupt,
+        prompt: 'Approve?',
+        cursor,
+      },
+    }), new Date(now.getTime() + 1000));
+
+    expect((await pool.query<{ workflow_cursor: unknown }>(
+      'SELECT workflow_cursor FROM workflow_interrupts WHERE id = $1',
+      [ids.interrupt],
+    )).rows[0]!.workflow_cursor).toEqual(cursor);
+
+    const prepared = await prepareUnified({
+      commandId: ids.nextCommand,
+      baseCheckpointId: ids.nextCheckpoint,
+      expectedCheckpointVersion: 1,
+      input: { type: 'resume_interrupt', interruptId: ids.interrupt, content: 'Approved.' },
+      kind: 'resume_interrupt',
+      interruptId: ids.interrupt,
+      content: 'Approved.',
+      inputHash: `cursor-${_label}-resume`,
+      now: new Date(now.getTime() + 1100),
+      leaseExpiresAt: new Date(now.getTime() + 31_100),
+    });
+
+    expect(prepared.execution.interruptCursor).toEqual(cursor);
   });
 
   it('adopts only owned staged attachments into the successful Command scope', async () => {

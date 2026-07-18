@@ -5,6 +5,7 @@ import type {
   StageProjectionSnapshot,
   WorkflowCheckpoint,
 } from '../domain/types.js';
+import type { MemoryUpdate } from '../memory/types.js';
 
 export type WorkflowCommandKind = 'message' | 'named_action' | 'resume_interrupt';
 export type PublicWorkflowCommandInput =
@@ -213,11 +214,11 @@ export interface FinalizeCommandInput {
   memoryProposals: unknown[];
   interrupt: PendingInterruptInput | null;
   attachmentIds: string[];
+  memoryUpdates?: MemoryUpdate[];
   contextTitle?: string;
   conversationTitle?: string;
   workflowState?: CheckpointWorkflowState;
   stageProjection?: StageProjectionSnapshot;
-  memoryUpdates?: unknown[];
 }
 
 export interface UnifiedCommandCommitResult extends Omit<CommandCommitResult, 'threadId'> {

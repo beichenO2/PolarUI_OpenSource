@@ -17,10 +17,10 @@ function setup() {
     uploadAttachment: vi.fn(async (_user: string, _thread: string, input: any) => ({ attachment: { id: ids.asset, filename: input.filename } })),
     openAsset: vi.fn(async () => ({ filename: 'notes.txt', object: { mediaType: 'text/plain', byteSize: 5 }, stream: Readable.from('hello') })),
   };
-  const memoryRepository = { list: vi.fn(async () => [{ id: ids.proposal, status: 'pending' }]), decide: vi.fn(async (_user: string, _id: string, decision: string) => ({ proposal: { id: ids.proposal, status: decision }, alreadyDecided: false })) };
+  const memoryService = { list: vi.fn(async () => [{ id: ids.proposal, scope: 'user', status: 'active', version: 2 }]), listVersions: vi.fn(async () => [{ memoryId: ids.proposal, version: 1 }, { memoryId: ids.proposal, version: 2 }]), revise: vi.fn(async (_user: string, id: string, input: any) => ({ id, scope: 'user', status: 'active', version: input.expectedVersion + 1, value: input.value })), invalidate: vi.fn(async (_user: string, id: string, input: any) => ({ id, scope: 'user', status: 'invalidated', version: input.expectedVersion + 1, value: null })) };
   const archiveRepository = { list: vi.fn(async () => [{ id: ids.conversation, title: 'Old', readOnly: true }]), detail: vi.fn(async (_user: string, id: string) => id === ids.conversation ? { conversation: { id, readOnly: true }, messages: [], attachments: [] } : null) };
-  const app = buildApp({ manifest, staticRoot: null, config, authService: authService as any, assetService: assetService as any, memoryRepository: memoryRepository as any, archiveRepository: archiveRepository as any });
-  apps.push(app); return { app, assetService, memoryRepository };
+  const app = buildApp({ manifest, staticRoot: null, config, authService: authService as any, assetService: assetService as any, memoryService: memoryService as any, archiveRepository: archiveRepository as any });
+  apps.push(app); return { app, assetService, memoryService };
 }
 const cookie = 'polar_session=token';
 
@@ -49,11 +49,42 @@ describe('Phase 5 owned routes', () => {
     expect(response.statusCode).toBe(200); expect(response.body).toBe('hello');
     expect(response.headers['content-disposition']).toContain('attachment;'); expect(response.headers['x-content-type-options']).toBe('nosniff');
   });
-  it('lists and explicitly decides memory proposals', async () => {
-    const { app, memoryRepository } = setup();
-    expect((await app.inject({ method: 'GET', url: `/api/memory-proposals?thread=${ids.thread}`, headers: { cookie } })).json().proposals).toHaveLength(1);
-    const decision = await app.inject({ method: 'POST', url: `/api/memory-proposals/${ids.proposal}/decision`, headers: { cookie, origin }, payload: { decision: 'adopted' } });
-    expect(decision.statusCode).toBe(200); expect(memoryRepository.decide).toHaveBeenCalledWith(ids.user, ids.proposal, 'adopted', expect.any(Date));
+  it('exposes exactly two versioned memory layers as direct metadata operations', async () => {
+    const { app, memoryService } = setup();
+    expect((await app.inject({ method: 'GET', url: '/api/memory?scope=user' })).statusCode).toBe(401);
+
+    const userMemory = await app.inject({ method: 'GET', url: '/api/memory?scope=user', headers: { cookie } });
+    expect(userMemory.statusCode).toBe(200);
+    expect(userMemory.json().memories).toHaveLength(1);
+    expect(memoryService.list).toHaveBeenCalledWith(ids.user, { scope: 'user' });
+
+    const contextMemory = await app.inject({ method: 'GET', url: `/api/memory?scope=context&context=${ids.conversation}`, headers: { cookie } });
+    expect(contextMemory.statusCode).toBe(200);
+    expect(memoryService.list).toHaveBeenCalledWith(ids.user, { scope: 'context', contextId: ids.conversation });
+
+    const versions = await app.inject({ method: 'GET', url: `/api/memory/${ids.proposal}/versions`, headers: { cookie } });
+    expect(versions.json().versions.map((item: any) => item.version)).toEqual([1, 2]);
+
+    expect((await app.inject({ method: 'PATCH', url: `/api/memory/${ids.proposal}`, headers: { cookie }, payload: { value: 'launch', expectedVersion: 2 } })).statusCode).toBe(403);
+    const revised = await app.inject({ method: 'PATCH', url: `/api/memory/${ids.proposal}`, headers: { cookie, origin }, payload: { value: 'launch', expectedVersion: 2, evidence: [] } });
+    expect(revised.statusCode).toBe(200);
+    expect(revised.json().memory).toMatchObject({ value: 'launch', version: 3 });
+    expect(memoryService.revise).toHaveBeenCalledWith(ids.user, ids.proposal, { value: 'launch', expectedVersion: 2, evidence: [] });
+
+    const invalidated = await app.inject({ method: 'DELETE', url: `/api/memory/${ids.proposal}`, headers: { cookie, origin }, payload: { expectedVersion: 3, reason: 'No longer true' } });
+    expect(invalidated.statusCode).toBe(200);
+    expect(invalidated.json().memory).toMatchObject({ status: 'invalidated', version: 4 });
+    expect(memoryService.invalidate).toHaveBeenCalledWith(ids.user, ids.proposal, { expectedVersion: 3, reason: 'No longer true' });
+
+    for (const scope of ['route', 'stage', 'thread']) {
+      expect((await app.inject({ method: 'GET', url: `/api/memory?scope=${scope}`, headers: { cookie } })).statusCode).toBe(400);
+    }
+  });
+
+  it('does not expose the legacy five-layer proposal/decision API', async () => {
+    const { app } = setup();
+    expect((await app.inject({ method: 'GET', url: `/api/memory-proposals?thread=${ids.thread}`, headers: { cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: `/api/memory-proposals/${ids.proposal}/decision`, headers: { cookie, origin }, payload: { decision: 'adopted' } })).statusCode).toBe(404);
   });
   it('exposes imported conversations as read-only owned archives', async () => {
     const { app } = setup();

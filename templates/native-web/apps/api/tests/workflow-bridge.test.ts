@@ -402,12 +402,46 @@ describe('workflow bridge v2', () => {
         attachments: v2BaseInput.attachments,
       },
       history: v2BaseInput.history,
-      memory: v2BaseInput.memory,
+      memory: {
+        user: {
+          items: v2BaseInput.memory.user,
+          extraction_goal: '是对用户的建模，能揭示用户的习惯、特点、taste。',
+        },
+        context: {
+          items: v2BaseInput.memory.context,
+          extraction_goal: '是对本情景的建模，是本情景的本质信息；对之后处理具体问题有持续性帮助或约束。',
+        },
+      },
       checkpoint_snapshot: v2BaseInput.baseCheckpoint.snapshot,
       workflow_id: 'demo-flow',
     });
     expect(JSON.stringify(body)).not.toContain('stage_key');
     expect(JSON.stringify(body)).not.toContain('setStage');
+  });
+
+  it('restores a resume cursor only from the private Bridge input', async () => {
+    const privateCursor = { kind: 'memory_confirmation', token: 'database-only' };
+    const { bridge, fetchImpl } = setupV2();
+
+    await bridge.run({
+      ...v2BaseInput,
+      commandInput: {
+        type: 'resume_interrupt',
+        interruptId: '10000000-0000-4000-8000-000000000099',
+        content: '确认更新',
+      },
+      interruptCursor: privateCursor,
+    });
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    expect(body.command.input).toEqual({
+      type: 'resume_interrupt',
+      interruptId: '10000000-0000-4000-8000-000000000099',
+      content: '确认更新',
+    });
+    expect(body.interrupt_cursor).toEqual(privateCursor);
+    expect(body.command.input).not.toHaveProperty('cursor');
+    expect(JSON.stringify(body.command.input)).not.toContain('database-only');
   });
 
   it('accepts a normal message that moves the Workflow-owned projection and normalizes the full result', async () => {

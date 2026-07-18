@@ -2,6 +2,10 @@ import type { DatabaseClient, DatabasePool } from '../db/pool.js';
 import { randomUUID } from 'node:crypto';
 import { withTransaction } from '../db/pool.js';
 import {
+  appendWorkflowVersionsWithClient,
+  listForWorkflowWithClient,
+} from '../memory/repository.js';
+import {
   checkpointStages,
   normalizeCheckpointSnapshot,
 } from '../domain/types.js';
@@ -25,6 +29,7 @@ import {
   type FinalizeActionInput,
   type FinalizeCommandInput,
   type FinalizeMessageInput,
+  type PendingInterruptInput,
   type PrepareCommandInput,
   type PrepareCommandResult,
   type PublicWorkflowInterrupt,
@@ -466,6 +471,7 @@ async function loadUnifiedExecution(
     if (!interruptResult.rows[0]) throw new CommandRepositoryError('PENDING_INTERRUPT_NOT_FOUND');
     interruptCursor = interruptResult.rows[0].workflow_cursor;
   }
+  const memory = await listForWorkflowWithClient(client, userId, command.context_id);
   return {
     userId,
     contextId: command.context_id,
@@ -478,6 +484,7 @@ async function loadUnifiedExecution(
     baseIsHead,
     history: historyResult.rows,
     stages,
+    memory,
     scope,
     ...(interruptCursor === undefined ? {} : { interruptCursor }),
   };
@@ -558,123 +565,11 @@ async function applyUnifiedStageSignals(
   return stages;
 }
 
-interface WorkflowMemoryUpdateRecord {
-  scope: 'user' | 'context';
-  key: string;
-  value: unknown;
-  expectedVersion?: number;
-  highImpact?: boolean;
-  evidence: Array<Record<string, unknown>>;
-  impactScope?: Record<string, unknown>;
-}
-
-function workflowMemoryUpdate(value: unknown): WorkflowMemoryUpdateRecord | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const candidate = value as Record<string, unknown>;
-  const key = typeof candidate.key === 'string' ? candidate.key.trim() : '';
-  if ((candidate.scope !== 'user' && candidate.scope !== 'context') ||
-      !key || key.length > 200 || !('value' in candidate) ||
-      (candidate.expectedVersion !== undefined &&
-        (!Number.isInteger(candidate.expectedVersion) ||
-          typeof candidate.expectedVersion !== 'number' || candidate.expectedVersion < 1)) ||
-      (candidate.highImpact !== undefined && typeof candidate.highImpact !== 'boolean') ||
-      (candidate.evidence !== undefined &&
-        (!Array.isArray(candidate.evidence) || candidate.evidence.length > 100 ||
-          candidate.evidence.some((item) => !item || typeof item !== 'object' || Array.isArray(item)))) ||
-      (candidate.impactScope !== undefined &&
-        (!candidate.impactScope || typeof candidate.impactScope !== 'object' ||
-          Array.isArray(candidate.impactScope)))) {
-    return null;
-  }
-  return {
-    scope: candidate.scope,
-    key,
-    value: candidate.value,
-    ...(candidate.expectedVersion === undefined
-      ? {}
-      : { expectedVersion: candidate.expectedVersion as number }),
-    ...(candidate.highImpact === undefined ? {} : { highImpact: candidate.highImpact as boolean }),
-    evidence: (candidate.evidence ?? []) as Array<Record<string, unknown>>,
-    ...(candidate.impactScope === undefined
-      ? {}
-      : { impactScope: candidate.impactScope as Record<string, unknown> }),
-  };
-}
-
-async function appendWorkflowMemoryVersions(
-  client: DatabaseClient,
-  input: {
-    userId: string;
-    contextId: string;
-    conversationId: string;
-    commandId: string;
-    checkpointId: string;
-    updates: unknown[];
-    baseReferences: CheckpointSnapshot['memoryReferences'];
-    now: Date;
-  },
-): Promise<CheckpointSnapshot['memoryReferences']> {
-  const references = new Map(input.baseReferences.map(
-    (reference) => [reference.memoryId, reference.version] as const,
-  ));
-  for (const rawUpdate of input.updates) {
-    const update = workflowMemoryUpdate(rawUpdate);
-    if (!update || update.highImpact) continue;
-    const contextId = update.scope === 'context' ? input.contextId : null;
-    const existingResult = await client.query<{
-      id: string;
-      current_version: number;
-    }>(
-      'SELECT id, current_version FROM memory_items ' +
-      'WHERE user_id = $1 AND scope = $2 AND context_id IS NOT DISTINCT FROM $3 AND memory_key = $4 FOR UPDATE',
-      [input.userId, update.scope, contextId, update.key],
-    );
-    const existing = existingResult.rows[0];
-    if (existing && update.expectedVersion !== existing.current_version) continue;
-    if (!existing && update.expectedVersion !== undefined) continue;
-
-    const memoryId = existing?.id ?? randomUUID();
-    const version = (existing?.current_version ?? 0) + 1;
-    if (!existing) {
-      await client.query(
-        'INSERT INTO memory_items ' +
-        '(id, user_id, scope, context_id, memory_key, status, current_version, created_at, updated_at) ' +
-        "VALUES ($1, $2, $3, $4, $5, 'active', 1, $6, $6)",
-        [memoryId, input.userId, update.scope, contextId, update.key, input.now],
-      );
-    }
-    const source = {
-      kind: 'workflow',
-      commandId: input.commandId,
-      conversationId: input.conversationId,
-      checkpointId: input.checkpointId,
-    };
-    const impactScope = update.impactScope ?? {
-      contextIds: update.scope === 'user' ? 'all' : [input.contextId],
-    };
-    await client.query(
-      'INSERT INTO memory_item_versions ' +
-      '(id, memory_id, version, value, status, source, evidence, impact_scope, created_at) ' +
-      "VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8)",
-      [randomUUID(), memoryId, version, update.value, source, update.evidence, impactScope, input.now],
-    );
-    if (existing) {
-      await client.query(
-        "UPDATE memory_items SET status = 'active', current_version = $2, updated_at = $3 WHERE id = $1",
-        [memoryId, version, input.now],
-      );
-    }
-    references.set(memoryId, version);
-  }
-  return [...references].map(([memoryId, version]) => ({ memoryId, version }));
-}
-
 function unifiedSnapshot(
   base: CheckpointSnapshot,
   command: CommandRow,
   result: FinalizeCommandInput,
   stages: StageProjection[],
-  memoryReferences: CheckpointSnapshot['memoryReferences'] = base.memoryReferences,
 ): CheckpointSnapshot & Partial<LegacyCheckpointSnapshot> {
   if (result.workflowState !== undefined) {
     return {
@@ -684,7 +579,7 @@ function unifiedSnapshot(
         : base.stageProjection !== undefined
           ? { stageProjection: base.stageProjection }
           : {}),
-      memoryReferences,
+      memoryReferences: base.memoryReferences,
       artifacts: base.artifacts,
     };
   }
@@ -720,7 +615,7 @@ function unifiedSnapshot(
           })),
         },
       }),
-    memoryReferences,
+    memoryReferences: base.memoryReferences,
     artifacts: base.artifacts,
     stages: legacyStages,
     command: legacyCommand,
@@ -780,15 +675,26 @@ function agentTitle(value: string | undefined) {
   return title && title.length <= 120 ? title : null;
 }
 
+function mergeMemoryReferences(
+  base: CheckpointSnapshot['memoryReferences'],
+  appended: CheckpointSnapshot['memoryReferences'],
+) {
+  const updatedIds = new Set(appended.map((reference) => reference.memoryId));
+  return [
+    ...base.filter((reference) => !updatedIds.has(reference.memoryId)),
+    ...appended,
+  ];
+}
+
 async function completeUnifiedCommand(
   client: DatabaseClient,
   command: CommandRow,
   result: {
     routeId: string;
     conversationId: string;
-    checkpointId: string;
-    userMessageId: string;
-    assistantMessageId: string;
+    checkpointId: string | null;
+    userMessageId: string | null;
+    assistantMessageId: string | null;
     reply: string;
     pendingInterrupt?: PublicWorkflowInterrupt | null;
   },
@@ -859,8 +765,8 @@ async function completeCommand(
     routeId: string;
     threadId: string;
     checkpointId: string | null;
-    userMessageId: string;
-    assistantMessageId: string;
+    userMessageId: string | null;
+    assistantMessageId: string | null;
     reply: string;
     pendingInterrupt?: PublicWorkflowInterrupt | null;
   },
@@ -899,6 +805,74 @@ async function completeCommand(
     errorCode: null,
     events,
   };
+}
+
+async function persistInterruptWithClient(
+  client: DatabaseClient,
+  command: CommandRow,
+  interruptInput: PendingInterruptInput,
+  now: Date,
+): Promise<UnifiedCommandCommitResult> {
+  if (command.kind === 'resume_interrupt') {
+    const resolved = await client.query(
+      "UPDATE workflow_interrupts SET status = 'resolved', resolution_command_id = $2, " +
+      "resolved_at = $3, updated_at = $3 WHERE id = $1 AND status = 'pending'",
+      [command.interrupt_id, command.id, now],
+    );
+    if (resolved.rowCount !== 1) {
+      throw new CommandRepositoryError('PENDING_INTERRUPT_NOT_FOUND');
+    }
+  }
+  const inserted = await client.query<InterruptRow>(
+    'INSERT INTO workflow_interrupts ' +
+    '(id, context_id, route_id, thread_id, stage_key, prompt, workflow_cursor, ' +
+    'originating_command_id, action_key, created_at, updated_at) ' +
+    'VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $10) ' +
+    'RETURNING id, prompt, action_key, workflow_cursor, created_at',
+    [
+      interruptInput.id,
+      command.context_id,
+      command.source_route_id,
+      command.source_thread_id,
+      command.stage_key,
+      interruptInput.prompt,
+      JSON.stringify(interruptInput.cursor),
+      command.id,
+      interruptInput.actionKey ?? command.action_key,
+      now,
+    ],
+  );
+  const interrupt = inserted.rows[0]!;
+  const pendingInterrupt: PublicWorkflowInterrupt = {
+    id: interrupt.id,
+    prompt: interrupt.prompt,
+    actionKey: interrupt.action_key,
+    createdAt: interrupt.created_at,
+  };
+  await client.query(
+    "UPDATE contexts SET status = CASE WHEN status = 'initializing' THEN 'active' ELSE status END, " +
+    'updated_at = $2 WHERE id = $1',
+    [command.context_id, now],
+  );
+  await client.query(
+    "UPDATE workflow_routes SET status = CASE WHEN status = 'initializing' THEN 'active' ELSE status END, " +
+    'updated_at = $2 WHERE id = $1',
+    [command.source_route_id, now],
+  );
+  await client.query(
+    "UPDATE workflow_threads SET status = CASE WHEN status = 'initializing' THEN 'active' ELSE status END, " +
+    'updated_at = $2 WHERE id = $1',
+    [command.source_thread_id, now],
+  );
+  return completeUnifiedCommand(client, command, {
+    routeId: command.source_route_id,
+    conversationId: command.source_thread_id,
+    checkpointId: null,
+    userMessageId: null,
+    assistantMessageId: null,
+    reply: interrupt.prompt,
+    pendingInterrupt,
+  }, now);
 }
 
 function snapshotStages(stages: StageProjection[]) {
@@ -1423,6 +1397,24 @@ export function createCommandRepository(pool: DatabasePool) {
       });
     },
 
+    async persistInterrupt(
+      commandId: string,
+      interrupt: PendingInterruptInput,
+      now: Date,
+    ): Promise<UnifiedCommandCommitResult> {
+      return withTransaction(pool, async (client) => {
+        const commandResult = await client.query<CommandRow>(
+          'SELECT * FROM workflow_commands WHERE id = $1 FOR UPDATE',
+          [commandId],
+        );
+        const command = commandResult.rows[0];
+        if (!command || command.status !== 'running') {
+          throw new CommandRepositoryError('COMMAND_NOT_FINALIZABLE');
+        }
+        return persistInterruptWithClient(client, command, interrupt, now);
+      });
+    },
+
     async finalizeCommand(
       commandId: string,
       result: FinalizeCommandInput,
@@ -1500,12 +1492,34 @@ export function createCommandRepository(pool: DatabasePool) {
 
         let routeId = command.source_route_id;
         let conversationId = command.source_thread_id;
+        if (scopeMode === 'history') {
+          routeId = randomUUID();
+          conversationId = randomUUID();
+        }
+        const memoryWrite = await appendWorkflowVersionsWithClient(client, {
+          userId: context.user_id,
+          contextId: command.context_id,
+          commandId: command.id,
+          conversationId,
+          checkpointId: result.checkpointId,
+          updates: result.memoryUpdates ?? [],
+          now,
+        });
+        if (memoryWrite.kind === 'blocked') {
+          return persistInterruptWithClient(client, command, {
+            id: randomUUID(),
+            prompt: memoryWrite.update.confirmationPrompt?.trim() || '确认保存这项记忆更新？',
+            cursor: {
+              kind: 'memory_confirmation',
+              update: memoryWrite.update,
+              current: memoryWrite.current ?? undefined,
+            },
+          }, now);
+        }
         let parentCheckpointId = base.id;
         let checkpointVersion = base.version + 1;
         const baseSnapshot = normalizeCheckpointSnapshot(base.snapshot);
         if (scopeMode === 'history') {
-          routeId = randomUUID();
-          conversationId = randomUUID();
           const branchCheckpointId = randomUUID();
           await client.query(
             'INSERT INTO workflow_routes ' +
@@ -1554,20 +1568,16 @@ export function createCommandRepository(pool: DatabasePool) {
           if (!targetConversation.rows[0]) throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
         }
 
-        const memoryReferences = await appendWorkflowMemoryVersions(client, {
-          userId: context.user_id,
-          contextId: command.context_id,
-          conversationId,
-          commandId: command.id,
-          checkpointId: result.checkpointId,
-          updates: result.memoryUpdates ?? [],
-          baseReferences: baseSnapshot.memoryReferences,
-          now,
-        });
         const stages = result.workflowState === undefined
           ? await applyUnifiedStageSignals(client, routeId, result.stageSignals, now)
           : [];
-        const snapshot = unifiedSnapshot(baseSnapshot, command, result, stages, memoryReferences);
+        const snapshot = {
+          ...unifiedSnapshot(baseSnapshot, command, result, stages),
+          memoryReferences: mergeMemoryReferences(
+            baseSnapshot.memoryReferences,
+            memoryWrite.references,
+          ),
+        };
         await client.query(
           'INSERT INTO workflow_checkpoints ' +
           '(id, context_id, route_id, parent_checkpoint_id, version, stage_key, reason, snapshot, created_at) ' +
@@ -1639,7 +1649,7 @@ export function createCommandRepository(pool: DatabasePool) {
               conversationId,
               command.stage_key,
               result.interrupt.prompt,
-              result.interrupt.cursor,
+              JSON.stringify(result.interrupt.cursor),
               command.id,
               result.interrupt.actionKey ?? command.action_key,
               now,

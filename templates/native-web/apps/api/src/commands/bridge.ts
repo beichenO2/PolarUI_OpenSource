@@ -42,9 +42,10 @@ export interface WorkflowV2BridgeInput {
     snapshot: CheckpointSnapshot;
   };
   commandInput: PublicWorkflowCommandInput;
+  interruptCursor?: unknown;
   attachments: unknown[];
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
-  memory: unknown;
+  memory: { user: unknown[]; context: unknown[] };
 }
 
 export type WorkflowBridgeInput = LegacyWorkflowBridgeInput | WorkflowV2BridgeInput;
@@ -185,6 +186,9 @@ const v2ResponseSchema = z.object({
     context.addIssue({ code: 'custom', message: 'reply events or interrupt required' });
   }
 });
+
+const USER_MEMORY_GOAL = '是对用户的建模，能揭示用户的习惯、特点、taste。';
+const CONTEXT_MEMORY_GOAL = '是对本情景的建模，是本情景的本质信息；对之后处理具体问题有持续性帮助或约束。';
 
 const publicMemoryProposalSchema = z.object({
   scope: z.enum(['user', 'context', 'route', 'stage', 'thread']),
@@ -400,6 +404,9 @@ export function createWorkflowBridge(options: {
   async function run(input: LegacyWorkflowBridgeInput): Promise<LegacyWorkflowBridgeResult>;
   async function run(input: WorkflowBridgeInput): Promise<WorkflowBridgeResult> {
       if ('commandInput' in input) {
+        if (input.commandInput.type === 'resume_interrupt' && input.interruptCursor === undefined) {
+          fail('WORKFLOW_INVALID_STATE');
+        }
         const raw = await request(input.commandId, {
           contract_version: '2.0',
           command: {
@@ -413,7 +420,19 @@ export function createWorkflowBridge(options: {
             attachments: input.attachments,
           },
           history: input.history,
-          memory: input.memory,
+          memory: {
+            user: {
+              items: input.memory.user,
+              extraction_goal: USER_MEMORY_GOAL,
+            },
+            context: {
+              items: input.memory.context,
+              extraction_goal: CONTEXT_MEMORY_GOAL,
+            },
+          },
+          ...(input.commandInput.type === 'resume_interrupt'
+            ? { interrupt_cursor: input.interruptCursor }
+            : {}),
           checkpoint_snapshot: input.baseCheckpoint.snapshot,
           workflow_id: options.workflowId,
         });

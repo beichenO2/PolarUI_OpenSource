@@ -306,6 +306,7 @@ function setupUnified(options: {
   bridgeError?: Error;
   bridgeResult?: unknown;
   manifest?: ProductManifest;
+  memoryConflict?: unknown;
 } = {}) {
   const command = {
     id: ids.command,
@@ -334,6 +335,7 @@ function setupUnified(options: {
       checkpointId: unifiedIds.resultCheckpoint,
     })),
     failCommand: vi.fn(async () => []),
+    persistInterrupt: vi.fn(async () => ({ status: 'succeeded', pendingInterrupt: true })),
     renameContext: vi.fn(),
     renameConversation: vi.fn(),
   };
@@ -342,25 +344,29 @@ function setupUnified(options: {
       if (options.bridgeError) throw options.bridgeError;
       if (options.bridgeResult) return options.bridgeResult;
       return {
-        reply: 'Answer',
-        stageSignals: [],
-        workflowCursor: null,
-        memoryProposals: [],
-        interrupt: null,
+        replyEvents: [{ type: 'message', content: 'Answer' }],
+        checkpoint: { workflowState: {} },
+        memoryUpdates: [],
         artifactProposals: [],
+        interrupt: null,
+        diagnostics: {},
       };
     }),
+  };
+  const memoryRepository = {
+    detectConflict: vi.fn(async () => options.memoryConflict ?? null),
   };
   const generated = Array.from({ length: 16 }, (_, index) =>
     `21000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
   const service = createCommandService({
     repository: repository as never,
     bridge: bridge as never,
+    memoryRepository: memoryRepository as never,
     manifest: options.manifest ?? manifest,
     createId: () => generated.shift()!,
     now: () => new Date('2026-07-16T10:00:00.000Z'),
   });
-  return { repository, bridge, service };
+  return { repository, bridge, memoryRepository, service };
 }
 
 describe('unified workflow input command', () => {
@@ -486,6 +492,48 @@ describe('unified workflow input command', () => {
     expect(bridge.run).not.toHaveBeenCalled();
   });
 
+  it('fails safely without finalizing when a unified bridge returns a legacy-shaped runtime result', async () => {
+    const { repository, service } = setupUnified({ bridgeResult: {
+      reply: 'Legacy answer',
+      stageSignals: [],
+      workflowCursor: null,
+      memoryProposals: [],
+      artifactProposals: [],
+      interrupt: null,
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('fails safely without finalizing when a unified bridge omits required v2 checkpoint state', async () => {
+    const { repository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Malformed answer' }],
+      checkpoint: {},
+      memoryUpdates: [],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
   it('rejects changed payload reuse of the same command ID', async () => {
     const { service } = setupUnified({ prepared: { kind: 'reused' } });
     await expect(service.createCommand(ids.user, startCommandInput)).rejects.toEqual(
@@ -533,7 +581,14 @@ describe('unified workflow input command', () => {
       user: [{ key: 'tone', value: 'concise', version: 3 }],
       context: [{ key: 'goal', value: 'ship', version: 2 }],
     };
-    const memoryUpdates = [{ scope: 'context', key: 'goal', value: 'ship' }];
+    const memoryUpdates = [{
+      scope: 'context' as const,
+      key: 'goal',
+      value: 'ship',
+      expectedVersion: 2,
+      evidence: [{ kind: 'message', id: 'evidence-1' }],
+      impactScope: { contextIds: [ids.context] },
+    }];
     const baseCheckpoint = {
       ...execution.baseCheckpoint,
       stageKey: null,
@@ -602,11 +657,128 @@ describe('unified workflow input command', () => {
         stageProjection,
         contextTitle: '发布计划',
         conversationTitle: '首轮总结',
-        memoryUpdates,
         attachmentIds: [],
+        memoryUpdates,
       }),
       expect.any(Date),
     );
     expect(repository.failCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing expectedVersion', {
+      scope: 'context' as const,
+      key: 'goal',
+      value: 'launch',
+      confirmationPrompt: '确认覆盖当前目标？',
+    }],
+    ['mismatched expectedVersion', {
+      scope: 'context' as const,
+      key: 'goal',
+      value: 'launch',
+      expectedVersion: 9,
+      confirmationPrompt: '确认覆盖当前目标？',
+    }],
+  ])('persists a private memory confirmation interrupt for an active-key update with %s', async (_label, update) => {
+    const current = {
+      id: '31000000-0000-4000-8000-000000000001',
+      scope: 'context',
+      contextId: ids.context,
+      key: 'goal',
+      value: 'ship',
+      status: 'active',
+      version: 2,
+    };
+    const { repository, memoryRepository, service } = setupUnified({
+      memoryConflict: { current },
+      bridgeResult: {
+        replyEvents: [{ type: 'message', content: '建议更新目标' }],
+        checkpoint: { workflowState: { fsm: 'review' } },
+        memoryUpdates: [update],
+        artifactProposals: [],
+        interrupt: null,
+        diagnostics: {},
+      },
+    });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).toHaveBeenCalledWith({
+      userId: ids.user,
+      contextId: ids.context,
+      update,
+    });
+    expect(repository.persistInterrupt).toHaveBeenCalledWith(
+      ids.command,
+      expect.objectContaining({
+        id: expect.any(String),
+        prompt: '确认覆盖当前目标？',
+        cursor: { kind: 'memory_confirmation', update, current },
+      }),
+      expect.any(Date),
+    );
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).not.toHaveBeenCalled();
+  });
+
+  it('turns a high-impact update into an interrupt even without a version conflict', async () => {
+    const update = {
+      scope: 'user' as const,
+      key: 'decision_style',
+      value: 'risk-seeking',
+      highImpact: true,
+      confirmationPrompt: '确认记录这项高影响用户特征？',
+    };
+    const { repository, memoryRepository, service } = setupUnified({
+      bridgeResult: {
+        replyEvents: [{ type: 'message', content: '发现一项可能的用户特征' }],
+        checkpoint: { workflowState: { fsm: 'review' } },
+        memoryUpdates: [update],
+        artifactProposals: [],
+        interrupt: null,
+        diagnostics: {},
+      },
+    });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).toHaveBeenCalledWith({
+      userId: ids.user,
+      contextId: ids.context,
+      update,
+    });
+    expect(repository.persistInterrupt).toHaveBeenCalledWith(
+      ids.command,
+      expect.objectContaining({
+        prompt: '确认记录这项高影响用户特征？',
+        cursor: { kind: 'memory_confirmation', update, current: undefined },
+      }),
+      expect.any(Date),
+    );
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+  });
+
+  it('sends only the repository-loaded private cursor when unified Input resumes an interrupt', async () => {
+    const privateCursor = { kind: 'memory_confirmation', token: 'postgres-only' };
+    const { bridge, service } = setupUnified({ executionOverride: { interruptCursor: privateCursor } });
+    await service.createCommand(ids.user, {
+      commandId: ids.command,
+      contextId: ids.context,
+      routeId: ids.route,
+      conversationId: ids.thread,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      input: { type: 'resume_interrupt', interruptId: ids.interrupt, content: '确认' },
+      attachmentIds: [],
+    });
+    await service.executeCommand(ids.command);
+
+    expect(bridge.run).toHaveBeenCalledWith(expect.objectContaining({
+      commandInput: { type: 'resume_interrupt', interruptId: ids.interrupt, content: '确认' },
+      interruptCursor: privateCursor,
+    }));
+    expect(bridge.run.mock.calls[0]![0].commandInput).not.toHaveProperty('cursor');
   });
 });
