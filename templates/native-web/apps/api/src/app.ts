@@ -58,6 +58,15 @@ export function buildApp(options: {
       return reply.code(503).send({ error: { code: 'COMMAND_SERVICE_UNAVAILABLE' } });
     }
     if (
+      request.url.startsWith('/api/attachments/') ||
+      request.url.startsWith('/api/assets/') ||
+      /^\/api\/conversations\/[^/]+\/attachments(?:\?|$)/.test(request.url) ||
+      /^\/api\/routes\/[^/]+\/stages\/[^/]+\/artifacts(?:\?|$)/.test(request.url)
+    ) {
+      request.log.error(error);
+      return reply.code(503).send({ error: { code: 'ASSET_SERVICE_UNAVAILABLE' } });
+    }
+    if (
       request.url.startsWith('/api/contexts') ||
       request.url.startsWith('/api/routes') ||
       request.url.startsWith('/api/conversations') ||

@@ -70,8 +70,8 @@ describe('memory service', () => {
   it('returns repository history and maps a missing owned item to a hidden 404', async () => {
     const { service } = setup();
     await expect(service.listVersions(ids.user, ids.memory)).resolves.toEqual([
-      expect.objectContaining({ version: 1, value: 'draft' }),
-      expect.objectContaining({ version: 2, value: 'ship' }),
+      { ...memory, value: 'draft', version: 1, updatedAt: memory.createdAt },
+      memory,
     ]);
     await expect(service.listVersions(ids.otherUser, ids.memory))
       .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });

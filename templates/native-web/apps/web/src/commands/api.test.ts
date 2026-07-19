@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CommandApiError,
   createCommand,
-  listThreadMessages,
+  createWorkflowCommand,
+  listConversationMessages,
   streamCommandEvents,
-  type CommandInput,
+  type PublicCommandInput,
   type WorkflowCommandEvent,
 } from './api';
 
@@ -39,13 +40,15 @@ function frame(id: number, event: WorkflowCommandEvent['type'], payload: object,
 
 const terminalFrame = (id: number, eol = '\n') => frame(id, 'command.finished', {
   outcome: 'succeeded',
-  resultRouteId: 'route-1',
-  resultThreadId: 'thread-1',
-  resultCheckpointId: null,
+  contextId: 'context-1',
+  routeId: 'route-1',
+  conversationId: 'conversation-1',
+  checkpointId: null,
+  stageProjectionRevision: 'projection-v2',
 }, eol);
 
 describe('workflow command web client', () => {
-  it('reads persisted Thread messages and a public pending interrupt', async () => {
+  it('reads persisted Conversation messages and a public pending interrupt', async () => {
     const body = {
       messages: [{
         id: 'message-1',
@@ -66,21 +69,23 @@ describe('workflow command web client', () => {
     const fetchMock = vi.fn(() => jsonResponse(body));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(listThreadMessages('thread id', { signal: controller.signal })).resolves.toEqual(body);
-    expect(fetchMock).toHaveBeenCalledWith('/api/threads/thread%20id/messages', {
+    await expect(listConversationMessages('conversation id', { signal: controller.signal })).resolves.toEqual(body);
+    expect(fetchMock).toHaveBeenCalledWith('/api/conversations/conversation%20id/messages', {
       credentials: 'same-origin',
       signal: controller.signal,
     });
   });
 
   it('posts the exact typed command payload and requires a 202 receipt', async () => {
-    const input: CommandInput = {
+    const input: PublicCommandInput = {
       commandId: '11111111-1111-4111-8111-111111111111',
-      kind: 'named_action',
-      actionKey: 'advance',
-      content: '进入下一阶段',
+      contextId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      routeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      conversationId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       baseCheckpointId: '22222222-2222-4222-8222-222222222222',
       expectedCheckpointVersion: 3,
+      input: { type: 'named_intent', key: 'summarize', content: '总结当前进展' },
+      attachmentIds: ['dddddddd-dddd-4ddd-8ddd-dddddddddddd'],
     };
     const controller = new AbortController();
     const fetchMock = vi.fn(() => jsonResponse({
@@ -89,11 +94,11 @@ describe('workflow command web client', () => {
     }, 202));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(createCommand('thread id', input, { signal: controller.signal })).resolves.toEqual({
+    await expect(createWorkflowCommand(input, { signal: controller.signal })).resolves.toEqual({
       commandId: input.commandId,
       eventUrl: `/api/commands/${input.commandId}/events`,
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/threads/thread%20id/commands', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/workflow/commands', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
@@ -105,13 +110,56 @@ describe('workflow command web client', () => {
   it('rejects a successful command response that is not the contracted 202 receipt', async () => {
     vi.stubGlobal('fetch', vi.fn(() => jsonResponse({ commandId: 'command-1', eventUrl: '/events' })));
 
-    await expect(createCommand('thread-1', {
+    await expect(createWorkflowCommand({
       commandId: 'command-1',
-      kind: 'message',
-      content: 'hello',
-      baseCheckpointId: 'checkpoint-1',
-      expectedCheckpointVersion: 0,
+      input: { type: 'message', content: 'hello' },
+      attachmentIds: [],
     })).rejects.toMatchObject({ code: 'COMMAND_RESPONSE_INVALID', status: 200 });
+  });
+
+  it.each(['workflow', 'deprecated'] as const)(
+    'rejects a 202 %s receipt whose commandId differs from the submitted command',
+    async (surface) => {
+      const commandId = 'command-1';
+      vi.stubGlobal('fetch', vi.fn(() => jsonResponse({
+        commandId: 'command-2',
+        eventUrl: '/api/commands/command-2/events',
+      }, 202)));
+
+      const request = surface === 'workflow'
+        ? createWorkflowCommand({
+            commandId,
+            input: { type: 'message', content: 'hello' },
+            attachmentIds: [],
+          })
+        : createCommand('thread-1', {
+            commandId,
+            kind: 'message',
+            content: 'hello',
+            baseCheckpointId: 'checkpoint-1',
+            expectedCheckpointVersion: 0,
+          });
+
+      await expect(request).rejects.toEqual(
+        new CommandApiError('COMMAND_RESPONSE_INVALID', 202),
+      );
+    },
+  );
+
+  it.each([
+    ['an absolute same-origin URL', 'http://localhost/api/commands/command-1/events'],
+    ['an external URL', 'https://attacker.example/api/commands/command-1/events'],
+    ['a different command', '/api/commands/command-2/events'],
+    ['a different path', '/api/workflow/commands/command-1/events'],
+    ['a query string', '/api/commands/command-1/events?after=0'],
+  ])('rejects a 202 receipt with %s', async (_label, eventUrl) => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({ commandId: 'command-1', eventUrl }, 202)));
+
+    await expect(createWorkflowCommand({
+      commandId: 'command-1',
+      input: { type: 'message', content: 'hello' },
+      attachmentIds: [],
+    })).rejects.toEqual(new CommandApiError('COMMAND_RESPONSE_INVALID', 202));
   });
 
   it('parses a frame split across chunks and returns the terminal payload', async () => {
@@ -119,7 +167,9 @@ describe('workflow command web client', () => {
       frame(1, 'command.accepted', { commandId: 'command-1' }),
       frame(2, 'workflow.started', {}),
       frame(3, 'assistant.delta', { delta: '研究' }),
-      frame(4, 'workspace.committed', { resultThreadId: 'thread-1' }),
+      frame(4, 'workspace.committed', {
+        contextId: 'context-1', routeId: 'route-1', conversationId: 'conversation-1', checkpointId: 'checkpoint-1',
+      }),
       terminalFrame(5),
     ].join('');
     const splitAt = complete.indexOf('assistant.delta') + 9;
@@ -145,11 +195,54 @@ describe('workflow command web client', () => {
       lastEventId: 5,
       finished: {
         outcome: 'succeeded',
-        resultRouteId: 'route-1',
-        resultThreadId: 'thread-1',
-        resultCheckpointId: null,
+        contextId: 'context-1',
+        routeId: 'route-1',
+        conversationId: 'conversation-1',
+        checkpointId: null,
+        stageProjectionRevision: 'projection-v2',
       },
     });
+  });
+
+  it('normalizes legacy persistence field names without exposing Thread or Stage state', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => eventResponse([
+      frame(1, 'workspace.committed', {
+        resultRouteId: 'route-legacy',
+        resultThreadId: 'thread-legacy',
+        resultCheckpointId: 'checkpoint-legacy',
+      }) + frame(2, 'command.finished', {
+        outcome: 'succeeded',
+        resultRouteId: 'route-legacy',
+        resultThreadId: 'thread-legacy',
+        resultCheckpointId: 'checkpoint-legacy',
+      }),
+    ])));
+    const events: WorkflowCommandEvent[] = [];
+
+    const result = await streamCommandEvents('/events', {}, (event) => events.push(event));
+
+    expect(events[0]?.payload).toEqual({
+      routeId: 'route-legacy',
+      conversationId: 'thread-legacy',
+      checkpointId: 'checkpoint-legacy',
+    });
+    expect(result.finished).toEqual({
+      outcome: 'succeeded',
+      routeId: 'route-legacy',
+      conversationId: 'thread-legacy',
+      checkpointId: 'checkpoint-legacy',
+    });
+    expect(JSON.stringify(events)).not.toMatch(/resultThreadId|stageKey/);
+  });
+
+  it('rejects Stage-bearing terminal payloads', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => eventResponse([
+      frame(1, 'command.finished', { outcome: 'succeeded', stageKey: 'discover' }),
+    ])));
+
+    await expect(streamCommandEvents('/events', {}, () => undefined)).rejects.toEqual(
+      new CommandApiError('COMMAND_STREAM_INVALID', 200),
+    );
   });
 
   it('handles multiple CRLF frames in one chunk and ignores heartbeat comments', async () => {
@@ -184,20 +277,17 @@ describe('workflow command web client', () => {
 
   it('maps structured JSON and conflict responses to CommandApiError', async () => {
     const fetchMock = vi.fn()
-      .mockImplementationOnce(() => jsonResponse({ error: { code: 'THREAD_NOT_FOUND' } }, 404))
+      .mockImplementationOnce(() => jsonResponse({ error: { code: 'CONVERSATION_NOT_FOUND' } }, 404))
       .mockImplementationOnce(() => jsonResponse({ error: { code: 'CHECKPOINT_VERSION_CONFLICT' } }, 409));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(listThreadMessages('missing')).rejects.toEqual(
-      new CommandApiError('THREAD_NOT_FOUND', 404),
+    await expect(listConversationMessages('missing')).rejects.toEqual(
+      new CommandApiError('CONVERSATION_NOT_FOUND', 404),
     );
-    await expect(createCommand('thread-1', {
+    await expect(createWorkflowCommand({
       commandId: 'command-1',
-      kind: 'named_action',
-      actionKey: 'advance',
-      content: '',
-      baseCheckpointId: 'checkpoint-1',
-      expectedCheckpointVersion: 1,
+      input: { type: 'named_intent', key: 'summarize' },
+      attachmentIds: [],
     })).rejects.toEqual(new CommandApiError('CHECKPOINT_VERSION_CONFLICT', 409));
   });
 

@@ -1,9 +1,12 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createPool } from '../src/db/pool.js';
+import { createPool, withTransaction } from '../src/db/pool.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { createMemoryRepository } from '../src/memory/repository.js';
+import {
+  appendWorkflowVersionsWithClient,
+  createMemoryRepository,
+} from '../src/memory/repository.js';
 
 const configuredDatabaseUrl = process.env.TEST_DATABASE_URL;
 const databaseUrl = configuredDatabaseUrl ?? 'postgresql://localhost/polar_test_unconfigured';
@@ -146,15 +149,24 @@ integrationDescribe('memory repository', () => {
     expect(invalidated).toMatchObject({ status: 'invalidated', value: null, version: 3 });
     const versions = await repository.listVersions(ids.user, initial.id);
     expect(versions).toEqual([
-      expect.objectContaining({ version: 1, value: 'draft', status: 'active' }),
-      expect.objectContaining({ version: 2, value: 'launch', status: 'active' }),
-      expect.objectContaining({
-        version: 3,
+      { ...initial, updatedAt: now },
+      {
+        ...initial,
+        value: 'launch',
+        version: 2,
+        source: { kind: 'user' },
+        evidence: [{ kind: 'message', id: 'evidence-2' }],
+        updatedAt: new Date(now.getTime() + 1000),
+      },
+      {
+        ...initial,
         value: null,
+        version: 3,
         status: 'invalidated',
         source: { kind: 'user' },
         evidence: [{ kind: 'invalidation_reason', id: 'user', excerpt: 'No longer true' }],
-      }),
+        updatedAt: new Date(now.getTime() + 2000),
+      },
     ]);
     expect(await repository.list(ids.user, {
       scope: 'context', contextId: ids.contextA,
@@ -226,6 +238,53 @@ integrationDescribe('memory repository', () => {
       "SELECT count(*)::int AS count FROM memory_items WHERE user_id=$1 AND scope='user' AND memory_key='taste'",
       [ids.user],
     )).rows).toEqual([{ count: 1 }]);
+    await expectNoWorkflowCausalRows();
+  });
+
+  it('serializes reverse-order multi-identity batches without deadlock or partial writes', async () => {
+    const alpha = await appendWorkflowVersion({ update: {
+      scope: 'context', key: 'alpha', value: 'alpha-v1', evidence: [],
+      impactScope: { contextIds: [ids.contextA] },
+    } });
+    const zeta = await appendWorkflowVersion({ update: {
+      scope: 'context', key: 'zeta', value: 'zeta-v1', evidence: [],
+      impactScope: { contextIds: [ids.contextA] },
+    } });
+    const update = (key: string, value: string) => ({
+      scope: 'context' as const,
+      key,
+      value,
+      expectedVersion: 1,
+      evidence: [],
+      impactScope: { contextIds: [ids.contextA] },
+    });
+    const run = (commandId: string, updates: ReturnType<typeof update>[]) =>
+      withTransaction(pool, (client) => appendWorkflowVersionsWithClient(client, {
+        userId: ids.user,
+        contextId: ids.contextA,
+        commandId,
+        conversationId: ids.conversation,
+        checkpointId: ids.checkpoint,
+        updates,
+        now: new Date(now.getTime() + 1000),
+      }));
+
+    const results = await Promise.all([
+      run(ids.commandA, [
+        update('alpha', 'alpha-forward'),
+        update('zeta', 'zeta-forward'),
+      ]),
+      run(ids.commandB, [
+        update('zeta', 'zeta-reverse'),
+        update('alpha', 'alpha-reverse'),
+      ]),
+    ]);
+
+    expect(results.map((result) => result.kind).sort()).toEqual(['applied', 'blocked']);
+    expect((await repository.listVersions(ids.user, alpha.id) ?? [])
+      .map((version) => version.version)).toEqual([1, 2]);
+    expect((await repository.listVersions(ids.user, zeta.id) ?? [])
+      .map((version) => version.version)).toEqual([1, 2]);
     await expectNoWorkflowCausalRows();
   });
 });

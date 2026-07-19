@@ -5,10 +5,13 @@ import { createAssetService, AssetServiceError } from '../src/assets/service.js'
 function fixture() {
   const objects: any[] = [];
   const attachments: any[] = [];
+  const stagedAttachments: any[] = [];
   const bodies = new Map<string, Buffer>();
   let id = 0;
+  let threadScopeLookups = 0;
   const repository = {
     async getThreadScope(userId: string, threadId: string) {
+      threadScopeLookups += 1;
       return userId === 'owner' && threadId === 'thread'
         ? { contextId: 'context', routeId: 'route', threadId, stageKey: 'work' }
         : null;
@@ -22,10 +25,35 @@ function fixture() {
       attachments.push(record);
       return result;
     },
+    async createStagedAttachment(record: any) {
+      const result = {
+        id: record.id,
+        userId: record.userId,
+        objectId: record.objectId,
+        filename: record.filename,
+        status: 'pending',
+        conversationId: null,
+        createdAt: new Date('2026-07-17T00:00:00.000Z'),
+      };
+      stagedAttachments.push(result);
+      return result;
+    },
+    async deleteStagedAttachment(userId: string, attachmentId: string) {
+      const index = stagedAttachments.findIndex((item) => item.id === attachmentId && item.userId === userId && item.status === 'pending');
+      if (index === -1) return false;
+      stagedAttachments.splice(index, 1);
+      return true;
+    },
+    async listConversationAttachments(userId: string, conversationId: string) {
+      return userId === 'owner' && conversationId === 'conversation'
+        ? [{ kind: 'attachment', id: 'adopted-1' }]
+        : null;
+    },
     async listThreadAttachments() { return [{ kind: 'attachment', id: 'attachment-1' }]; },
     async listStageArtifacts() { return [{ kind: 'artifact', id: 'artifact-1' }]; },
     async getOwnedAsset(userId: string, _kind: string, assetId: string) {
-      const attachment = attachments.find((item) => item.id === assetId && item.userId === userId);
+      const attachment = attachments.find((item) => item.id === assetId && item.userId === userId)
+        ?? stagedAttachments.find((item) => item.id === assetId && item.userId === userId);
       const object = attachment && objects.find((item) => item.id === attachment.objectId);
       return object ? { filename: attachment.filename, object } : null;
     },
@@ -40,7 +68,14 @@ function fixture() {
     },
   };
   const service = createAssetService({ repository: repository as any, store, createId: () => `id-${++id}` });
-  return { service, objects, attachments, bodies };
+  return {
+    service,
+    objects,
+    attachments,
+    stagedAttachments,
+    bodies,
+    get threadScopeLookups() { return threadScopeLookups; },
+  };
 }
 
 describe('asset service', () => {
@@ -83,5 +118,63 @@ describe('asset service', () => {
     await expect(service.listStageArtifacts('owner', 'route', 'work')).resolves.toEqual({
       artifacts: [{ kind: 'artifact', id: 'artifact-1' }],
     });
+  });
+
+  it('stages an owned attachment without creating or looking up an empty workflow scope', async () => {
+    const state = fixture();
+
+    const staged = await state.service.stageAttachment('owner', {
+      filename: '../evidence.txt',
+      mediaType: 'text/plain; charset=utf-8',
+      body: Buffer.from('evidence'),
+    });
+
+    expect(staged).toMatchObject({
+      id: 'id-2',
+      filename: '.._evidence.txt',
+      mediaType: 'text/plain',
+      byteSize: 8,
+      status: 'pending',
+      conversationId: null,
+    });
+    expect(state.threadScopeLookups).toBe(0);
+    expect(state.stagedAttachments).toHaveLength(1);
+  });
+
+  it('deletes only pending staged attachments owned by the caller', async () => {
+    const { service } = fixture();
+    const staged = await service.stageAttachment('owner', {
+      filename: 'draft.txt', mediaType: 'text/plain', body: Buffer.from('draft'),
+    });
+
+    await expect(service.deleteStagedAttachment('other', staged.id))
+      .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });
+    await expect(service.deleteStagedAttachment('owner', staged.id)).resolves.toBeUndefined();
+    await expect(service.deleteStagedAttachment('owner', staged.id))
+      .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });
+  });
+
+  it('opens a pending staged attachment through the owned attachment download boundary', async () => {
+    const { service } = fixture();
+    const staged = await service.stageAttachment('owner', {
+      filename: 'private.txt', mediaType: 'text/plain', body: Buffer.from('private'),
+    });
+
+    await expect(service.openAsset('owner', 'attachment', staged.id)).resolves.toMatchObject({
+      filename: 'private.txt',
+      object: { byteSize: 7, mediaType: 'text/plain' },
+    });
+    await expect(service.openAsset('other', 'attachment', staged.id))
+      .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });
+  });
+
+  it('lists adopted attachments only for an owned conversation', async () => {
+    const { service } = fixture();
+
+    await expect(service.listConversationAttachments('owner', 'conversation')).resolves.toEqual({
+      attachments: [{ kind: 'attachment', id: 'adopted-1' }],
+    });
+    await expect(service.listConversationAttachments('other', 'conversation'))
+      .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });
   });
 });

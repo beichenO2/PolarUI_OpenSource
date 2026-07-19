@@ -16,22 +16,29 @@ export const takeReturnPath = (productId: string) => {
 export interface ComposerDraftScope {
   productId: string;
   userId: string;
-  contextId: string;
-  routeId: string;
-  stageKey: string;
-  threadId: string;
+  contextId?: string;
+  routeId?: string;
+  conversationId?: string;
+  virtualConversationId?: string;
 }
 
-export const composerDraftKey = (scope: ComposerDraftScope) =>
-  prefix + [
+export const composerDraftKey = (scope: ComposerDraftScope) => {
+  const conversationScope = scope.conversationId
+    ? `conversation:${scope.conversationId}`
+    : scope.virtualConversationId
+      ? `virtual:${scope.virtualConversationId}`
+      : scope.contextId
+        ? 'virtual:primary'
+        : 'virtual:start';
+  return prefix + [
     scope.productId,
     'composer-draft',
     scope.userId,
-    scope.contextId,
-    scope.routeId,
-    scope.stageKey,
-    scope.threadId,
+    scope.contextId ?? 'zero-context',
+    scope.routeId ?? 'zero-route',
+    conversationScope,
   ].map(encodeURIComponent).join(':');
+};
 
 export const readComposerDraft = (scope: ComposerDraftScope) =>
   localStorage.getItem(composerDraftKey(scope)) ?? '';

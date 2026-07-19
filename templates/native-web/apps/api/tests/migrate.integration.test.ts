@@ -65,6 +65,26 @@ async function runCoreInputMigrations(pool: ReturnType<typeof createPool>) {
   }
 }
 
+async function runInterruptCursorMigrations(pool: ReturnType<typeof createPool>) {
+  const directory = await mkdtemp(join(tmpdir(), 'polar-native-interrupt-migrations-'));
+  try {
+    await Promise.all([
+      '0001_identity.sql',
+      '0002_workflow_domain.sql',
+      '0003_workflow_commands.sql',
+      '0004_assets_memory_archive.sql',
+      '0005_core_input_memory.sql',
+      '0006_workflow_interrupt_cursor.sql',
+    ].map((fileName) => copyFile(
+      join(migrationsDir, fileName),
+      join(directory, fileName),
+    )));
+    await runMigrations({ pool, migrationsDir: directory });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 async function createWorkflowFixture(pool: ReturnType<typeof createPool>) {
   const ids = {
     user: randomUUID(),
@@ -163,7 +183,7 @@ integrationDescribe('identity migrations', () => {
       'SELECT version, checksum FROM schema_migrations ORDER BY version',
     );
     expect(applied.rows.at(-1)).toMatchObject({
-      version: '0006_workflow_interrupt_cursor',
+      version: '0007_staged_attachment_claims',
     });
     expect(applied.rows).toEqual([
       expect.objectContaining({
@@ -188,6 +208,10 @@ integrationDescribe('identity migrations', () => {
       }),
       expect.objectContaining({
         version: '0006_workflow_interrupt_cursor',
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+      expect.objectContaining({
+        version: '0007_staged_attachment_claims',
         checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
       }),
     ]);
@@ -277,7 +301,33 @@ integrationDescribe('identity migrations', () => {
     expect(after.rows).toEqual([]);
     expect((await pool.query(
       'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1',
-    )).rows[0]).toEqual({ version: '0006_workflow_interrupt_cursor' });
+    )).rows[0]).toEqual({ version: '0007_staged_attachment_claims' });
+  });
+
+  it('upgrades an existing interrupt-cursor schema with durable staged attachment claims', async () => {
+    await runInterruptCursorMigrations(pool);
+
+    const before = await pool.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 " +
+      "AND table_name = 'staged_attachments' AND column_name LIKE 'claimed_%'",
+      [schemaName],
+    );
+    expect(before.rows).toEqual([]);
+
+    await runMigrations({ pool, migrationsDir });
+
+    const after = await pool.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 " +
+      "AND table_name = 'staged_attachments' AND column_name LIKE 'claimed_%' ORDER BY column_name",
+      [schemaName],
+    );
+    expect(after.rows).toEqual([
+      { column_name: 'claimed_command_id' },
+      { column_name: 'claimed_context_id' },
+    ]);
+    expect((await pool.query(
+      'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1',
+    )).rows[0]).toEqual({ version: '0007_staged_attachment_claims' });
   });
 
   it('migrates complete legacy causal rows and supports an initializing zero-Stage flow', async () => {
@@ -964,6 +1014,7 @@ integrationDescribe('identity migrations', () => {
     const first = await createWorkflowFixture(pool);
     const second = await createWorkflowFixture(pool);
     const firstCommandId = await insertCommand(pool, first);
+    const alternateFirstCommandId = await insertCommand(pool, first);
 
     async function insertAsset(userId: string, marker: 'a' | 'b') {
       const objectId = randomUUID();
@@ -1017,12 +1068,15 @@ integrationDescribe('identity migrations', () => {
       [pendingId, first.user, firstObjectId],
     );
     const pending = await pool.query(
-      'SELECT status, adopted_command_id, adopted_context_id, adopted_at ' +
+      'SELECT status, claimed_command_id, claimed_context_id, ' +
+        'adopted_command_id, adopted_context_id, adopted_at ' +
         'FROM staged_attachments WHERE id = $1',
       [pendingId],
     );
     expect(pending.rows).toEqual([{
       status: 'pending',
+      claimed_command_id: null,
+      claimed_context_id: null,
       adopted_command_id: null,
       adopted_context_id: null,
       adopted_at: null,
@@ -1038,7 +1092,7 @@ integrationDescribe('identity migrations', () => {
       "UPDATE staged_attachments SET status = 'adopted', " +
         'adopted_command_id = $2, adopted_at = now() WHERE id = $1',
       [partialId, firstCommandId],
-    )).rejects.toMatchObject({ code: '23514' });
+    )).rejects.toMatchObject({ code: '55000' });
 
     const mismatchedScopeId = randomUUID();
     await pool.query(
@@ -1051,10 +1105,53 @@ integrationDescribe('identity migrations', () => {
         'adopted_command_id = $2, adopted_context_id = $3, ' +
         'adopted_at = now(), updated_at = now() WHERE id = $1',
       [mismatchedScopeId, firstCommandId, second.context],
+    )).rejects.toMatchObject({ code: '55000' });
+
+    await pool.query(
+      'UPDATE staged_attachments SET claimed_command_id = $2, claimed_context_id = $3, ' +
+        'updated_at = now() WHERE id = $1',
+      [partialId, firstCommandId, first.context],
+    );
+    await pool.query(
+      'UPDATE staged_attachments SET claimed_command_id = NULL, claimed_context_id = NULL, ' +
+        'updated_at = now() WHERE id = $1',
+      [partialId],
+    );
+    expect((await pool.query(
+      'DELETE FROM staged_attachments WHERE id = $1 RETURNING id',
+      [partialId],
+    )).rows).toEqual([{ id: partialId }]);
+
+    await pool.query(
+      'UPDATE staged_attachments SET claimed_command_id = $2, claimed_context_id = $3, ' +
+        'updated_at = now() WHERE id = $1',
+      [pendingId, firstCommandId, first.context],
+    );
+    await expect(pool.query(
+      'DELETE FROM staged_attachments WHERE id = $1',
+      [pendingId],
+    )).rejects.toMatchObject({ code: '55000' });
+    await expect(pool.query(
+      'UPDATE staged_attachments SET claimed_command_id = $2, claimed_context_id = $3, ' +
+        'updated_at = now() WHERE id = $1',
+      [pendingId, alternateFirstCommandId, first.context],
+    )).rejects.toMatchObject({ code: '55000' });
+
+    await expect(pool.query(
+      'UPDATE staged_attachments SET claimed_command_id = $2, claimed_context_id = $3, ' +
+        'updated_at = now() WHERE id = $1',
+      [mismatchedScopeId, firstCommandId, first.context],
     )).rejects.toMatchObject({ code: '23503' });
+    await expect(pool.query(
+      "UPDATE staged_attachments SET status = 'adopted', " +
+        'adopted_command_id = $2, adopted_context_id = $3, ' +
+        'adopted_at = now(), updated_at = now() WHERE id = $1',
+      [mismatchedScopeId, firstCommandId, second.context],
+    )).rejects.toMatchObject({ code: '55000' });
 
     await pool.query(
       "UPDATE staged_attachments SET status = 'adopted', " +
+        'claimed_command_id = NULL, claimed_context_id = NULL, ' +
         'adopted_command_id = $2, adopted_context_id = $3, ' +
         'adopted_at = $4, updated_at = $4 WHERE id = $1',
       [
@@ -1065,13 +1162,15 @@ integrationDescribe('identity migrations', () => {
       ],
     );
     const adopted = await pool.query(
-      'SELECT status, adopted_command_id, adopted_context_id, ' +
+      'SELECT status, claimed_command_id, claimed_context_id, adopted_command_id, adopted_context_id, ' +
         'adopted_at IS NOT NULL AS has_adopted_at ' +
         'FROM staged_attachments WHERE id = $1',
       [pendingId],
     );
     expect(adopted.rows).toEqual([{
       status: 'adopted',
+      claimed_command_id: null,
+      claimed_context_id: null,
       adopted_command_id: firstCommandId,
       adopted_context_id: first.context,
       has_adopted_at: true,

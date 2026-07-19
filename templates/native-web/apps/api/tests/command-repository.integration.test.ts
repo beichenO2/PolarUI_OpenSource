@@ -642,6 +642,88 @@ integrationDescribe('workflow command repository', () => {
     )).rows[0].head_checkpoint_id).toBe(ids.sourceHeadCheckpoint);
   });
 
+  it('atomically records prepared artifacts in the historical result snapshot without changing its source', async () => {
+    await advanceSourceHead();
+    const objectId = '90000000-0000-4000-8000-000000000020';
+    const readyArtifactId = '92000000-0000-4000-8000-000000000020';
+    const failedArtifactId = '92000000-0000-4000-8000-000000000021';
+    await pool.query(
+      'INSERT INTO asset_objects ' +
+      '(id, user_id, storage_key, sha256, byte_size, media_type, status, created_at) ' +
+      "VALUES ($1, $2, 'objects/history-result', $3, 14, 'text/plain', 'ready', $4)",
+      [objectId, ids.user, 'c'.repeat(64), now],
+    );
+    const sourceBefore = (await pool.query<{ id: string; snapshot: Record<string, unknown> }>(
+      'SELECT id, snapshot FROM workflow_checkpoints WHERE route_id = $1 ORDER BY version',
+      [ids.route],
+    )).rows;
+    await prepareUnified({
+      commandId: ids.historyCommand,
+      baseCheckpointId: ids.checkpoint,
+      expectedCheckpointVersion: 0,
+      inputHash: 'history-artifact-atomic',
+    });
+
+    const committed = await repository.finalizeCommand(ids.historyCommand, finalizeInput({
+      checkpointId: ids.historyResultCheckpoint,
+      headCheckpointIdAtClaim: ids.sourceHeadCheckpoint,
+      preparedArtifacts: [{
+        status: 'ready',
+        id: readyArtifactId,
+        objectId,
+        filename: 'history-result.txt',
+        mediaType: 'text/plain',
+        byteSize: 14,
+        sha256: 'c'.repeat(64),
+      }, {
+        status: 'failed',
+        id: failedArtifactId,
+        filename: 'broken-result.bin',
+        errorCode: 'ARTIFACT_STORAGE_FAILED',
+      }],
+    }), new Date(now.getTime() + 1000));
+
+    expect(committed.status).toBe('succeeded');
+    expect(committed.routeId).not.toBe(ids.route);
+    const resultSnapshot = (await pool.query<{ snapshot: Record<string, any> }>(
+      'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
+      [ids.historyResultCheckpoint],
+    )).rows[0]!.snapshot;
+    expect(resultSnapshot.artifacts).toEqual([{
+      id: readyArtifactId,
+      stage_key: 'discover',
+      filename: 'history-result.txt',
+      media_type: 'text/plain',
+      byte_size: 14,
+      sha256: 'c'.repeat(64),
+      created_at: new Date(now.getTime() + 1000).toISOString(),
+    }]);
+    expect((await pool.query(
+      'SELECT id, route_id, thread_id, status, error_code FROM workflow_artifacts ' +
+      'WHERE command_id = $1 ORDER BY id',
+      [ids.historyCommand],
+    )).rows).toEqual([
+      {
+        id: readyArtifactId,
+        route_id: committed.routeId,
+        thread_id: committed.conversationId,
+        status: 'ready',
+        error_code: null,
+      },
+      {
+        id: failedArtifactId,
+        route_id: committed.routeId,
+        thread_id: committed.conversationId,
+        status: 'failed',
+        error_code: 'ARTIFACT_STORAGE_FAILED',
+      },
+    ]);
+    expect((await pool.query<{ id: string; snapshot: Record<string, unknown> }>(
+      'SELECT id, snapshot FROM workflow_checkpoints WHERE route_id = $1 ORDER BY version',
+      [ids.route],
+    )).rows).toEqual(sourceBefore);
+  });
+
   it('rejects a stale expected version without moving the current head used for refresh', async () => {
     await advanceSourceHead();
     await expect(repository.prepareCommand(prepareInput({
@@ -767,6 +849,7 @@ integrationDescribe('workflow command repository', () => {
 
     await repository.finalizeCommand(ids.command, finalizeInput({
       workflowState,
+      workflowRevision: 'workflow-v7',
       stageProjection,
     }), new Date(now.getTime() + 1000));
 
@@ -776,6 +859,8 @@ integrationDescribe('workflow command repository', () => {
     )).rows[0]!.snapshot;
     expect(snapshot).toEqual({
       workflowState,
+      workflowRevision: 'workflow-v7',
+      sourceCommandId: ids.command,
       stageProjection,
       memoryReferences: [],
       artifacts: [],
@@ -807,6 +892,8 @@ integrationDescribe('workflow command repository', () => {
     )).rows[0]!.snapshot;
     expect(nextSnapshot.stageProjection).toEqual(stageProjection);
     expect(nextSnapshot.memoryReferences).toEqual([]);
+    expect(nextSnapshot.sourceCommandId).toBe(ids.thirdCommand);
+    expect(nextSnapshot).not.toHaveProperty('workflowRevision');
   });
 
   it('keeps a conflicting memory update inactive until database-cursor resume confirms the current version', async () => {
@@ -825,7 +912,32 @@ integrationDescribe('workflow command repository', () => {
       },
       now,
     });
-    await prepareUnified({ inputHash: 'memory-conflict-origin' });
+    const unmodified = await memoryRepository.appendWorkflowVersion({
+      userId: ids.user,
+      contextId: ids.context,
+      commandId: '60000000-0000-4000-8000-000000000089',
+      conversationId: ids.thread,
+      checkpointId: ids.checkpoint,
+      update: {
+        scope: 'user',
+        key: 'tone',
+        value: 'concise',
+        evidence: [],
+        impactScope: { contextIds: 'all' },
+      },
+      now,
+    });
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '3'.repeat(64),
+      storageKey: 'objects/task6-interrupt-release',
+    });
+    await prepareUnified({
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'memory-conflict-origin',
+    });
     const conflictingUpdate = {
       scope: 'context' as const,
       key: 'goal',
@@ -846,6 +958,11 @@ integrationDescribe('workflow command repository', () => {
       cursor: privateCursor,
     }, new Date(now.getTime() + 100));
 
+    expect((await pool.query(
+      'SELECT status, claimed_command_id, claimed_context_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', claimed_command_id: null, claimed_context_id: null });
+
     expect(await memoryRepository.list(ids.user, {
       scope: 'context', contextId: ids.context,
     })).toEqual([expect.objectContaining({ id: initial.id, value: 'draft', version: 1 })]);
@@ -864,17 +981,30 @@ integrationDescribe('workflow command repository', () => {
       kind: 'resume_interrupt',
       interruptId: ids.interrupt,
       content: '确认更新',
+      attachmentIds: [ids.stagedAttachment],
       inputHash: 'memory-conflict-resume',
       now: new Date(now.getTime() + 200),
       leaseExpiresAt: new Date(now.getTime() + 30_200),
     });
     expect(resumed.execution.interruptCursor).toEqual(privateCursor);
+    expect((await pool.query(
+      'SELECT claimed_command_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0].claimed_command_id).toBe(ids.nextCommand);
+    expect(resumed.execution.memory).toMatchObject({
+      user: [{ id: unmodified.id, version: 1 }],
+      context: [{ id: initial.id, version: 1 }],
+    });
     expect(await memoryRepository.listVersions(ids.user, initial.id)).toHaveLength(1);
 
     await repository.finalizeCommand(ids.nextCommand, finalizeInput({
       userMessageId: ids.nextUserMessage,
       assistantMessageId: ids.nextAssistantMessage,
       checkpointId: ids.nextCheckpoint,
+      consumedMemoryReferences: [
+        { memoryId: unmodified.id, version: 1 },
+        { memoryId: initial.id, version: 1 },
+      ],
       memoryUpdates: [{
         scope: 'context',
         key: 'goal',
@@ -883,6 +1013,7 @@ integrationDescribe('workflow command repository', () => {
         evidence: [{ kind: 'interrupt', id: ids.interrupt }],
         impactScope: { contextIds: [ids.context] },
       }],
+      attachmentIds: [ids.stagedAttachment],
     }), new Date(now.getTime() + 300));
 
     expect(await memoryRepository.list(ids.user, {
@@ -907,7 +1038,12 @@ integrationDescribe('workflow command repository', () => {
       'SELECT snapshot FROM workflow_checkpoints WHERE id = $1',
       [ids.nextCheckpoint],
     )).rows[0].snapshot;
-    expect(snapshot.memoryReferences).toContainEqual({ memoryId: initial.id, version: 2 });
+    expect(snapshot.memoryReferences).toEqual(expect.arrayContaining([
+      { memoryId: unmodified.id, version: 1 },
+      { memoryId: initial.id, version: 1 },
+      { memoryId: initial.id, version: 2 },
+    ]));
+    expect(snapshot.memoryReferences).toHaveLength(3);
     expect((await pool.query(
       'SELECT status, resolution_command_id FROM workflow_interrupts WHERE id = $1',
       [ids.interrupt],
@@ -1073,6 +1209,7 @@ integrationDescribe('workflow command repository', () => {
   });
 
   it('adopts only owned staged attachments into the successful Command scope', async () => {
+    const activeNow = new Date(Date.now() + 60_000);
     await stageAttachment({
       userId: ids.user,
       objectId: ids.attachmentObject,
@@ -1080,20 +1217,47 @@ integrationDescribe('workflow command repository', () => {
       sha256: 'c'.repeat(64),
       storageKey: 'objects/task3-owned',
     });
-    await prepareUnified({ attachmentIds: [ids.stagedAttachment], inputHash: 'attachment-hash' });
+    await expect(assets.getOwnedAsset(ids.user, 'attachment', ids.stagedAttachment)).resolves.toMatchObject({
+      filename: 'notes.txt',
+      object: { id: ids.attachmentObject },
+    });
+    await expect(assets.getOwnedAsset(ids.otherUser, 'attachment', ids.stagedAttachment)).resolves.toBeNull();
+    await prepareUnified({
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'attachment-hash',
+      now: activeNow,
+      leaseExpiresAt: new Date(activeNow.getTime() + 30_000),
+    });
     expect((await pool.query(
-      'SELECT status, adopted_command_id FROM staged_attachments WHERE id = $1',
+      'SELECT status, claimed_command_id, claimed_context_id, adopted_command_id ' +
+      'FROM staged_attachments WHERE id = $1',
       [ids.stagedAttachment],
-    )).rows[0]).toEqual({ status: 'pending', adopted_command_id: null });
+    )).rows[0]).toEqual({
+      status: 'pending',
+      claimed_command_id: ids.command,
+      claimed_context_id: ids.context,
+      adopted_command_id: null,
+    });
+    await expect(assets.deleteStagedAttachment(ids.user, ids.stagedAttachment)).resolves.toBe(false);
+    await expect(repository.prepareCommand(prepareInput({
+      commandId: ids.nextCommand,
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'running-command-already-claimed-attachment-hash',
+      now: new Date(now.getTime() + 100),
+      leaseExpiresAt: new Date(now.getTime() + 30_100),
+    }))).rejects.toEqual(expect.objectContaining({ code: 'COMMAND_SCOPE_INVALID' }));
 
     const committed = await repository.finalizeCommand(ids.command, finalizeInput({
       attachmentIds: [ids.stagedAttachment],
-    }), new Date(now.getTime() + 1000));
+    }), new Date(activeNow.getTime() + 1000));
     expect((await pool.query(
-      'SELECT status, adopted_command_id, adopted_context_id FROM staged_attachments WHERE id = $1',
+      'SELECT status, claimed_command_id, claimed_context_id, adopted_command_id, adopted_context_id ' +
+      'FROM staged_attachments WHERE id = $1',
       [ids.stagedAttachment],
     )).rows[0]).toEqual({
       status: 'adopted',
+      claimed_command_id: null,
+      claimed_context_id: null,
       adopted_command_id: ids.command,
       adopted_context_id: ids.context,
     });
@@ -1110,9 +1274,192 @@ integrationDescribe('workflow command repository', () => {
       stage_key: null,
       filename: 'notes.txt',
     }]);
+
+    await expect(repository.prepareCommand(prepareInput({
+      commandId: ids.nextCommand,
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'already-adopted-attachment-hash',
+      now: new Date(activeNow.getTime() + 2000),
+      leaseExpiresAt: new Date(activeNow.getTime() + 32_000),
+    }))).rejects.toEqual(expect.objectContaining({ code: 'COMMAND_SCOPE_INVALID' }));
+    expect((await pool.query(
+      'SELECT count(*)::int AS count FROM workflow_attachments WHERE object_id = $1',
+      [ids.attachmentObject],
+    )).rows[0].count).toBe(1);
+    await expect(assets.listConversationAttachments(ids.user, committed.conversationId)).resolves.toEqual([
+      expect.objectContaining({ kind: 'attachment', filename: 'notes.txt' }),
+    ]);
+    await expect(assets.listConversationAttachments(ids.otherUser, committed.conversationId)).resolves.toBeNull();
+    await expect(assets.deleteStagedAttachment(ids.user, ids.stagedAttachment)).resolves.toBe(false);
   });
 
-  it('keeps attachments pending on failure and hides attachments owned by another user', async () => {
+  it('deletes only an unclaimed pending staged attachment through the real asset repository', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.otherAttachmentObject,
+      attachmentId: ids.otherStagedAttachment,
+      sha256: 'f'.repeat(64),
+      storageKey: 'objects/task6-unclaimed-delete',
+    });
+
+    await expect(assets.listConversationAttachments(ids.user, ids.thread)).resolves.toEqual([]);
+    await expect(assets.listConversationAttachments(ids.otherUser, ids.thread)).resolves.toBeNull();
+    await expect(assets.deleteStagedAttachment(ids.otherUser, ids.otherStagedAttachment)).resolves.toBe(false);
+    await expect(assets.deleteStagedAttachment(ids.user, ids.otherStagedAttachment)).resolves.toBe(true);
+    await expect(assets.deleteStagedAttachment(ids.user, ids.otherStagedAttachment)).resolves.toBe(false);
+  });
+
+  it('allows exactly one of two concurrent Commands to durably claim a staged attachment', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '1'.repeat(64),
+      storageKey: 'objects/task6-concurrent-claim',
+    });
+
+    const settled = await Promise.allSettled([
+      repository.prepareCommand(prepareInput({
+        commandId: ids.command,
+        attachmentIds: [ids.stagedAttachment],
+        inputHash: 'concurrent-attachment-claim-one',
+      })),
+      repository.prepareCommand(prepareInput({
+        commandId: ids.nextCommand,
+        attachmentIds: [ids.stagedAttachment],
+        inputHash: 'concurrent-attachment-claim-two',
+      })),
+    ]);
+
+    expect(settled.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(settled.filter((result) => result.status === 'rejected')).toEqual([
+      expect.objectContaining({ reason: expect.objectContaining({ code: 'COMMAND_SCOPE_INVALID' }) }),
+    ]);
+    const running = (await pool.query(
+      "SELECT id FROM workflow_commands WHERE status = 'running'",
+    )).rows;
+    expect(running).toHaveLength(1);
+    expect((await pool.query(
+      'SELECT claimed_command_id, claimed_context_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({
+      claimed_command_id: running[0].id,
+      claimed_context_id: ids.context,
+    });
+  });
+
+  it('terminalizes an abandoned unstarted Command and releases all of its claims before takeover', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '5'.repeat(64),
+      storageKey: 'objects/task6-abandoned-command-primary',
+    });
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.otherAttachmentObject,
+      attachmentId: ids.otherStagedAttachment,
+      sha256: '6'.repeat(64),
+      storageKey: 'objects/task6-abandoned-command-secondary',
+    });
+    const abandonedInput = prepareInput({
+      attachmentIds: [ids.stagedAttachment, ids.otherStagedAttachment],
+      inputHash: 'abandoned-command-attachments',
+      leaseExpiresAt: new Date(now.getTime() + 100),
+    });
+    await repository.prepareCommand(abandonedInput);
+
+    const takeover = await repository.prepareCommand(prepareInput({
+      commandId: ids.nextCommand,
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'replacement-command-attachment',
+      now: new Date(now.getTime() + 200),
+      leaseExpiresAt: new Date(now.getTime() + 30_200),
+    }));
+
+    expect(takeover.kind).toBe('claimed');
+    expect((await pool.query(
+      'SELECT status, lease_expires_at, error_code FROM workflow_commands WHERE id = $1',
+      [ids.command],
+    )).rows[0]).toEqual({ status: 'failed', lease_expires_at: null, error_code: 'COMMAND_LEASE_EXPIRED' });
+    expect((await pool.query(
+      'SELECT event_type, payload FROM workflow_command_events WHERE command_id = $1 ORDER BY sequence DESC LIMIT 1',
+      [ids.command],
+    )).rows[0]).toEqual({
+      event_type: 'command.finished',
+      payload: { outcome: 'failed', code: 'COMMAND_LEASE_EXPIRED' },
+    });
+    expect((await pool.query(
+      'SELECT id, claimed_command_id FROM staged_attachments ORDER BY id',
+    )).rows).toEqual([
+      { id: ids.stagedAttachment, claimed_command_id: ids.nextCommand },
+      { id: ids.otherStagedAttachment, claimed_command_id: null },
+    ]);
+    await expect(assets.deleteStagedAttachment(ids.user, ids.otherStagedAttachment)).resolves.toBe(true);
+
+    const replay = await repository.prepareCommand({
+      ...abandonedInput,
+      now: new Date(now.getTime() + 300),
+      leaseExpiresAt: new Date(now.getTime() + 30_300),
+    });
+    expect(replay.kind).toBe('replay');
+    if (replay.kind !== 'replay') throw new Error('expected abandoned Command replay');
+    expect(replay.command).toMatchObject({ status: 'failed', errorCode: 'COMMAND_LEASE_EXPIRED' });
+  });
+
+  it('terminalizes an abandoned started Command before deleting its claimed attachment', async () => {
+    const abandonedNow = new Date(Date.now() - 60_000);
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '7'.repeat(64),
+      storageKey: 'objects/task6-abandoned-started-delete',
+    });
+    const abandonedInput = prepareInput({
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'abandoned-started-attachment',
+      now: abandonedNow,
+      leaseExpiresAt: new Date(abandonedNow.getTime() + 100),
+    });
+    await repository.prepareCommand(abandonedInput);
+    await repository.appendEvent(
+      ids.command,
+      'workflow.started',
+      { attempt: 1 },
+      new Date(abandonedNow.getTime() + 50),
+    );
+
+    await expect(assets.deleteStagedAttachment(ids.user, ids.stagedAttachment)).resolves.toBe(true);
+
+    expect((await pool.query(
+      'SELECT status, lease_expires_at, error_code FROM workflow_commands WHERE id = $1',
+      [ids.command],
+    )).rows[0]).toEqual({ status: 'failed', lease_expires_at: null, error_code: 'WORKFLOW_OUTCOME_UNKNOWN' });
+    expect((await pool.query(
+      'SELECT event_type, payload FROM workflow_command_events WHERE command_id = $1 ORDER BY sequence DESC LIMIT 1',
+      [ids.command],
+    )).rows[0]).toEqual({
+      event_type: 'command.finished',
+      payload: { outcome: 'failed', code: 'WORKFLOW_OUTCOME_UNKNOWN' },
+    });
+    expect((await pool.query(
+      'SELECT count(*)::int AS count FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0].count).toBe(0);
+
+    const replay = await repository.prepareCommand({
+      ...abandonedInput,
+      now: new Date(),
+      leaseExpiresAt: new Date(Date.now() + 30_000),
+    });
+    expect(replay.kind).toBe('replay');
+    if (replay.kind !== 'replay') throw new Error('expected abandoned Command replay');
+    expect(replay.command).toMatchObject({ status: 'failed', errorCode: 'WORKFLOW_OUTCOME_UNKNOWN' });
+  });
+
+  it('keeps attachments pending on failure so a new Command can retry the same opaque ID', async () => {
     await stageAttachment({
       userId: ids.user,
       objectId: ids.attachmentObject,
@@ -1121,12 +1468,43 @@ integrationDescribe('workflow command repository', () => {
       storageKey: 'objects/task3-pending',
     });
     await prepareUnified({ attachmentIds: [ids.stagedAttachment], inputHash: 'pending-attachment-hash' });
+    expect((await pool.query(
+      'SELECT claimed_command_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0].claimed_command_id).toBe(ids.command);
     await repository.failCommand(ids.command, 'WORKFLOW_UNAVAILABLE', new Date(now.getTime() + 1000));
+    expect((await pool.query(
+      'SELECT status, claimed_command_id, claimed_context_id, adopted_command_id ' +
+      'FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({
+      status: 'pending', claimed_command_id: null, claimed_context_id: null, adopted_command_id: null,
+    });
+    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_attachments')).rows[0].count).toBe(0);
+
+    await prepareUnified({
+      commandId: ids.nextCommand,
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'retry-pending-attachment-hash',
+      now: new Date(now.getTime() + 2000),
+      leaseExpiresAt: new Date(now.getTime() + 32_000),
+    });
+    expect((await pool.query(
+      'SELECT claimed_command_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0].claimed_command_id).toBe(ids.nextCommand);
+    await repository.finalizeCommand(ids.nextCommand, finalizeInput({
+      userMessageId: ids.nextUserMessage,
+      assistantMessageId: ids.nextAssistantMessage,
+      attachmentIds: [ids.stagedAttachment],
+    }), new Date(now.getTime() + 3000));
     expect((await pool.query(
       'SELECT status, adopted_command_id FROM staged_attachments WHERE id = $1',
       [ids.stagedAttachment],
-    )).rows[0]).toEqual({ status: 'pending', adopted_command_id: null });
-    expect((await pool.query('SELECT count(*)::int AS count FROM workflow_attachments')).rows[0].count).toBe(0);
+    )).rows[0]).toEqual({ status: 'adopted', adopted_command_id: ids.nextCommand });
+  });
+
+  it('hides staged attachments owned by another user from Command claims', async () => {
 
     await stageAttachment({
       userId: ids.otherUser,
@@ -1276,8 +1654,16 @@ integrationDescribe('workflow command repository', () => {
   });
 
   it('reclaims the immutable accepted head scope and conflicts if that original head advanced', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '2'.repeat(64),
+      storageKey: 'objects/task6-conflict-release',
+    });
     const prepared = await repository.prepareCommand(prepareInput({
       commandId: ids.headCommand,
+      attachmentIds: [ids.stagedAttachment],
       inputHash: 'reclaim-head-hash',
       leaseExpiresAt: new Date(now.getTime() + 100),
     }));
@@ -1288,6 +1674,7 @@ integrationDescribe('workflow command repository', () => {
     await advanceSourceHead();
     const reclaimed = await repository.prepareCommand(prepareInput({
       commandId: ids.headCommand,
+      attachmentIds: [ids.stagedAttachment],
       inputHash: 'reclaim-head-hash',
       now: new Date(now.getTime() + 200),
       leaseExpiresAt: new Date(now.getTime() + 30_200),
@@ -1310,6 +1697,43 @@ integrationDescribe('workflow command repository', () => {
     expect((await pool.query(
       'SELECT head_checkpoint_id FROM workflow_routes WHERE id = $1', [ids.route],
     )).rows[0].head_checkpoint_id).toBe(ids.sourceHeadCheckpoint);
+    expect((await pool.query(
+      'SELECT status, claimed_command_id, claimed_context_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', claimed_command_id: null, claimed_context_id: null });
+    await expect(assets.deleteStagedAttachment(ids.user, ids.stagedAttachment)).resolves.toBe(true);
+  });
+
+  it('releases a staged attachment when an expired unified Workflow outcome becomes unknown', async () => {
+    await stageAttachment({
+      userId: ids.user,
+      objectId: ids.attachmentObject,
+      attachmentId: ids.stagedAttachment,
+      sha256: '4'.repeat(64),
+      storageKey: 'objects/task6-expired-release',
+    });
+    const input = prepareInput({
+      attachmentIds: [ids.stagedAttachment],
+      inputHash: 'expired-unified-attachment-claim',
+      leaseExpiresAt: new Date(now.getTime() + 100),
+    });
+    await repository.prepareCommand(input);
+    await repository.appendEvent(ids.command, 'workflow.started', { attempt: 1 }, new Date(now.getTime() + 50));
+
+    const replay = await repository.prepareCommand({
+      ...input,
+      now: new Date(now.getTime() + 200),
+      leaseExpiresAt: new Date(now.getTime() + 30_200),
+    });
+
+    expect(replay.kind).toBe('replay');
+    if (replay.kind !== 'replay') throw new Error('expected terminal replay');
+    expect(replay.command).toMatchObject({ status: 'failed', errorCode: 'WORKFLOW_OUTCOME_UNKNOWN' });
+    expect((await pool.query(
+      'SELECT status, claimed_command_id, claimed_context_id FROM staged_attachments WHERE id = $1',
+      [ids.stagedAttachment],
+    )).rows[0]).toEqual({ status: 'pending', claimed_command_id: null, claimed_context_id: null });
+    await expect(assets.deleteStagedAttachment(ids.user, ids.stagedAttachment)).resolves.toBe(true);
   });
 
   it('terminally fails an expired lease after workflow start instead of reclaiming it', async () => {

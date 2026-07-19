@@ -21,10 +21,13 @@ export interface PublicWorkflowInterrupt {
   createdAt?: string;
 }
 
-export interface ThreadMessages {
+export interface ConversationMessages {
   messages: WorkflowMessage[];
   pendingInterrupt: PublicWorkflowInterrupt | null;
 }
+
+/** @deprecated Use ConversationMessages. */
+export type ThreadMessages = ConversationMessages;
 
 interface CommandBase {
   commandId: string;
@@ -37,6 +40,20 @@ export type CommandInput =
   | (CommandBase & { kind: 'message' })
   | (CommandBase & { kind: 'named_action'; actionKey: string })
   | (CommandBase & { kind: 'resume_interrupt'; interruptId: string });
+
+export type PublicCommandInput = {
+  commandId: string;
+  contextId?: string;
+  routeId?: string;
+  conversationId?: string;
+  baseCheckpointId?: string;
+  expectedCheckpointVersion?: number;
+  input:
+    | { type: 'message'; content: string }
+    | { type: 'named_intent'; key: string; content?: string }
+    | { type: 'resume_interrupt'; interruptId: string; content: string };
+  attachmentIds: string[];
+};
 
 export interface CommandReceipt {
   commandId: string;
@@ -58,11 +75,14 @@ export interface AssistantDeltaPayload {
 }
 
 export interface WorkspaceCommittedPayload {
-  resultRouteId?: string;
-  resultThreadId?: string;
-  resultCheckpointId?: string | null;
-  stageKey?: string;
-  [key: string]: unknown;
+  contextId?: string;
+  routeId?: string;
+  conversationId?: string;
+  checkpointId?: string | null;
+  stageProjectionRevision?: string;
+  userMessageId?: string | null;
+  assistantMessageId?: string | null;
+  pendingInterrupt?: PublicWorkflowInterrupt | null;
 }
 
 export type CommandOutcome = 'succeeded' | 'failed' | 'conflict';
@@ -70,11 +90,12 @@ export type CommandOutcome = 'succeeded' | 'failed' | 'conflict';
 export interface CommandFinishedPayload {
   outcome: CommandOutcome;
   code?: string;
-  resultRouteId?: string;
-  resultThreadId?: string;
-  resultCheckpointId?: string | null;
-  stageKey?: string;
-  [key: string]: unknown;
+  contextId?: string;
+  routeId?: string;
+  conversationId?: string;
+  checkpointId?: string | null;
+  stageProjectionRevision?: string;
+  currentHeadCheckpointId?: string;
 }
 
 export type WorkflowCommandEvent =
@@ -141,36 +162,49 @@ function validInterrupt(value: unknown): value is PublicWorkflowInterrupt {
   return value.createdAt === undefined || typeof value.createdAt === 'string';
 }
 
-function validThreadMessages(value: unknown): value is ThreadMessages {
+function validConversationMessages(value: unknown): value is ConversationMessages {
   return isRecord(value) &&
     Array.isArray(value.messages) && value.messages.every(validMessage) &&
     (value.pendingInterrupt === null || validInterrupt(value.pendingInterrupt));
 }
 
-function validReceipt(value: unknown): value is CommandReceipt {
-  return isRecord(value) && typeof value.commandId === 'string' && typeof value.eventUrl === 'string';
+function validReceipt(value: unknown, expectedCommandId: string): value is CommandReceipt {
+  return isRecord(value) &&
+    value.commandId === expectedCommandId &&
+    value.eventUrl === `/api/commands/${encodeURIComponent(expectedCommandId)}/events`;
 }
 
-export async function listThreadMessages(
-  threadId: string,
+async function requestMessages(
+  url: string,
   options: RequestOptions = {},
-): Promise<ThreadMessages> {
-  const response = await fetch(`/api/threads/${encodeURIComponent(threadId)}/messages`, {
+): Promise<ConversationMessages> {
+  const response = await fetch(url, {
     credentials: 'same-origin',
     signal: options.signal,
   });
   const body = await readJson(response);
   if (!response.ok) throw new CommandApiError(errorCode(body), response.status);
-  if (!validThreadMessages(body)) throw new CommandApiError('COMMAND_RESPONSE_INVALID', response.status);
+  if (!validConversationMessages(body)) throw new CommandApiError('COMMAND_RESPONSE_INVALID', response.status);
   return body;
 }
 
-export async function createCommand(
-  threadId: string,
-  input: CommandInput,
+export async function listConversationMessages(
+  conversationId: string,
+  options: RequestOptions = {},
+): Promise<ConversationMessages> {
+  return requestMessages(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+    options,
+  );
+}
+
+async function requestReceipt(
+  url: string,
+  input: unknown,
+  expectedCommandId: string,
   options: RequestOptions = {},
 ): Promise<CommandReceipt> {
-  const response = await fetch(`/api/threads/${encodeURIComponent(threadId)}/commands`, {
+  const response = await fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
@@ -179,19 +213,88 @@ export async function createCommand(
   });
   const body = await readJson(response);
   if (!response.ok) throw new CommandApiError(errorCode(body), response.status);
-  if (response.status !== 202 || !validReceipt(body)) {
+  if (response.status !== 202 || !validReceipt(body, expectedCommandId)) {
     throw new CommandApiError('COMMAND_RESPONSE_INVALID', response.status);
   }
   return body;
+}
+
+export async function createWorkflowCommand(
+  input: PublicCommandInput,
+  options: RequestOptions = {},
+) {
+  return requestReceipt('/api/workflow/commands', input, input.commandId, options);
+}
+
+/** @deprecated Transitional adapter for components replaced in Task 8. */
+export function listThreadMessages(
+  threadId: string,
+  options: RequestOptions = {},
+) {
+  return requestMessages(
+    `/api/threads/${encodeURIComponent(threadId)}/messages`,
+    options,
+  );
+}
+
+/** @deprecated Transitional adapter for components replaced in Task 8. */
+export function createCommand(
+  threadId: string,
+  input: CommandInput,
+  options: RequestOptions = {},
+) {
+  return requestReceipt(
+    `/api/threads/${encodeURIComponent(threadId)}/commands`,
+    input,
+    input.commandId,
+    options,
+  );
 }
 
 function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 }
 
-function optionalString(payload: Record<string, unknown>, key: string, nullable = false): boolean {
-  const value = payload[key];
-  return value === undefined || typeof value === 'string' || (nullable && value === null);
+function canonicalValue(
+  payload: Record<string, unknown>,
+  canonicalKey: string,
+  legacyKey?: string,
+  nullable = false,
+): string | null | undefined {
+  const canonical = payload[canonicalKey];
+  const legacy = legacyKey ? payload[legacyKey] : undefined;
+  const valid = (value: unknown) => value === undefined || typeof value === 'string' || (nullable && value === null);
+  if (!valid(canonical) || !valid(legacy)) streamInvalid();
+  if (canonical !== undefined && legacy !== undefined && canonical !== legacy) streamInvalid();
+  return (canonical !== undefined ? canonical : legacy) as string | null | undefined;
+}
+
+function optionalInterrupt(value: unknown): PublicWorkflowInterrupt | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (!validInterrupt(value)) streamInvalid();
+  return value;
+}
+
+function normalizeWorkspacePayload(payload: Record<string, unknown>): WorkspaceCommittedPayload {
+  if (Object.prototype.hasOwnProperty.call(payload, 'stageKey')) streamInvalid();
+  const normalized: WorkspaceCommittedPayload = {};
+  const contextId = canonicalValue(payload, 'contextId', 'resultContextId');
+  const routeId = canonicalValue(payload, 'routeId', 'resultRouteId');
+  const conversationId = canonicalValue(payload, 'conversationId', 'resultThreadId');
+  const checkpointId = canonicalValue(payload, 'checkpointId', 'resultCheckpointId', true);
+  const stageProjectionRevision = canonicalValue(payload, 'stageProjectionRevision');
+  const userMessageId = canonicalValue(payload, 'userMessageId', undefined, true);
+  const assistantMessageId = canonicalValue(payload, 'assistantMessageId', undefined, true);
+  const pendingInterrupt = optionalInterrupt(payload.pendingInterrupt);
+  if (contextId !== undefined) normalized.contextId = contextId;
+  if (routeId !== undefined) normalized.routeId = routeId;
+  if (conversationId !== undefined) normalized.conversationId = conversationId;
+  if (checkpointId !== undefined) normalized.checkpointId = checkpointId;
+  if (stageProjectionRevision !== undefined) normalized.stageProjectionRevision = stageProjectionRevision;
+  if (userMessageId !== undefined) normalized.userMessageId = userMessageId;
+  if (assistantMessageId !== undefined) normalized.assistantMessageId = assistantMessageId;
+  if (pendingInterrupt !== undefined) normalized.pendingInterrupt = pendingInterrupt;
+  return normalized;
 }
 
 function validatePayload(
@@ -199,17 +302,20 @@ function validatePayload(
   payload: Record<string, unknown>,
 ): WorkflowCommandEvent['payload'] {
   if (type === 'assistant.delta' && typeof payload.delta !== 'string') streamInvalid();
+  if (type === 'workspace.committed') return normalizeWorkspacePayload(payload);
   if (type === 'command.finished') {
     if (payload.outcome !== 'succeeded' && payload.outcome !== 'failed' && payload.outcome !== 'conflict') {
       streamInvalid();
     }
-    if (!optionalString(payload, 'code') ||
-        !optionalString(payload, 'resultRouteId') ||
-        !optionalString(payload, 'resultThreadId') ||
-        !optionalString(payload, 'resultCheckpointId', true) ||
-        !optionalString(payload, 'stageKey')) {
-      streamInvalid();
-    }
+    const code = canonicalValue(payload, 'code');
+    const currentHeadCheckpointId = canonicalValue(payload, 'currentHeadCheckpointId');
+    const workspace = normalizeWorkspacePayload(payload);
+    return {
+      outcome: payload.outcome,
+      ...(code !== undefined ? { code } : {}),
+      ...workspace,
+      ...(currentHeadCheckpointId !== undefined ? { currentHeadCheckpointId } : {}),
+    } as CommandFinishedPayload;
   }
   return payload as WorkflowCommandEvent['payload'];
 }

@@ -6,10 +6,13 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import { exportRelease } from './export-release.mjs';
+import { assertNameLocks } from './native-web-qa-assertions.mjs';
+import { waitForZeroContextReady, workflowInput, workflowInterrupt } from './native-web-qa-readiness.mjs';
 import {
   buildGovernedServiceRegistration,
   claimGovernedQaPort,
   registerAndStartGovernedService,
+  restartGovernedServiceWithPort,
   runGovernedServiceAction,
   waitForHttp,
 } from './governed-qa-services.mjs';
@@ -48,8 +51,8 @@ const report = {
   release: {},
   screenshots: [],
   contract: {
-    manifest: 'product.manifest declares product identity, optional one-click demo login, Stage projection, legal actions, fixed component keys, Artifact rules, and the Workflow endpoint.',
-    workflow_bridge: 'The Bridge translates the versioned Command Envelope to Workflow input and normalizes reply_events, stage_signal, artifact_proposals, memory_proposals, and workflow_cursor.',
+    manifest: 'product.manifest declares product identity, optional one-click demo login, named intents, and a Stage-independent Workflow endpoint.',
+    workflow_bridge: 'The Bridge translates the unified v2 Command Envelope and normalizes reply events, names, two-layer memory updates, Artifacts, Interrupts, Checkpoints, and optional dynamic Stage Projection.',
     template_injection_points: ['product.manifest.json', 'Workflow Bridge runtime endpoint'],
     export_artifacts: ['workflow/snapshot.json', 'product.manifest.json', 'site.config.json', 'migrations/', 'compose.yml', 'Start/start.sh'],
     ownership: 'Native Domain/API exclusively owns authorization, execution cursor, state transitions, optimistic concurrency, and atomic persistence.',
@@ -133,23 +136,6 @@ function run(command, args, options = {}) {
     throw new Error(`${options.label ?? command} failed\n${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim());
   }
   return result.stdout.trim();
-}
-
-function cleanupStaleQaComposeProjects() {
-  const projects = JSON.parse(run('docker', ['compose', 'ls', '--all', '--format', 'json']) || '[]');
-  const releaseEnv = join(homedir(), '.config', 'polarui', 'release-env', 'native-web-qa.env');
-  let cleaned = 0;
-
-  for (const entry of projects) {
-    if (!entry.Name.startsWith('polar-native-web-qa-')) continue;
-    const configPath = String(entry.ConfigFiles ?? '').split(',').find((candidate) => candidate.endsWith('/compose.yml'));
-    if (!configPath || !configPath.startsWith(`${join(taskRoot, 'work')}/`)) continue;
-    run('docker', ['compose', '--project-name', entry.Name, '--env-file', releaseEnv,
-      '-f', configPath, 'down', '--remove-orphans'], { label: `remove stale QA Compose project ${entry.Name}` });
-    cleaned += 1;
-  }
-
-  console.log(`[QA CLEANUP] removed ${cleaned} stale native Web QA Compose project(s); volumes preserved`);
 }
 
 async function waitFor(label, probe, timeoutMs = 60_000) {
@@ -266,26 +252,55 @@ function currentIds() {
   return {
     contextId: url.pathname.match(/\/contexts\/([^/]+)/)?.[1] ?? '',
     routeId: url.pathname.match(/\/routes\/([^/]+)/)?.[1] ?? '',
-    stageKey: url.pathname.match(/\/stages\/([^/]+)/)?.[1] ?? '',
-    threadId: url.searchParams.get('thread') ?? '',
+    conversationId: url.pathname.match(/\/conversations\/([^/]+)/)?.[1] ?? '',
+    checkpointId: url.searchParams.get('checkpoint') ?? '',
   };
 }
 
 async function sendUiMessage(content, expectedReply) {
   const requestPromise = page.waitForRequest((request) => {
-    if (request.method() !== 'POST' || !/\/api\/threads\/[0-9a-f-]+\/commands$/u.test(request.url())) return false;
-    try { return request.postDataJSON().kind === 'message' && request.postDataJSON().content === content; } catch { return false; }
+    if (request.method() !== 'POST' || !request.url().endsWith('/api/workflow/commands')) return false;
+    try {
+      const body = request.postDataJSON();
+      return body.input?.type === 'message' && body.input.content === content;
+    } catch {
+      return false;
+    }
   });
-  await page.getByLabel('消息内容').fill(content);
-  await page.getByRole('button', { name: '发送消息' }).click();
+  await workflowInput(page).fill(content);
+  await page.getByRole('button', { name: '发送 Workflow Input' }).click();
   const request = await requestPromise;
-  await page.getByText(expectedReply, { exact: true }).waitFor();
+  if (expectedReply) await page.getByText(expectedReply, { exact: true }).waitFor();
   return request.postDataJSON();
 }
 
-async function runNamedAction(label, expectedReply) {
-  await page.getByRole('button', { name: label, exact: true }).click();
-  await page.getByText(expectedReply, { exact: true }).waitFor();
+async function assertFullScreenLayer(locator) {
+  const bounds = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+  assert.deepEqual(bounds, { x: 0, y: 0, width: 390, height: 844 });
+}
+
+async function assertMinimumInteractiveTarget(locator) {
+  const metrics = await locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const bounds = element.getBoundingClientRect();
+    return {
+      minInlineSize: style.minInlineSize,
+      minBlockSize: style.minBlockSize,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  });
+  assert.equal(metrics.minInlineSize, '44px');
+  assert.equal(metrics.minBlockSize, '44px');
+  assert(metrics.width >= 44 && metrics.height >= 44);
 }
 
 try {
@@ -294,7 +309,6 @@ try {
   await stopIfRegistered(runtimeServiceId);
   await stopIfRegistered(mailpitServiceId);
   await stopIfRegistered('web-native-web-qa');
-  cleanupStaleQaComposeProjects();
   const runtimePort = await claimGovernedQaPort({ serviceName: runtimeServiceId, preferred: 14925 });
   const mailpitHttpPort = await claimGovernedQaPort({ serviceName: mailpitServiceId, preferred: 14940 });
   const mailpitSmtpPort = await claimGovernedQaPort({ serviceName: 'polarui-native-web-qa-smtp', preferred: 14945 });
@@ -312,9 +326,26 @@ try {
   await waitForHttp(`http://127.0.0.1:${runtimePort}/health`);
   const runtimeProbe = await (await fetch(`http://127.0.0.1:${runtimePort}/run`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ workflowId: 'native-web-qa', sessionId: 'probe', message: '[qa:artifact] runtime probe', input: { contract_version: '1.0', command_kind: 'message', stage_key: 'discover' } }),
+    body: JSON.stringify({
+      contract_version: '2.0',
+      workflow_id: 'native-web-qa',
+      command: {
+        id: '60000000-0000-4000-8000-000000000001',
+        context_id: '10000000-0000-4000-8000-000000000001',
+        route_id: '20000000-0000-4000-8000-000000000001',
+        conversation_id: '30000000-0000-4000-8000-000000000001',
+        base_checkpoint_id: '40000000-0000-4000-8000-000000000001',
+        expected_checkpoint_version: 0,
+        input: { type: 'message', content: '[qa:artifact] runtime probe' },
+        attachments: [],
+      },
+      history: [],
+      memory: { user: { items: [] }, context: { items: [] } },
+      checkpoint_snapshot: { workflow_state: {}, memory_references: [], artifacts: [] },
+    }),
   })).json();
   assert.equal(runtimeProbe.reply, 'Fixture reply · runtime probe');
+  assert.equal(runtimeProbe.contract_version, '2.0');
   assert.deepEqual(runtimeProbe.node_traces, ['NativeWebQaFixture', 'Output']);
   report.services.workflow = { id: runtimeServiceId, port: runtimePort };
   record('real headless Workflow fixture is healthy', runtimeProbe.node_traces.join(' -> '));
@@ -378,6 +409,8 @@ try {
     username: 'demo',
     password: 'Demo-Workflow-2026!',
   });
+  assert.deepEqual(frozenProduct.stages, []);
+  assert.deepEqual(frozenProduct.intents, [{ key: 'summarize', label: '生成验收摘要' }]);
   record('export-release compiled and PolarProcess deployed production container', exported.release_id);
 
   const appOrigin = `http://127.0.0.1:${webPort}`;
@@ -404,7 +437,7 @@ try {
   await page.getByLabel('六位验证码').fill(code);
   await page.getByRole('button', { name: '完成验证' }).click();
   await login(email, password, username);
-  await page.getByRole('heading', { name: '创建第一个工作空间' }).waitFor();
+  await waitForZeroContextReady(page);
   record('email registration, verification, and email login');
 
   const composeProject = exported.deploy.compose_project;
@@ -436,125 +469,243 @@ try {
   await page.getByRole('button', { name: '导入档案', exact: true }).click();
   await page.getByRole('button', { name: new RegExp(`历史讨论 ${suffix}`) }).click();
   await page.getByText(`历史消息 ${suffix}`, { exact: true }).waitFor();
+  const importedArchiveLink = page.getByRole('link', { name: 'legacy.txt', exact: true });
+  await importedArchiveLink.waitFor();
+  await assertMinimumInteractiveTarget(importedArchiveLink);
   await page.getByRole('button', { name: '关闭', exact: true }).click();
   record('read-only archive import and browser rendering');
 
-  await page.getByLabel('工作空间名称').fill(`发行项目 ${suffix}`);
-  await page.getByRole('button', { name: '创建工作空间' }).click();
-  await page.getByTestId('workspace-slot').waitFor();
-  assert.equal(await page.getByRole('dialog', { name: '阶段讨论' }).count(), 0);
-  assert.equal(await page.getByText('当前浏览位置的未提交笔记').count(), 0);
-  assert.equal(await page.getByText('派生路线').count(), 0);
-  assert.equal(await page.getByText('generic_chat', { exact: true }).count(), 0);
-  const sourceIds = currentIds();
-  assert.match(sourceIds.routeId, /^[0-9a-f-]{36}$/);
-  await page.getByRole('button', { name: '推进实现' }).click();
-  await page.getByRole('heading', { name: '推进实现' }).waitFor();
-  assert.equal(currentIds().routeId, sourceIds.routeId);
-  await page.getByRole('button', { name: '明确项目' }).click();
-  await page.getByRole('heading', { name: '明确项目' }).waitFor();
-  record('Stage-first Context workspace and free Stage browsing without cursor movement');
+  await page.getByRole('heading', { name: '你现在想处理什么？' }).waitFor();
+  const composer = workflowInput(page);
+  assert.equal(await composer.isEnabled(), true);
+  assert.equal(await page.getByLabel(/名称/).count(), 0);
+  const initialAttachmentName = `attachment-${suffix}.txt`;
+  await page.getByLabel('添加附件').setInputFiles({
+    name: initialAttachmentName,
+    mimeType: 'text/plain',
+    buffer: Buffer.from(`attachment-${suffix}`),
+  });
+  await page.getByText(initialAttachmentName, { exact: true }).waitFor();
 
-  await page.getByRole('button', { name: /打开讨论/ }).click();
-  await page.getByRole('dialog', { name: '阶段讨论' }).waitFor();
-  for (const title of [`方案讨论 ${suffix}`, `验证讨论 ${suffix}`]) {
-    await page.getByRole('button', { name: '新建讨论', exact: true }).click();
-    await page.getByLabel('讨论标题').fill(title);
-    await page.getByRole('button', { name: '创建讨论' }).click();
-    await page.getByRole('tab', { name: title }).waitFor();
-  }
+  await sendUiMessage('[qa:reject] fail before initialization');
+  await page.getByRole('alert').filter({ hasText: 'WORKFLOW_INVALID_RESPONSE' }).waitFor();
+  assert.equal(await composer.inputValue(), '[qa:reject] fail before initialization');
+  assert.equal(await page.getByText(initialAttachmentName, { exact: true }).count(), 1);
+  const emptyContexts = await browserJson('/api/contexts');
+  assert.deepEqual(emptyContexts.body.contexts, []);
+  assert.equal(currentIds().contextId, '');
+  await page.screenshot({ path: failureScreenshot, fullPage: true });
+  report.screenshots.push(failureScreenshot);
+  record('failed first Input retains exact draft and attachment without activating an empty Context');
+
+  const startCommand = await sendUiMessage(
+    '[qa:start] establish the release context',
+    'Fixture initialized · establish the release context',
+  );
+  assert.equal(startCommand.attachmentIds.length, 1);
+  await page.waitForURL((url) => /\/contexts\/[^/]+\/routes\/[^/]+\/conversations\/[^/]+$/u.test(url.pathname));
   const activeIds = currentIds();
-  assert.match(activeIds.threadId, /^[0-9a-f-]{36}$/);
-  record('two parallel discussions in one Stage drawer');
+  assert.match(activeIds.contextId, /^[0-9a-f-]{36}$/);
+  assert.match(activeIds.routeId, /^[0-9a-f-]{36}$/);
+  assert.match(activeIds.conversationId, /^[0-9a-f-]{36}$/);
+  await page.getByRole('heading', { name: 'Native Web 发布验证' }).waitFor();
+  await page.getByRole('heading', { name: '核心 Input 验收' }).first().waitFor();
+  await page.getByRole('link', { name: new RegExp(initialAttachmentName.replace('.', '\\.')) }).waitFor();
+  record('first Input atomically activates Agent-named Context, Route, primary Conversation, and attachment');
 
-  const attachment = await page.evaluate(async ({ threadId, suffixValue }) => {
-    const response = await fetch(`/api/threads/${threadId}/attachments`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent(`attachment-${suffixValue}.txt`), 'x-file-media-type': 'text/plain' },
-      body: `attachment-${suffixValue}`,
-    });
-    return { status: response.status, body: await response.json() };
-  }, { threadId: activeIds.threadId, suffixValue: suffix });
-  assert.equal(attachment.status, 201);
-  await page.locator('.attachment-panel').getByRole('button', { name: '刷新' }).click();
-  await page.getByRole('link', { name: new RegExp(`attachment-${suffix}\\.txt`) }).waitFor();
+  const initialContextTitle = 'Native Web 发布验证';
+  const initialConversationTitle = '核心 Input 验收';
+  const userContextTitle = `用户 Context ${suffix}`;
+  const userConversationTitle = `用户 Conversation ${suffix}`;
+  const beforeRenameWorkspace = await browserJson(`/api/routes/${activeIds.routeId}/workspace`);
+  const beforeRenameMessages = await browserJson(`/api/conversations/${activeIds.conversationId}/messages`);
+  let commandRequestsDuringRename = 0;
+  const observeRenameRequest = (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/workflow/commands')) {
+      commandRequestsDuringRename += 1;
+    }
+  };
+  page.on('request', observeRenameRequest);
+  try {
+    await page.getByRole('button', { name: `重命名 ${initialContextTitle}` }).click();
+    await page.getByLabel('重命名 Context').fill(userContextTitle);
+    await page.getByLabel('重命名 Context').press('Enter');
+    await page.getByRole('heading', { name: userContextTitle }).waitFor();
+
+    await page.getByRole('button', { name: `重命名 ${initialConversationTitle}` }).first().click();
+    await page.getByLabel('重命名 Conversation').fill(userConversationTitle);
+    await page.getByLabel('重命名 Conversation').press('Enter');
+    await page.getByRole('heading', { name: userConversationTitle }).first().waitFor();
+  } finally {
+    page.off('request', observeRenameRequest);
+  }
+
+  const afterRenameWorkspace = await browserJson(`/api/routes/${activeIds.routeId}/workspace`);
+  const afterRenameMessages = await browserJson(`/api/conversations/${activeIds.conversationId}/messages`);
+  assert.equal(afterRenameWorkspace.body.route.id, beforeRenameWorkspace.body.route.id);
+  assert.deepEqual(
+    afterRenameWorkspace.body.checkpoints.map(({ id, parentCheckpointId, version, reason }) => ({
+      id, parentCheckpointId, version, reason,
+    })),
+    beforeRenameWorkspace.body.checkpoints.map(({ id, parentCheckpointId, version, reason }) => ({
+      id, parentCheckpointId, version, reason,
+    })),
+  );
+  assert.deepEqual(afterRenameMessages.body, beforeRenameMessages.body);
+  assert.equal(commandRequestsDuringRename, 0);
+
+  await sendUiMessage(
+    '[qa:rename-attempt] agent must not overwrite user titles',
+    'Fixture naming attempt · agent must not overwrite user titles',
+  );
+  const lockedWorkspace = await browserJson(`/api/routes/${activeIds.routeId}/workspace`);
+  assertNameLocks(lockedWorkspace.body, {
+    contextTitle: userContextTitle,
+    conversationId: activeIds.conversationId,
+    conversationTitle: userConversationTitle,
+  });
+  await page.getByRole('heading', { name: userContextTitle }).waitFor();
+  await page.getByRole('heading', { name: userConversationTitle }).first().waitFor();
+  assert.equal(await page.getByText('Agent overwrite attempt Context', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Agent overwrite attempt Conversation', { exact: true }).count(), 0);
+  record('user Context and Conversation renames remain metadata-only locks after a later Agent naming result');
+
+  const userMemory = await browserJson('/api/memory?scope=user');
+  const contextMemory = await browserJson(`/api/memory?scope=context&context=${activeIds.contextId}`);
+  assert.equal(userMemory.body.memories[0].key, 'qa_response_style');
+  assert.equal(contextMemory.body.memories[0].key, 'qa_release_goal');
+  for (const item of [userMemory.body.memories[0], contextMemory.body.memories[0]]) {
+    assert.equal(item.version, 1);
+    assert(item.source && item.createdAt && item.updatedAt && item.impactScope && item.evidence);
+  }
+  await page.getByRole('tab', { name: '用户记忆' }).click();
+  await page.getByText('qa_response_style', { exact: true }).waitFor();
+  await page.getByRole('tab', { name: '情景记忆' }).click();
+  await page.getByText('qa_release_goal', { exact: true }).waitFor();
+  record('separate user and Context memory updates expose source, timestamps, version, scope, and evidence');
+
+  await page.getByRole('tab', { name: '运行' }).click();
+  await page.getByText('动态校验项 1', { exact: true }).waitFor();
+  await sendUiMessage('继续组织可交付结果', 'Fixture reply · 继续组织可交付结果');
+  await page.getByText('组织交付', { exact: true }).waitFor();
+  await sendUiMessage('[qa:projection:0] hide projection', 'Fixture projection · 0');
+  await page.getByText('当前没有 Stage Projection。', { exact: true }).waitFor();
+  await sendUiMessage('[qa:projection:1] one projection', 'Fixture projection · 1');
+  await page.getByText('动态校验项 1', { exact: true }).waitFor();
+  await sendUiMessage('[qa:projection:many] dense projection', 'Fixture projection · 8');
+  await page.getByRole('button', { name: '查看全部 8 项' }).click();
+  const projectionDialog = page.getByRole('dialog', { name: '完整 Stage Projection' });
+  await projectionDialog.waitFor();
+  assert.equal(await projectionDialog.getByTestId('stage-projection-item').count(), 8);
+  const desktopProjectionBounds = await projectionDialog.boundingBox();
+  assert(desktopProjectionBounds && desktopProjectionBounds.width < 1440 && desktopProjectionBounds.height < 900);
+  await projectionDialog.getByRole('button', { name: '关闭完整 Stage Projection' }).click();
+  record('normal messages drive Workflow-owned 0, 1, and 7+ dynamic Stage Projection snapshots');
+
+  const artifactAttachmentName = `artifact-source-${suffix}.txt`;
+  await page.getByLabel('添加附件').setInputFiles({
+    name: artifactAttachmentName,
+    mimeType: 'text/plain',
+    buffer: Buffer.from(`artifact-source-${suffix}`),
+  });
+  await page.getByText(artifactAttachmentName, { exact: true }).waitFor();
   const artifactCommand = await sendUiMessage('[qa:artifact] release contract', 'Fixture reply · release contract');
-  await page.locator('.proposal-row').filter({ hasText: 'qa_fact' }).getByRole('button', { name: '采纳' }).click();
-  record('discussion attachment, Workflow Artifact proposal, and explicit memory proposal adoption');
-
-  const replay = await browserJson(`/api/threads/${activeIds.threadId}/commands`, {
+  const artifactLink = page.getByRole('link', { name: /workflow-report\.txt/ }).first();
+  await artifactLink.waitFor();
+  await assertMinimumInteractiveTarget(artifactLink);
+  const artifactHref = await artifactLink.getAttribute('href');
+  assert(artifactHref?.startsWith('/api/assets/artifact/'));
+  const replay = await browserJson('/api/workflow/commands', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(artifactCommand),
   });
   assert.equal(replay.status, 202);
   assert.equal(replay.body.commandId, artifactCommand.commandId);
-  const mutatedReplay = await browserJson(`/api/threads/${activeIds.threadId}/commands`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...artifactCommand, content: 'changed' }),
-  });
-  assert.equal(mutatedReplay.status, 409);
-  record('command idempotency and mismatched replay rejection');
-
-  await runNamedAction('采纳到当前路线', 'Fixture adopted thread');
-  await page.getByRole('button', { name: '关闭讨论' }).click();
-  await page.locator('.artifact-panel').getByRole('button', { name: '刷新' }).click();
-  await page.getByRole('link', { name: /workflow-report\.txt/ }).waitFor();
-  record('adopted discussion promotes its Workflow Artifact to a Stage outcome');
-
-  await page.getByRole('button', { name: /打开讨论/ }).click();
-  await runNamedAction('推进阶段', 'Fixture advanced to work');
-  await waitFor('forward Stage projection', async () => /已完成/.test(await page.getByRole('button', { name: '明确项目' }).textContent() ?? ''));
-  record('forward Stage transition and Checkpoint creation');
-
-  const sourceWorkspace = await browserJson(`/api/routes/${sourceIds.routeId}/workspace?stage=discover`);
-  const archivedCheckpoint = sourceWorkspace.body.checkpoints.find((checkpoint) => checkpoint.version === 0);
-  const archivedCommand = await browserJson(`/api/threads/${activeIds.threadId}/commands`, {
+  const mutatedReplay = await browserJson('/api/workflow/commands', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-      commandId: randomUUID(), kind: 'message', content: 'archived command must fail',
-      baseCheckpointId: archivedCheckpoint.id, expectedCheckpointVersion: archivedCheckpoint.version,
+      ...artifactCommand,
+      input: { ...artifactCommand.input, content: 'changed' },
     }),
   });
-  assert.equal(archivedCommand.status, 409);
-  assert.equal(archivedCommand.body.error.code, 'CHECKPOINT_NOT_CURRENT');
-  record('archived versions reject Workflow commands');
+  assert.equal(mutatedReplay.status, 409);
+  record('unified Command consumes an attachment, emits a causal Artifact, and remains idempotent');
 
-  await page.getByRole('button', { name: '关闭讨论' }).click();
-  await page.getByRole('button', { name: '版本', exact: true }).click();
+  await sendUiMessage('[qa:memory-conflict] replace the release authority');
+  const interruptForm = workflowInterrupt(page);
+  await interruptForm.getByText('这条高影响记忆与现有事实冲突，请确认。', { exact: true }).waitFor();
+  assert.equal(await composer.isDisabled(), true);
+  await interruptForm.getByRole('textbox', { name: 'Interrupt 回复', exact: true }).fill('确认这次高影响更新');
+  await interruptForm.getByRole('button', { name: '继续 Workflow', exact: true }).click();
+  await waitFor('normal composer after Interrupt', async () => await composer.isEnabled());
+  record('conflicting high-impact memory update interrupts inline and resumes through its public ID');
+
+  const sourceIds = currentIds();
+  const sourceWorkspace = await browserJson(`/api/routes/${sourceIds.routeId}/workspace`);
+  const sourceHeadId = sourceWorkspace.body.headCheckpoint.id;
+  const denseProjectionCheckpoint = sourceWorkspace.body.checkpoints.find(
+    ({ snapshot }) => snapshot.stageProjection?.items.length >= 7,
+  );
+  assert(denseProjectionCheckpoint, 'the source Route must retain its dense Stage Projection Checkpoint');
+  const artifactCheckpoint = sourceWorkspace.body.checkpoints.find(
+    ({ snapshot }) => snapshot.artifacts.length > 0,
+  );
+  assert(artifactCheckpoint, 'the source Route must retain its Artifact Checkpoint');
+  const archivedCheckpoint = [...sourceWorkspace.body.checkpoints]
+    .sort((left, right) => left.version - right.version)[0];
+  await page.getByRole('button', { name: '打开版本归档' }).click();
   const versionDialog = page.getByRole('dialog', { name: '版本归档' });
   await versionDialog.waitFor();
-  assert.equal(await versionDialog.getByLabel('消息内容').count(), 0);
-  assert.equal(await versionDialog.getByRole('button', { name: '推进阶段' }).count(), 0);
-  await versionDialog.getByRole('button', { name: /^版本 00/ }).click();
+  await versionDialog.getByRole('button', {
+    name: new RegExp(`^版本 ${String(artifactCheckpoint.version).padStart(2, '0')}`),
+  }).click();
+  const versionArtifactLink = versionDialog.getByRole('link', { name: /下载workflow-report\.txt/ }).first();
+  await versionArtifactLink.waitFor();
+  await assertMinimumInteractiveTarget(versionArtifactLink);
+  await versionDialog.getByRole('button', {
+    name: new RegExp(`^版本 ${String(archivedCheckpoint.version).padStart(2, '0')}`),
+  }).click();
   await page.screenshot({ path: versionArchiveScreenshot, fullPage: true });
   report.screenshots.push(versionArchiveScreenshot);
-  await versionDialog.getByRole('button', { name: '基于此版本新建路线' }).click();
-  const versionRouteName = `归档方案 ${suffix}`;
-  await versionDialog.getByLabel('新路线名称').fill(versionRouteName);
-  await versionDialog.getByRole('button', { name: '创建路线', exact: true }).click();
+  await versionDialog.getByRole('button', { name: '在此版本继续' }).click();
+  await page.getByRole('note').waitFor();
+  assert.equal(await composer.inputValue(), '');
+  assert.equal(currentIds().checkpointId, archivedCheckpoint.id);
+  await sendUiMessage(
+    '[qa:history] continue from immutable source',
+    'Fixture branched · continue from immutable source',
+  );
   await page.waitForURL((url) => {
     const routeId = url.pathname.match(/\/routes\/([^/]+)/)?.[1];
     return Boolean(routeId && routeId !== sourceIds.routeId);
   });
-  await page.getByRole('button', { name: versionRouteName, exact: true }).waitFor();
-  await page.getByText(/^来源：.*\/ 版本 00$/).waitFor();
-  assert.equal(await page.getByText('派生路线').count(), 0);
-  await page.getByRole('button', { name: /打开讨论/ }).click();
-  await page.getByRole('dialog', { name: '阶段讨论' }).waitFor();
-  await page.getByRole('button', { name: '新建讨论', exact: true }).click();
-  const versionDiscussionTitle = `版本路线讨论 ${suffix}`;
-  await page.getByLabel('讨论标题').fill(versionDiscussionTitle);
-  await page.getByRole('button', { name: '创建讨论' }).click();
-  await page.getByRole('tab', { name: versionDiscussionTitle }).waitFor();
-  const versionRouteIds = currentIds();
-  assert.notEqual(versionRouteIds.routeId, sourceIds.routeId);
-  assert.match(versionRouteIds.threadId, /^[0-9a-f-]{36}$/);
-  record('read-only Version Archive creates an equal-status Route explicitly');
+  const historicalResultIds = currentIds();
+  assert.notEqual(historicalResultIds.routeId, sourceIds.routeId);
+  assert.notEqual(historicalResultIds.conversationId, sourceIds.conversationId);
+  await page.getByText(new RegExp(`来源 Checkpoint ${archivedCheckpoint.id}`)).waitFor();
+  const sourceAfterBranch = await browserJson(`/api/routes/${sourceIds.routeId}/workspace`);
+  assert.equal(sourceAfterBranch.body.headCheckpoint.id, sourceHeadId);
+  assert.deepEqual(
+    sourceAfterBranch.body.checkpoints.find(({ id }) => id === archivedCheckpoint.id),
+    archivedCheckpoint,
+  );
+  const historicalWorkspace = await browserJson(`/api/routes/${historicalResultIds.routeId}/workspace`);
+  assert.equal(
+    historicalWorkspace.body.selectedCheckpoint.snapshot.workflowState.history_source.checkpoint_id,
+    archivedCheckpoint.id,
+  );
+  record('historical Input atomically creates an equal Route while preserving exact source history');
 
-  const versionRouteWorkspace = await browserJson(`/api/routes/${versionRouteIds.routeId}/workspace?stage=discover`);
-  const baseCheckpoint = versionRouteWorkspace.body.selectedCheckpoint;
+  const baseCheckpoint = historicalWorkspace.body.selectedCheckpoint;
   const concurrentBodies = [randomUUID(), randomUUID()].map((commandId) => ({
-    commandId, kind: 'named_action', actionKey: 'adopt_thread', content: 'concurrent adopt',
-    baseCheckpointId: baseCheckpoint.id, expectedCheckpointVersion: baseCheckpoint.version,
+    commandId,
+    contextId: historicalResultIds.contextId,
+    routeId: historicalResultIds.routeId,
+    conversationId: historicalResultIds.conversationId,
+    baseCheckpointId: baseCheckpoint.id,
+    expectedCheckpointVersion: baseCheckpoint.version,
+    input: { type: 'named_intent', key: 'summarize', content: 'concurrent summary' },
+    attachmentIds: [],
   }));
-  const receipts = await Promise.all(concurrentBodies.map((body) => browserJson(`/api/threads/${versionRouteIds.threadId}/commands`, {
+  const receipts = await Promise.all(concurrentBodies.map((body) => browserJson('/api/workflow/commands', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   })));
   assert.deepEqual(receipts.map((receipt) => receipt.status), [202, 202]);
@@ -566,81 +717,227 @@ try {
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('workspace-slot').waitFor();
-  assert.deepEqual(currentIds(), versionRouteIds);
-  assert.equal(await page.getByRole('dialog', { name: '阶段讨论' }).count(), 0);
-  record('refresh restores Route, Stage, and discussion URL state');
+  assert.deepEqual(currentIds(), historicalResultIds);
+  record('refresh restores Context, Route, Conversation, and Checkpoint URL state');
 
-  await page.getByRole('button', { name: /打开讨论/ }).click();
-  await page.getByRole('dialog', { name: '阶段讨论' }).waitFor();
   for (const [message, codeName] of [
-    ['[qa:reject] command', 'WORKFLOW_REJECTED'],
     ['[qa:invalid] command', 'WORKFLOW_INVALID_RESPONSE'],
     ['[qa:timeout] command', 'WORKFLOW_TIMEOUT'],
   ]) {
-    await page.getByLabel('消息内容').fill(message);
-    await page.getByRole('button', { name: '发送消息' }).click();
+    await sendUiMessage(message);
     await page.getByRole('alert').filter({ hasText: codeName }).waitFor();
-    await page.getByLabel('消息内容').fill('');
   }
-  record('Workflow rejection, invalid result, and timeout fail closed');
+  record('Workflow invalid result and timeout fail closed beside their triggering Input');
 
   const createAdmin = run('docker', ['exec', webContainer, 'node', 'apps/api/dist/scripts/create-user.js',
     '--email', adminEmail, '--username', adminUsername, '--password', adminPassword, '--verified']);
   assert.match(createAdmin, /Created verified user/);
   await page.getByRole('button', { name: `${username} · 退出` }).click();
   await login(adminUsername, adminPassword, adminUsername);
-  const isolated = await browserJson(`/api/routes/${sourceIds.routeId}/workspace?stage=discover`);
+  const isolated = await browserJson(`/api/routes/${sourceIds.routeId}/workspace`);
   assert.equal(isolated.status, 404);
   await page.getByRole('button', { name: `${adminUsername} · 退出` }).click();
   await login(username, password, username);
-  await page.goto(`${appOrigin}/contexts/${versionRouteIds.contextId}/routes/${versionRouteIds.routeId}/stages/discover?thread=${versionRouteIds.threadId}`);
+  await page.goto(`${appOrigin}/contexts/${historicalResultIds.contextId}/routes/${historicalResultIds.routeId}/conversations/${historicalResultIds.conversationId}`);
   await page.getByTestId('workspace-slot').waitFor();
   record('username login and cross-user isolation');
 
-  assert.equal(await page.getByRole('dialog', { name: '阶段讨论' }).count(), 0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const desktopContract = await page.evaluate(() => {
+    const shell = document.querySelector('.conversation-first-shell');
+    const context = document.querySelector('.context-sidebar-layer');
+    const main = document.querySelector('.conversation-axis');
+    const inspector = document.querySelector('.workspace-inspector');
+    const firstButton = document.querySelector('button');
+    firstButton?.focus();
+    const buttonStyle = firstButton ? getComputedStyle(firstButton) : null;
+    const shellStyle = shell ? getComputedStyle(shell) : null;
+    const bodyStyle = getComputedStyle(document.body);
+    return {
+      columns: shellStyle?.gridTemplateColumns.split(' ').filter(Boolean).length,
+      maxInlineSize: shellStyle?.maxInlineSize,
+      overflowX: bodyStyle.overflowX,
+      minInlineSize: buttonStyle?.minInlineSize,
+      minBlockSize: buttonStyle?.minBlockSize,
+      outlineStyle: buttonStyle?.outlineStyle,
+      domOrder: Boolean(context && main && inspector &&
+        (context.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        (main.compareDocumentPosition(inspector) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    };
+  });
+  assert.deepEqual(desktopContract, {
+    columns: 3,
+    maxInlineSize: '100%',
+    overflowX: 'clip',
+    minInlineSize: '44px',
+    minBlockSize: '44px',
+    outlineStyle: 'solid',
+    domOrder: true,
+  });
   await page.screenshot({ path: desktopScreenshot, fullPage: true });
   report.screenshots.push(desktopScreenshot);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reducedMotionDuration = await page.locator('.message-composer').evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).transitionDuration)
+  ));
+  assert(reducedMotionDuration <= 0.01);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('workspace-slot').waitFor();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  assert(overflow <= 0, `mobile horizontal overflow: ${overflow}`);
-  await page.screenshot({ path: mobileScreenshot, fullPage: true });
-  report.screenshots.push(mobileScreenshot);
-  await page.getByRole('button', { name: /打开讨论/ }).click();
-  const mobileDrawer = page.getByRole('dialog', { name: '阶段讨论' });
-  await mobileDrawer.waitFor();
-  const drawerBounds = await mobileDrawer.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
+  const mobileContract = await page.evaluate(() => {
+    const axis = document.querySelector('.conversation-axis');
+    const composer = document.querySelector('.message-composer');
+    const timeline = document.querySelector('.message-timeline');
+    const shell = document.querySelector('.conversation-first-shell');
+    if (axis) axis.scrollTop = axis.scrollHeight;
+    const lastMessage = document.querySelector('.message-entry:last-of-type');
+    const composerBounds = composer?.getBoundingClientRect();
+    const lastMessageBounds = lastMessage?.getBoundingClientRect();
+    const targets = [...document.querySelectorAll('button,input,textarea,summary,a.download-target')]
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0;
+      });
     return {
-      x: Math.round(bounds.x), y: Math.round(bounds.y),
-      width: Math.round(bounds.width), height: Math.round(bounds.height),
+      overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      maxInlineSize: shell ? getComputedStyle(shell).maxInlineSize : '',
+      composerPosition: composer ? getComputedStyle(composer).position : '',
+      composerPaddingBottom: axis ? Number.parseFloat(getComputedStyle(axis).paddingBottom) : 0,
+      timelineOverflowY: timeline ? getComputedStyle(timeline).overflowY : '',
+      timelineMaxHeight: timeline ? getComputedStyle(timeline).maxHeight : '',
+      smallestTarget: Math.min(...targets.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return Math.min(bounds.width, bounds.height);
+      })),
+      finalMessageVisible: !composerBounds || !lastMessageBounds || lastMessageBounds.bottom <= composerBounds.top,
     };
   });
-  assert.deepEqual(drawerBounds, { x: 0, y: 0, width: 390, height: 844 });
+  assert(mobileContract.overflowX <= 0, `mobile horizontal overflow: ${mobileContract.overflowX}`);
+  assert.equal(mobileContract.maxInlineSize, '100%');
+  assert.equal(mobileContract.composerPosition, 'sticky');
+  assert(mobileContract.composerPaddingBottom >= 232);
+  assert.equal(mobileContract.timelineOverflowY, 'visible');
+  assert.equal(mobileContract.timelineMaxHeight, 'none');
+  assert(mobileContract.smallestTarget >= 44);
+  assert.equal(mobileContract.finalMessageVisible, true);
+  await page.screenshot({ path: mobileScreenshot, fullPage: true });
+  report.screenshots.push(mobileScreenshot);
+
+  await page.getByRole('button', { name: '打开 Contexts' }).click();
+  const contextLayer = page.getByRole('dialog', { name: 'Contexts' });
+  await contextLayer.waitFor();
+  await assertFullScreenLayer(contextLayer);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: '管理 Conversations' }).click();
+  const mobileDrawer = page.getByRole('dialog', { name: 'Conversation 管理' });
+  await mobileDrawer.waitFor();
+  await assertFullScreenLayer(mobileDrawer);
   await page.screenshot({ path: mobileDiscussionScreenshot });
   report.screenshots.push(mobileDiscussionScreenshot);
-  await page.getByRole('button', { name: '关闭讨论' }).click();
-  record('desktop Stage, Version Archive, mobile Stage, and full-screen mobile discussion screenshots');
+  await page.keyboard.press('Escape');
 
-  await runGovernedServiceAction(webServiceId, 'restart');
+  await page.getByRole('button', { name: '打开记忆、成果与运行检查器' }).click();
+  const inspectorLayer = page.getByRole('dialog', { name: '工作空间检查器' });
+  await inspectorLayer.waitFor();
+  await assertFullScreenLayer(inspectorLayer);
+  await page.keyboard.press('Escape');
+
+  await page.goto(`${appOrigin}/contexts/${sourceIds.contextId}/routes/${sourceIds.routeId}/conversations/${sourceIds.conversationId}?checkpoint=${denseProjectionCheckpoint.id}`);
+  await page.getByTestId('workspace-slot').waitFor();
+  await page.getByRole('button', { name: '打开记忆、成果与运行检查器' }).click();
+  await page.getByRole('tab', { name: '运行' }).click();
+  await page.getByRole('button', { name: '查看全部 8 项' }).click();
+  const mobileProjectionDialog = page.getByRole('dialog', { name: '完整 Stage Projection' });
+  await mobileProjectionDialog.waitFor();
+  await assertFullScreenLayer(mobileProjectionDialog);
+  await page.keyboard.press('Escape');
+  await mobileProjectionDialog.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: '查看全部 8 项' }).click();
+  await mobileProjectionDialog.waitFor();
+  await mobileProjectionDialog.getByRole('button', { name: '关闭完整 Stage Projection' }).click();
+  await mobileProjectionDialog.waitFor({ state: 'detached' });
+  await page.goto(`${appOrigin}/contexts/${sourceIds.contextId}/routes/${sourceIds.routeId}/conversations/${sourceIds.conversationId}?checkpoint=${artifactCheckpoint.id}`);
+  await page.getByTestId('workspace-slot').waitFor();
+  const mobileArtifactLink = page.getByRole('link', { name: /workflow-report\.txt/ }).first();
+  await mobileArtifactLink.waitFor();
+  await assertMinimumInteractiveTarget(mobileArtifactLink);
+
+  await page.getByRole('button', { name: '打开版本归档' }).click();
+  const mobileVersionArchive = page.getByRole('dialog', { name: '版本归档' });
+  await mobileVersionArchive.waitFor();
+  await assertFullScreenLayer(mobileVersionArchive);
+  const mobileVersionArtifactLink = mobileVersionArchive.getByRole('link', { name: /下载workflow-report\.txt/ }).first();
+  await mobileVersionArtifactLink.waitFor();
+  await assertMinimumInteractiveTarget(mobileVersionArtifactLink);
+  await mobileVersionArchive.getByRole('button', { name: '关闭版本归档' }).click();
+
+  await page.getByRole('button', { name: '导入档案', exact: true }).click();
+  const importedArchiveLayer = page.getByRole('dialog', { name: 'LibreChat 历史档案' });
+  await importedArchiveLayer.waitFor();
+  await assertFullScreenLayer(importedArchiveLayer);
+  await importedArchiveLayer.getByRole('button', { name: new RegExp(`历史讨论 ${suffix}`) }).click();
+  const mobileArchiveLink = importedArchiveLayer.getByRole('link', { name: 'legacy.txt', exact: true });
+  await mobileArchiveLink.waitFor();
+  await assertMinimumInteractiveTarget(mobileArchiveLink);
+  await importedArchiveLayer.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.goto(`${appOrigin}/contexts/${historicalResultIds.contextId}/routes/${historicalResultIds.routeId}/conversations/${historicalResultIds.conversationId}`);
+  await page.getByTestId('workspace-slot').waitFor();
+  record('desktop and 390px journeys satisfy computed layout, focus, motion, and full-screen layer contracts');
+
+  await restartGovernedServiceWithPort({
+    serviceId: webServiceId,
+    serviceName: webServiceId,
+    preferred: webPort,
+    project: 'PolarUI',
+  }, { waitForServiceStatus });
   await waitForHttp(`http://127.0.0.1:${webPort}/readyz`, { timeoutMs: 180_000 });
+  const restartedWebService = await waitForServiceStatus(webServiceId, 'running');
+  assert(
+    Number.isInteger(restartedWebService.pid) && restartedWebService.pid > 0,
+    `PolarProcess ${webServiceId} must report a positive integer PID`,
+  );
+  const polarPortResponse = await fetch('http://127.0.0.1:11050/api/list');
+  assert.equal(polarPortResponse.ok, true, 'PolarPort ownership list must be readable after restart');
+  const polarPortEntries = await polarPortResponse.json();
+  assert(Array.isArray(polarPortEntries), 'PolarPort ownership list must be an array');
+  const activeWebPortOwners = polarPortEntries.filter((entry) => (
+    entry.port === webPort && entry.status === 'active'
+  ));
+  assert.equal(activeWebPortOwners.length, 1, `port ${webPort} must have exactly one active PolarPort owner`);
+  assert.equal(activeWebPortOwners[0].service_name, webServiceId);
+  assert.equal(activeWebPortOwners[0].project, 'PolarUI');
+  report.services.web = {
+    ...report.services.web,
+    pid: restartedWebService.pid,
+    ownership: activeWebPortOwners[0],
+  };
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('workspace-slot').waitFor();
-  assert.deepEqual(currentIds(), versionRouteIds);
-  const restoredAttachments = await browserJson(`/api/threads/${activeIds.threadId}/attachments`);
+  assert.deepEqual(currentIds(), historicalResultIds);
+  const restoredAttachments = await browserJson(`/api/conversations/${activeIds.conversationId}/attachments`);
   assert.equal(restoredAttachments.status, 200);
   assert(restoredAttachments.body.attachments.some((asset) => asset.filename === `attachment-${suffix}.txt`));
-  const restoredArtifacts = await browserJson(`/api/routes/${activeIds.routeId}/stages/${activeIds.stageKey}/artifacts`);
-  assert.equal(restoredArtifacts.status, 200);
-  const restoredArtifact = restoredArtifacts.body.artifacts.find((asset) => asset.filename === 'workflow-report.txt');
-  assert(restoredArtifact);
-  const restoredObject = await page.evaluate(async ({ kind, id }) => {
-    const response = await fetch(`/api/assets/${kind}/${id}/download`);
+  await page.goto(`${appOrigin}/contexts/${activeIds.contextId}/routes/${activeIds.routeId}/conversations/${activeIds.conversationId}`);
+  await page.getByTestId('workspace-slot').waitFor();
+  const restoredArtifact = page.getByRole('link', { name: /workflow-report\.txt/ }).first();
+  await restoredArtifact.waitFor();
+  assert.equal(await restoredArtifact.getAttribute('href'), artifactHref);
+  const restoredObject = await page.evaluate(async (href) => {
+    const response = await fetch(href);
     return { status: response.status, body: await response.text() };
-  }, restoredArtifact);
-  assert.deepEqual(restoredObject, { status: 200, body: 'artifact · release contract' });
+  }, artifactHref);
+  assert.equal(restoredObject.status, 200);
+  assert.match(restoredObject.body, /^artifact · release contract · attachment /u);
+  await page.goto(`${appOrigin}/contexts/${historicalResultIds.contextId}/routes/${historicalResultIds.routeId}/conversations/${historicalResultIds.conversationId}`);
+  await page.getByTestId('workspace-slot').waitFor();
   record('PolarProcess container restart preserves database, objects, session, and URL state');
+  record(
+    'governed Web restart retains exact PolarProcess and PolarPort ownership',
+    `pid=${restartedWebService.pid}; ownership=${activeWebPortOwners[0].service_name}@${activeWebPortOwners[0].port} (${activeWebPortOwners[0].status})`,
+  );
 
   report.status = 'passed';
   report.finished_at = new Date().toISOString();

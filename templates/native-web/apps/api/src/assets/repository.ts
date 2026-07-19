@@ -1,4 +1,6 @@
 import type { DatabasePool } from '../db/pool.js';
+import { withTransaction } from '../db/pool.js';
+import { expireStaleAttachmentClaims } from '../commands/attachment-claims.js';
 
 export interface AssetObjectRecord {
   id: string;
@@ -15,6 +17,15 @@ export interface ThreadScope {
   routeId: string;
   threadId: string;
   stageKey: string;
+}
+
+export interface StagedAttachmentRecord {
+  id: string;
+  userId: string;
+  objectId: string;
+  filename: string;
+  status: 'pending' | 'adopted';
+  createdAt: Date;
 }
 
 function mapObject(row: Record<string, unknown>): AssetObjectRecord {
@@ -72,6 +83,40 @@ export function createAssetRepository(pool: DatabasePool) {
     return result.rows[0];
   }
 
+  async function createStagedAttachment(input: {
+    id: string;
+    userId: string;
+    objectId: string;
+    filename: string;
+  }): Promise<StagedAttachmentRecord> {
+    const result = await pool.query(
+      'INSERT INTO staged_attachments (id, user_id, object_id, filename) ' +
+      "VALUES ($1, $2, $3, $4) RETURNING id, user_id, object_id, filename, status, created_at",
+      [input.id, input.userId, input.objectId, input.filename],
+    );
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      userId: row.user_id,
+      objectId: row.object_id,
+      filename: row.filename,
+      status: row.status,
+      createdAt: row.created_at,
+    };
+  }
+
+  async function deleteStagedAttachment(userId: string, attachmentId: string) {
+    return withTransaction(pool, async (client) => {
+      await expireStaleAttachmentClaims(client, userId, [attachmentId], new Date());
+      const result = await client.query(
+        "DELETE FROM staged_attachments WHERE id = $1 AND user_id = $2 AND status = 'pending' " +
+        'AND claimed_command_id IS NULL RETURNING id',
+        [attachmentId, userId],
+      );
+      return result.rowCount === 1;
+    });
+  }
+
   async function listThreadAttachments(userId: string, threadId: string) {
     const result = await pool.query(
       "SELECT 'attachment' AS kind, a.id, a.filename, o.media_type, o.byte_size, o.sha256, a.created_at " +
@@ -88,6 +133,16 @@ export function createAssetRepository(pool: DatabasePool) {
       sha256: row.sha256,
       createdAt: row.created_at,
     }));
+  }
+
+  async function listConversationAttachments(userId: string, conversationId: string) {
+    const owned = await pool.query(
+      'SELECT t.id FROM workflow_threads t JOIN contexts c ON c.id = t.context_id ' +
+      'WHERE t.id = $1 AND c.user_id = $2',
+      [conversationId, userId],
+    );
+    if (!owned.rows[0]) return null;
+    return listThreadAttachments(userId, conversationId);
   }
 
   async function listStageArtifacts(userId: string, routeId: string, stageKey: string) {
@@ -117,7 +172,19 @@ export function createAssetRepository(pool: DatabasePool) {
   }
 
   async function getOwnedAsset(userId: string, kind: 'attachment' | 'artifact' | 'archive', id: string) {
-    const table = kind === 'attachment' ? 'workflow_attachments' : kind === 'artifact' ? 'workflow_artifacts' : 'librechat_archive_attachments';
+    if (kind === 'attachment') {
+      const result = await pool.query(
+        'SELECT a.filename, o.* FROM (' +
+        'SELECT id, user_id, object_id, filename FROM workflow_attachments ' +
+        'UNION ALL ' +
+        'SELECT id, user_id, object_id, filename FROM staged_attachments' +
+        ') a JOIN asset_objects o ON o.id = a.object_id ' +
+        "WHERE a.id = $1 AND a.user_id = $2 AND o.status = 'ready' LIMIT 1",
+        [id, userId],
+      );
+      return result.rows[0] ? { filename: result.rows[0].filename, object: mapObject(result.rows[0]) } : null;
+    }
+    const table = kind === 'artifact' ? 'workflow_artifacts' : 'librechat_archive_attachments';
     const result = await pool.query(
       `SELECT a.filename, o.* FROM ${table} a JOIN asset_objects o ON o.id = a.object_id ` +
       "WHERE a.id = $1 AND a.user_id = $2 AND o.status = 'ready'" +
@@ -153,7 +220,10 @@ export function createAssetRepository(pool: DatabasePool) {
     findObject,
     createObject,
     createAttachment,
+    createStagedAttachment,
+    deleteStagedAttachment,
     listThreadAttachments,
+    listConversationAttachments,
     listStageArtifacts,
     getOwnedAsset,
     createArtifact,

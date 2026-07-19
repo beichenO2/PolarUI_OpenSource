@@ -36,7 +36,7 @@ describe('fixed stage component registry', () => {
     revision = 1;
     rendered.rerender(<StageWorkspace componentKey="generic_chat" routeId="route-1" stageKey="discover" revision={revision} />);
 
-    expect(await screen.findByRole('link', { name: /workflow-report\.txt/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /workflow-report\.txt/ })).toHaveClass('download-target');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

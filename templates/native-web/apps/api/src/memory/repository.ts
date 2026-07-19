@@ -6,7 +6,6 @@ import type {
   MemoryEvidence,
   MemoryImpactScope,
   MemoryItem,
-  MemoryItemVersion,
   MemoryListInput,
   MemoryScope,
   MemorySource,
@@ -32,13 +31,17 @@ interface MemoryRow {
 
 interface MemoryVersionRow {
   memory_id: string;
+  scope: MemoryScope;
+  context_id: string | null;
+  memory_key: string;
   version: number;
   value: unknown;
   status: MemoryStatus;
   source: unknown;
   evidence: unknown;
   impact_scope: unknown;
-  created_at: Date;
+  item_created_at: Date;
+  version_created_at: Date;
 }
 
 interface MemoryIdentity {
@@ -135,16 +138,20 @@ function mapMemory(row: MemoryRow): MemoryItem {
   };
 }
 
-function mapVersion(row: MemoryVersionRow): MemoryItemVersion {
+function mapVersion(row: MemoryVersionRow): MemoryItem {
   return {
-    memoryId: row.memory_id,
-    version: row.version,
+    id: row.memory_id,
+    scope: row.scope,
+    contextId: row.context_id,
+    key: row.memory_key,
     value: row.value,
     status: row.status,
+    version: row.version,
     source: publicSource(row.source),
     evidence: row.evidence as MemoryEvidence[],
     impactScope: row.impact_scope as MemoryImpactScope,
-    createdAt: row.created_at,
+    createdAt: row.item_created_at,
+    updatedAt: row.version_created_at,
   };
 }
 
@@ -383,18 +390,16 @@ export function createMemoryRepository(pool: DatabasePool) {
   async function listVersions(
     userId: string,
     memoryId: string,
-  ): Promise<MemoryItemVersion[] | null> {
-    const owner = await pool.query(
-      'SELECT 1 FROM memory_items WHERE id = $1 AND user_id = $2',
+  ): Promise<MemoryItem[] | null> {
+    const result = await pool.query<MemoryVersionRow>(
+      'SELECT i.id AS memory_id, i.scope, i.context_id, i.memory_key, ' +
+      'v.version, v.value, v.status, v.source, v.evidence, v.impact_scope, ' +
+      'i.created_at AS item_created_at, v.created_at AS version_created_at ' +
+      'FROM memory_items i JOIN memory_item_versions v ON v.memory_id = i.id ' +
+      'WHERE i.id = $1 AND i.user_id = $2 ORDER BY v.version',
       [memoryId, userId],
     );
-    if (!owner.rows[0]) return null;
-    const result = await pool.query<MemoryVersionRow>(
-      'SELECT v.memory_id, v.version, v.value, v.status, v.source, v.evidence, ' +
-      'v.impact_scope, v.created_at FROM memory_item_versions v ' +
-      'WHERE v.memory_id = $1 ORDER BY v.version',
-      [memoryId],
-    );
+    if (result.rows.length === 0) return null;
     return result.rows.map(mapVersion);
   }
 

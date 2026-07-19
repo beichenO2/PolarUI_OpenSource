@@ -71,6 +71,8 @@ export interface WorkflowCheckpoint {
   reason: 'bootstrap' | 'branch' | 'workflow_action';
   snapshot: {
     workflowState: Record<string, unknown>;
+    workflowRevision?: string;
+    sourceCommandId?: string;
     stageProjection?: StageProjectionSnapshot;
     memoryReferences: Array<{ memoryId: string; version: number }>;
     artifacts: CheckpointArtifact[];

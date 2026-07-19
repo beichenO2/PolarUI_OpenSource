@@ -1,85 +1,124 @@
 # Polar Native Workflow Web Template
 
-Tracked source for native Polar workflow web releases. This implementation is independent from the legacy chat runtime.
+This directory is the tracked source for native Polar Workflow Web releases. The UI is conversation-first and independent from the legacy chat runtime: users can provide Workflow Input immediately, while Context, Route, Conversation, Checkpoint, memory, Artifact, and attachment ownership remain durable server-side concepts.
 
-## npm development with local PostgreSQL and Mailpit
-
-Start development-only PostgreSQL and Mailpit containers bound to the loopback interface:
-
-```bash
-docker run --name polar-native-postgres-dev --rm -d \
-  -e POSTGRES_DB=polar -e POSTGRES_USER=polar -e POSTGRES_PASSWORD=polar-dev-only \
-  -p 127.0.0.1:5432:5432 postgres:16-alpine
-docker run --name polar-native-mailpit-dev --rm -d \
-  -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 ghcr.io/axllent/mailpit:v1.27
-```
-
-Install, build the browser application, and start the API in watch mode:
-
-```bash
-npm install
-npm run build
-export DATABASE_URL='postgresql://polar:polar-dev-only@127.0.0.1:5432/polar'
-export AUTH_PEPPER="$(openssl rand -hex 32)"
-export PUBLIC_APP_ORIGIN='http://127.0.0.1:3920'
-export COOKIE_SECURE=false
-export SMTP_HOST=127.0.0.1 SMTP_PORT=1025 SMTP_SECURE=false
-export SMTP_FROM='Polar Workflow <no-reply@example.test>'
-npm run dev:api
-```
-
-Open `http://127.0.0.1:3920`; Mailpit's development inbox is at `http://127.0.0.1:8025`. Rebuild the web workspace after browser-source changes with `npm run build -w @polar/native-web-web`.
-
-## Persisted workflow hierarchy
-
-After authentication, the native Web UI persists this release-owned hierarchy in PostgreSQL:
+## Domain hierarchy
 
 ```text
-User -> Context -> Route -> Stage -> Thread -> Checkpoint
+User -> Context -> Route -> Conversation
+                     └-> immutable Checkpoints -> optional Stage Projection snapshots
+
+User memory: cross-Context
+Context memory: current Context only
 ```
 
-Creating a Context atomically creates its main Route, manifest Stage projections, and immutable version-zero Checkpoint. Stage navigation is free and never advances workflow state. Threads remain scoped to one Route and Stage. “从此检查点创建新路线” clones the selected snapshot into a new Route while retaining the original Route.
+- A Context is the shared situation and Context-memory boundary.
+- A Conversation is a local message and draft history. It is not a Workflow branch.
+- A Route is an equal-status Workflow timeline. Its Checkpoints are append-only and immutable.
+- Stage Projection is optional, read-only, and returned by the Workflow. Its names, count, order, and statuses are never Web-owned navigation state.
+- An Artifact is a Workflow result. It appears in the causal Conversation timeline and in the inspector's Artifact summary.
 
-Thread messages and workflow commands are also persisted. Command creation is deliberately separate from event observation so a browser disconnect never cancels workflow execution:
+The desktop shell keeps the Context sidebar, Conversation axis, and memory/Artifact/run inspector in DOM and visual order. Compact layouts keep a single Conversation scroll; Contexts, Conversation management, inspector content, Stage Projection details, and archives open as full-screen layers. The Input composer remains above the safe area.
+
+## Unified Command lifecycle
+
+All user messages, named intents, and Interrupt replies use one durable Command endpoint:
 
 ```text
-GET  /api/contexts
-POST /api/contexts
-GET  /api/contexts/:contextId/workspace
-GET  /api/routes/:routeId/workspace?stage=<stage-key>&checkpoint=<uuid>
-POST /api/routes/:routeId/threads
-PATCH /api/threads/:threadId
-POST /api/contexts/:contextId/routes
-GET  /api/threads/:threadId/messages
-POST /api/threads/:threadId/commands
+POST /api/workflow/commands
 GET  /api/commands/:commandId/events
 ```
 
-All endpoints derive ownership from the HttpOnly session. Mutation requests also require the configured same-origin `Origin` header.
-
-`POST /api/threads/:threadId/commands` returns `202` with a stable command ID and event URL. The event URL is an authenticated SSE endpoint that persists and replays `command.accepted`, `workflow.started`, `assistant.delta`, `workspace.committed`, and the terminal `command.finished`. Reconnect with `Last-Event-ID`; heartbeat comments keep idle proxy connections open, while `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no` prevent buffering.
-
-The command UUID is the durable idempotency key and is also sent upstream as `Idempotency-Key`. Reusing it with identical input replays stored events without another workflow call; reusing it with different input is rejected. The server never automatically retries an upstream timeout because the legacy workflow protocol cannot guarantee that a timed-out request had no side effects.
-
-Set `WORKFLOW_ENDPOINT_OVERRIDE` to the complete workflow `/run` URL when the manifest endpoint is not reachable from the deployment network, and optionally set the positive millisecond timeout `WORKFLOW_TIMEOUT_MS` (default `60000`). Both Compose modes forward these values to the Web container.
-
-`GET /api/threads/:threadId/messages` returns persisted messages plus only the public ID and prompt for a pending human-input interrupt. Resume it with an authenticated `resume_interrupt` command containing that public interrupt ID and the user's reply. The private PolarFlow cursor stays in PostgreSQL, is never returned to the browser, and is restored upstream only by the server during that resume.
-
-Phase 5 is complete. Each Thread now owns durable attachments and Workflow artifacts backed by a SHA-256-addressed object volume. Workflow memory proposals remain pending until the user explicitly adopts or rejects them, and adopted values are versioned. The fixed component registry renders `generic_chat`, `structured_form`, `card_selection`, and `document_workspace` without accepting recursive layout configuration.
+The public Command binds interaction to a timeline, not to a Stage:
 
 ```text
-GET  /api/threads/:threadId/assets
-POST /api/threads/:threadId/attachments   (application/octet-stream + X-File-Name + X-File-Media-Type)
-GET  /api/assets/:kind/:assetId/download
-GET  /api/memory-proposals?thread=<uuid>
-POST /api/memory-proposals/:proposalId/decision
-GET  /api/archive/conversations
-GET  /api/archive/conversations/:conversationId
+commandId
+contextId?
+routeId?
+conversationId?
+baseCheckpointId?
+expectedCheckpointVersion?
+input: message | named_intent | resume_interrupt
+attachmentIds[]
 ```
 
-Files are limited to 25 MB, downloaded with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`, and authorized by opaque asset ID plus the current HttpOnly session. `OBJECT_STORE_DIRECTORY` defaults to `/data/objects`; both Compose modes mount it as a persistent named volume.
+Command creation returns `202` with a stable command ID and authenticated event URL. The SSE stream persists and replays `command.accepted`, `workflow.started`, `assistant.delta`, `workspace.committed`, and terminal `command.finished` events. Reconnect with `Last-Event-ID`. Reusing a command ID with identical input replays its receipt; reusing it with different input is rejected.
 
-Import a previously exported LibreChat archive into an existing native user. The command is idempotent by original conversation/message/attachment ID, verifies attachment hashes, produces a machine-readable report, and supports a write-free dry run:
+### Hidden initialization
+
+At zero Context, the first Input starts one atomic initialization Command. The server provisions the Context, initial Route, primary Conversation, and Checkpoint privately, invokes the Workflow, and activates them only after success. The Agent may return Context and Conversation names. If the attempt fails, the provisional records remain hidden and the exact Input and attachment IDs remain available for retry.
+
+An existing Context with no Conversation exposes a virtual primary Conversation. `+` creates an untitled virtual Conversation immediately; its first successful Command materializes and may name it without a title form.
+
+### History and automatic branching
+
+Browsing an earlier Checkpoint is read-only and does not create a Route. Sending Input while a non-head Checkpoint is selected atomically creates a new equal-status Route from that exact Checkpoint, creates its Conversation, and executes the Workflow. Failure leaves no visible empty Route. The source Route, source messages, source artifacts, source Checkpoint Input, and historical Stage Projection snapshot remain unchanged.
+
+### Name locks
+
+Agent naming only applies while Context or Conversation title ownership is `agent`. A manual rename changes title ownership to `user`; later Workflow results cannot overwrite it. Rename changes display metadata only: it never runs the Workflow, creates a Checkpoint, changes memory, or branches a Route. Enter saves, Escape cancels, and either path restores focus to the rename trigger.
+
+## Workflow result contract
+
+The Bridge sends the Workflow a versioned envelope containing Context/Route/Conversation IDs, the base Checkpoint and version, public Input, opaque attachment IDs, local history, both memory scopes, and the immutable Checkpoint snapshot. It never sends a user-selected `stage_key` or `setStage` action.
+
+A v2 Workflow result can return:
+
+```text
+reply_events
+checkpoint.workflow_state
+context_title?
+conversation_title?
+memory_updates[]
+artifact_proposals[]
+stage_projection?
+interrupt?
+diagnostics
+```
+
+`stage_projection` is self-describing and dynamic. Zero items hides the module; one item renders one status; 2–6 render directly; 7+ render a summary with a full vertical detail layer. Each Checkpoint stores its complete projection snapshot, so later Workflow-definition changes cannot rewrite history.
+
+## Two memory layers
+
+User memory models stable habits, characteristics, decision style, and taste across Contexts. Context memory models goals, facts, decisions, constraints, materials, and Artifact references that remain useful only in the current Context.
+
+Every memory record exposes scope, source, created and updated timestamps, version, impact scope, evidence references, and status. Updates are optimistic and append-only: correction creates a new version, while deletion writes an auditable invalidation instead of erasing history. Conflicting or high-impact updates produce a Workflow Interrupt and cannot silently replace the active version. Only the public Interrupt ID and prompt reach the browser; its private cursor stays server-side.
+
+```text
+GET    /api/memory?scope=user
+GET    /api/memory?scope=context&context=:contextId
+GET    /api/memory/:memoryId/versions
+PATCH  /api/memory/:memoryId
+DELETE /api/memory/:memoryId
+```
+
+## Workspace and asset endpoints
+
+All endpoints derive ownership from the HttpOnly session. Mutations also require the configured same-origin `Origin` header.
+
+```text
+GET   /api/contexts
+POST  /api/contexts                         # optional manual entry
+GET   /api/contexts/:contextId/workspace
+PATCH /api/contexts/:contextId
+
+GET   /api/routes/:routeId/workspace?checkpoint=:checkpointId
+POST  /api/routes/:routeId/conversations
+PATCH /api/conversations/:conversationId
+GET   /api/conversations/:conversationId/messages
+
+POST   /api/attachments/staged
+DELETE /api/attachments/staged/:attachmentId
+GET    /api/conversations/:conversationId/attachments
+GET    /api/assets/:kind/:assetId/download
+
+GET /api/archive/conversations
+GET /api/archive/conversations/:conversationId
+```
+
+Attachments and Workflow Artifacts use SHA-256-addressed object storage. Uploads are limited to 25 MB; downloads use opaque IDs, ownership checks, `Content-Disposition: attachment`, and `X-Content-Type-Options: nosniff`. Imported LibreChat conversations remain read-only.
+
+The one-shot archive importer supports a write-free review before mutation:
 
 ```bash
 npm run import:librechat -- \
@@ -89,63 +128,26 @@ npm run import:librechat -- \
   --dry-run
 ```
 
-Remove `--dry-run` only after reviewing the report. Imported conversations are exposed as read-only history and cannot receive new messages.
+Remove `--dry-run` only after reviewing its machine-readable report. For a direct Mongo source, provide `LIBRECHAT_MONGO_URI` through the operator secret environment and use `--source-user` when needed; the importer only reads the source database.
 
-For a direct read-only Mongo migration, install `mongosh` in the operator environment and provide the URI only through `LIBRECHAT_MONGO_URI`; the CLI executes `find` queries and never writes to Mongo. Add `--source-user <legacy-user-id>` when the source database contains multiple users. Keep the URI out of shell history and unset it after import.
+## Governed runtime
 
-## Bundled Docker Compose
+Do not start Vite, the API, Docker Compose, PostgreSQL, Mail capture, or QA services directly, and do not assign fixed local ports in ad-hoc shell commands.
 
-Generate operator secrets and start the application, internal PostgreSQL, and QA-only Mailpit:
+Runtime truth is declared in the repository-level `polaris.json`. `Start/start.sh` is the governed project entrypoint. PolarPort is the sole port allocator and ownership authority; PolarProcess is the sole long-running process registry and lifecycle authority. Preview, development, release QA, and restart verification must use those declarations and authorities. If the runtime-governance audit reports a hard conflict, stop rather than falling back to an unmanaged process.
 
-```bash
-export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
-export AUTH_PEPPER="$(openssl rand -hex 32)"
-export PUBLIC_APP_ORIGIN='http://127.0.0.1:3920'
-export NODE_ENV=development COOKIE_SECURE=false
-export SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_SECURE=false
-export SMTP_FROM='Polar Workflow <no-reply@example.test>'
-docker compose --profile qa up --build -d
-curl -fsS http://127.0.0.1:3920/readyz
-```
+Operator secrets such as `DATABASE_URL`, `AUTH_PEPPER`, SMTP credentials, `PUBLIC_APP_ORIGIN`, and Workflow endpoint overrides belong in the governed environment or secret store, never in tracked files.
 
-Omit `--profile qa` and supply production SMTP variables to run without Mailpit. The bundled topology publishes only Web port `3920`; PostgreSQL has no host port and is reachable only by Compose services. Mailpit exposes its SMTP and HTTP ports only inside the Compose network and never publishes them to the host.
+## Transient development gates
 
-The Web listener defaults to `127.0.0.1:3920`. PolarPort or another launcher can choose a different host binding without editing Compose:
+Dependency installation, unit tests, and builds terminate with the invoking command and do not bind a persistent port:
 
 ```bash
-POLAR_WEB_BIND=127.0.0.1 POLAR_WEB_PORT=43920 docker compose --profile qa up -d
+npm install
+npm test
+npm run build
 ```
 
-## External PostgreSQL
+Run the repository aggregate gate from the `PolarUI` root with `npm run test:native-web`. PostgreSQL integration suites require a governed `TEST_DATABASE_URL`; when it is absent they report an explicit skip and must not be described as passed.
 
-Provide an operator-managed database and SMTP service, then use the external database Compose file:
-
-```bash
-export DATABASE_URL='postgresql://app:password@db.example.internal:5432/polar?sslmode=require'
-export AUTH_PEPPER="$(openssl rand -hex 32)"
-export PUBLIC_APP_ORIGIN='https://workflow.example.com'
-export SMTP_HOST='smtp.example.com' SMTP_PORT=587 SMTP_SECURE=false
-export SMTP_FROM='Polar Workflow <no-reply@example.com>'
-docker compose -f compose.external-db.yml up --build -d
-curl -fsS http://127.0.0.1:3920/readyz
-```
-
-Set `SMTP_USERNAME` and `SMTP_PASSWORD` when the SMTP server requires authentication. `DATABASE_URL`, `AUTH_PEPPER`, `PUBLIC_APP_ORIGIN`, and the core SMTP settings are required by `compose.external-db.yml`; Compose stops before startup if any are absent.
-
-The external deployment uses the same `POLAR_WEB_BIND` and `POLAR_WEB_PORT` overrides and also defaults to `127.0.0.1:3920`.
-
-## Migrations and administrator CLI
-
-The API applies the ordered SQL files in `db/migrations` under a PostgreSQL advisory lock before it starts accepting traffic. The same migration runner is used by the administrator CLI.
-
-Create a verified administrator in the bundled deployment:
-
-```bash
-docker compose exec web node apps/api/dist/scripts/create-user.js \
-  --email admin@example.com \
-  --username admin \
-  --password 'replace-with-a-strong-password' \
-  --verified
-```
-
-For the external deployment, add `-f compose.external-db.yml` after `docker compose`. Keep `POSTGRES_PASSWORD`, `AUTH_PEPPER`, database credentials, and SMTP credentials in an operator secret store; do not commit them to Compose or environment files.
+Production browser/restart verification is the separate governed `qa:native-release` workflow. It may run only after the PolarPort/PolarProcess health checks and runtime audit defined by the project plan. Record evidence in `polaris.json` only from the actual logs; never infer a pass from unit or build results.

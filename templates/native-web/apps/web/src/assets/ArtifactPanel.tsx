@@ -34,7 +34,7 @@ export function ArtifactPanel({ routeId, stageKey, revision = 0 }: {
       {artifacts.map((artifact) => <a
         key={artifact.id}
         href={downloadUrl(artifact)}
-        className="asset-row"
+        className="asset-row download-target"
       >
         <span><strong>{artifact.filename}</strong><small>阶段成果</small></span>
         <span>{formatSize(artifact.byteSize)}</span>

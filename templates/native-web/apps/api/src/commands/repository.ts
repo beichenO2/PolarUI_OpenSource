@@ -2,6 +2,10 @@ import type { DatabaseClient, DatabasePool } from '../db/pool.js';
 import { randomUUID } from 'node:crypto';
 import { withTransaction } from '../db/pool.js';
 import {
+  expireStaleAttachmentClaims,
+  releaseClaimedStagedAttachments,
+} from './attachment-claims.js';
+import {
   appendWorkflowVersionsWithClient,
   listForWorkflowWithClient,
 } from '../memory/repository.js';
@@ -307,16 +311,24 @@ function bootstrapSnapshot(): CheckpointSnapshot {
   return { workflowState: {}, memoryReferences: [], artifacts: [] };
 }
 
-async function lockOwnedStagedAttachments(
+async function claimOwnedStagedAttachments(
   client: DatabaseClient,
   userId: string,
+  contextId: string,
+  commandId: string,
   attachmentIds: string[],
+  now: Date,
 ) {
   if (attachmentIds.length === 0) return;
   const result = await client.query<{ id: string }>(
-    "SELECT id FROM staged_attachments WHERE id = ANY($1::uuid[]) " +
-    "AND user_id = $2 AND status = 'pending' FOR UPDATE",
-    [attachmentIds, userId],
+    'WITH claimable AS (' +
+    'SELECT id FROM staged_attachments WHERE id = ANY($1::uuid[]) ' +
+    "AND user_id = $2 AND status = 'pending' AND claimed_command_id IS NULL " +
+    'ORDER BY id FOR UPDATE' +
+    ') UPDATE staged_attachments attachment SET claimed_command_id = $3, ' +
+    'claimed_context_id = $4, updated_at = $5 FROM claimable ' +
+    'WHERE attachment.id = claimable.id RETURNING attachment.id',
+    [attachmentIds, userId, commandId, contextId, now],
   );
   if (result.rows.length !== attachmentIds.length) {
     throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
@@ -512,6 +524,7 @@ async function reusePreparedCommand(
       [row.id, input.now],
     );
     const terminal = terminalResult.rows[0]!;
+    await releaseClaimedStagedAttachments(client, terminal.id, terminal.context_id, input.now);
     await appendEventWithClient(client, terminal.id, 'command.finished', {
       outcome: 'failed',
       code: 'WORKFLOW_OUTCOME_UNKNOWN',
@@ -574,6 +587,10 @@ function unifiedSnapshot(
   if (result.workflowState !== undefined) {
     return {
       workflowState: result.workflowState,
+      ...(result.workflowRevision === undefined
+        ? {}
+        : { workflowRevision: result.workflowRevision }),
+      sourceCommandId: command.id,
       ...(result.stageProjection !== undefined
         ? { stageProjection: result.stageProjection }
         : base.stageProjection !== undefined
@@ -602,6 +619,10 @@ function unifiedSnapshot(
   };
   return {
     workflowState,
+    ...(result.workflowRevision === undefined
+      ? {}
+      : { workflowRevision: result.workflowRevision }),
+    sourceCommandId: command.id,
     ...(stages.length === 0
       ? (base.stageProjection ? { stageProjection: base.stageProjection } : {})
       : {
@@ -634,17 +655,21 @@ async function adoptUnifiedAttachments(
   attachmentIds: string[],
   now: Date,
 ) {
-  await lockOwnedStagedAttachments(client, userId, attachmentIds);
-  if (attachmentIds.length === 0) return;
   const staged = await client.query<{
     id: string;
     object_id: string;
     filename: string;
   }>(
     'SELECT id, object_id, filename FROM staged_attachments ' +
-    'WHERE id = ANY($1::uuid[]) AND user_id = $2 ORDER BY created_at, id FOR UPDATE',
-    [attachmentIds, userId],
+    "WHERE claimed_command_id = $1 AND claimed_context_id = $2 AND user_id = $3 AND status = 'pending' " +
+    'ORDER BY id FOR UPDATE',
+    [command.id, command.context_id, userId],
   );
+  const expectedIds = attachmentIds.map((id) => id.toLowerCase()).sort();
+  if (staged.rows.length !== expectedIds.length ||
+      staged.rows.some((attachment, index) => attachment.id !== expectedIds[index])) {
+    throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
+  }
   for (const attachment of staged.rows) {
     await client.query(
       'INSERT INTO workflow_attachments ' +
@@ -662,12 +687,89 @@ async function adoptUnifiedAttachments(
         now,
       ],
     );
-    await client.query(
-      "UPDATE staged_attachments SET status = 'adopted', adopted_command_id = $2, " +
-      'adopted_context_id = $3, adopted_at = $4, updated_at = $4 WHERE id = $1',
+    const adopted = await client.query(
+      "UPDATE staged_attachments SET status = 'adopted', claimed_command_id = NULL, " +
+      'claimed_context_id = NULL, adopted_command_id = $2, adopted_context_id = $3, ' +
+      'adopted_at = $4, updated_at = $4 WHERE id = $1 AND claimed_command_id = $2',
       [attachment.id, command.id, command.context_id, now],
     );
+    if (adopted.rowCount !== 1) throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
   }
+}
+
+async function persistPreparedArtifacts(
+  client: DatabaseClient,
+  command: CommandRow,
+  userId: string,
+  routeId: string,
+  conversationId: string,
+  preparedArtifacts: NonNullable<FinalizeCommandInput['preparedArtifacts']>,
+  now: Date,
+): Promise<CheckpointSnapshot['artifacts']> {
+  const references: CheckpointSnapshot['artifacts'] = [];
+  for (const artifact of preparedArtifacts) {
+    if (artifact.status === 'failed') {
+      await client.query(
+        'INSERT INTO workflow_artifacts ' +
+        '(id, user_id, command_id, context_id, route_id, thread_id, stage_key, filename, status, error_code, created_at) ' +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'failed', $9, $10)",
+        [
+          artifact.id,
+          userId,
+          command.id,
+          command.context_id,
+          routeId,
+          conversationId,
+          command.stage_key,
+          artifact.filename,
+          artifact.errorCode,
+          now,
+        ],
+      );
+      continue;
+    }
+    const object = (await client.query<{
+      id: string;
+      media_type: string;
+      byte_size: number;
+      sha256: string;
+    }>(
+      "SELECT id, media_type, byte_size, sha256 FROM asset_objects " +
+      "WHERE id = $1 AND user_id = $2 AND status = 'ready' FOR SHARE",
+      [artifact.objectId, userId],
+    )).rows[0];
+    if (!object || object.media_type !== artifact.mediaType ||
+        Number(object.byte_size) !== artifact.byteSize || object.sha256 !== artifact.sha256) {
+      throw new CommandRepositoryError('ARTIFACT_PREPARATION_INVALID');
+    }
+    await client.query(
+      'INSERT INTO workflow_artifacts ' +
+      '(id, user_id, object_id, command_id, context_id, route_id, thread_id, stage_key, filename, status, created_at) ' +
+      "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ready', $10)",
+      [
+        artifact.id,
+        userId,
+        artifact.objectId,
+        command.id,
+        command.context_id,
+        routeId,
+        conversationId,
+        command.stage_key,
+        artifact.filename,
+        now,
+      ],
+    );
+    references.push({
+      id: artifact.id,
+      stage_key: command.stage_key,
+      filename: artifact.filename,
+      media_type: object.media_type,
+      byte_size: Number(object.byte_size),
+      sha256: object.sha256,
+      created_at: now.toISOString(),
+    });
+  }
+  return references;
 }
 
 function agentTitle(value: string | undefined) {
@@ -679,11 +781,11 @@ function mergeMemoryReferences(
   base: CheckpointSnapshot['memoryReferences'],
   appended: CheckpointSnapshot['memoryReferences'],
 ) {
-  const updatedIds = new Set(appended.map((reference) => reference.memoryId));
-  return [
-    ...base.filter((reference) => !updatedIds.has(reference.memoryId)),
-    ...appended,
-  ];
+  const merged = new Map<string, CheckpointSnapshot['memoryReferences'][number]>();
+  for (const reference of [...base, ...appended]) {
+    merged.set(`${reference.memoryId}:${reference.version}`, reference);
+  }
+  return [...merged.values()];
 }
 
 async function completeUnifiedCommand(
@@ -864,6 +966,7 @@ async function persistInterruptWithClient(
     'updated_at = $2 WHERE id = $1',
     [command.source_thread_id, now],
   );
+  await releaseClaimedStagedAttachments(client, command.id, command.context_id, now);
   return completeUnifiedCommand(client, command, {
     routeId: command.source_route_id,
     conversationId: command.source_thread_id,
@@ -965,7 +1068,7 @@ export function createCommandRepository(pool: DatabasePool) {
           return reusePreparedCommand(client, existing, input);
         }
         if (!validCommandFields(input)) throw new CommandRepositoryError('COMMAND_INPUT_INVALID');
-        await lockOwnedStagedAttachments(client, input.userId, input.attachmentIds);
+        await expireStaleAttachmentClaims(client, input.userId, input.attachmentIds, input.now);
 
         const isStart = input.contextId === undefined && input.routeId === undefined &&
           input.conversationId === undefined && input.baseCheckpointId === undefined &&
@@ -1166,6 +1269,14 @@ export function createCommandRepository(pool: DatabasePool) {
           ],
         );
         const command = inserted.rows[0]!;
+        await claimOwnedStagedAttachments(
+          client,
+          input.userId,
+          command.context_id,
+          command.id,
+          input.attachmentIds,
+          input.now,
+        );
         await appendEventWithClient(
           client,
           command.id,
@@ -1473,6 +1584,7 @@ export function createCommandRepository(pool: DatabasePool) {
             "error_code = 'CHECKPOINT_VERSION_CONFLICT', updated_at = $2 WHERE id = $1",
             [command.id, now],
           );
+          await releaseClaimedStagedAttachments(client, command.id, command.context_id, now);
           const event = await appendEventWithClient(client, command.id, 'command.finished', {
             outcome: 'conflict',
             code: 'CHECKPOINT_VERSION_CONFLICT',
@@ -1568,13 +1680,49 @@ export function createCommandRepository(pool: DatabasePool) {
           if (!targetConversation.rows[0]) throw new CommandRepositoryError('COMMAND_SCOPE_INVALID');
         }
 
+        const boundResultScope = await client.query<{ id: string }>(
+          'UPDATE workflow_commands AS target SET result_route_id = $2, result_thread_id = $3, updated_at = $4 ' +
+          "WHERE target.id = $1 AND target.status = 'running' AND target.context_id = $5 " +
+          'AND target.source_route_id = $6 AND target.source_thread_id = $7 ' +
+          'AND target.result_route_id IS NULL AND target.result_thread_id IS NULL ' +
+          'AND target.result_checkpoint_id IS NULL AND EXISTS (' +
+          'SELECT 1 FROM contexts owner WHERE owner.id = target.context_id AND owner.user_id = $8' +
+          ') RETURNING target.id',
+          [
+            command.id,
+            routeId,
+            conversationId,
+            now,
+            command.context_id,
+            command.source_route_id,
+            command.source_thread_id,
+            context.user_id,
+          ],
+        );
+        if (boundResultScope.rowCount !== 1) {
+          throw new CommandRepositoryError('COMMAND_NOT_FINALIZABLE');
+        }
+
         const stages = result.workflowState === undefined
           ? await applyUnifiedStageSignals(client, routeId, result.stageSignals, now)
           : [];
+        const preparedArtifactReferences = await persistPreparedArtifacts(
+          client,
+          command,
+          context.user_id,
+          routeId,
+          conversationId,
+          result.preparedArtifacts ?? [],
+          now,
+        );
         const snapshot = {
           ...unifiedSnapshot(baseSnapshot, command, result, stages),
+          artifacts: [...baseSnapshot.artifacts, ...preparedArtifactReferences],
           memoryReferences: mergeMemoryReferences(
-            baseSnapshot.memoryReferences,
+            mergeMemoryReferences(
+              baseSnapshot.memoryReferences,
+              result.consumedMemoryReferences ?? [],
+            ),
             memoryWrite.references,
           ),
         };
@@ -1611,11 +1759,26 @@ export function createCommandRepository(pool: DatabasePool) {
           "status = 'active', updated_at = $3 WHERE id = $1",
           [conversationId, agentTitle(result.conversationTitle), now],
         );
-        await client.query(
-          'UPDATE workflow_commands SET result_route_id = $2, result_thread_id = $3, ' +
-          'result_checkpoint_id = $4, updated_at = $5 WHERE id = $1',
-          [command.id, routeId, conversationId, result.checkpointId, now],
+        const boundResultCheckpoint = await client.query<{ id: string }>(
+          'UPDATE workflow_commands AS target SET result_checkpoint_id = $2, updated_at = $3 ' +
+          "WHERE target.id = $1 AND target.status = 'running' AND target.context_id = $4 " +
+          'AND target.result_route_id = $5 AND target.result_thread_id = $6 ' +
+          'AND target.result_checkpoint_id IS NULL AND EXISTS (' +
+          'SELECT 1 FROM contexts owner WHERE owner.id = target.context_id AND owner.user_id = $7' +
+          ') RETURNING target.id',
+          [
+            command.id,
+            result.checkpointId,
+            now,
+            command.context_id,
+            routeId,
+            conversationId,
+            context.user_id,
+          ],
         );
+        if (boundResultCheckpoint.rowCount !== 1) {
+          throw new CommandRepositoryError('COMMAND_NOT_FINALIZABLE');
+        }
         await insertMessages(
           client,
           command,
@@ -1953,6 +2116,7 @@ export function createCommandRepository(pool: DatabasePool) {
           'updated_at = $3 WHERE id = $1',
           [command.id, errorCode, now],
         );
+        await releaseClaimedStagedAttachments(client, command.id, command.context_id, now);
         await appendEventWithClient(client, command.id, 'command.finished', {
           outcome: 'failed',
           code: errorCode,

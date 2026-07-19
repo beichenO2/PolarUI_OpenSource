@@ -2,14 +2,13 @@ import type {
   InvalidateMemoryInput,
   MemoryEvidence,
   MemoryItem,
-  MemoryItemVersion,
   MemoryListInput,
   ReviseMemoryInput,
 } from './types.js';
 
 export interface MemoryServiceRepository {
   list(userId: string, input: MemoryListInput): Promise<MemoryItem[]>;
-  listVersions(userId: string, memoryId: string): Promise<MemoryItemVersion[] | null>;
+  listVersions(userId: string, memoryId: string): Promise<MemoryItem[] | null>;
   revise(
     userId: string,
     memoryId: string,

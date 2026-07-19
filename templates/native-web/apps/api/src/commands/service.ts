@@ -106,7 +106,140 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const memoryUpdateKeys = new Set([
+  'scope', 'key', 'value', 'expectedVersion', 'highImpact',
+  'confirmationPrompt', 'evidence', 'impactScope',
+]);
+const memoryEvidenceKeys = new Set(['kind', 'id', 'excerpt']);
+const maxMemoryUpdates = 1000;
+const maxMemoryValueDepth = 64;
+const maxMemoryValueNodes = 20_000;
+const maxMemoryValueCharacters = 36_000_000;
+
+interface MemoryValidationBudget {
+  nodes: number;
+  characters: number;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>) {
+  try {
+    if (Object.getOwnPropertySymbols(value).length > 0) return false;
+    const names = Object.getOwnPropertyNames(value);
+    const keys = Object.keys(value);
+    if (names.length !== keys.length) return false;
+    return names.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return allowed.has(key) && descriptor?.enumerable === true &&
+        Object.hasOwn(descriptor, 'value');
+    });
+  } catch {
+    return false;
+  }
+}
+
+function isJsonSafeMemoryValue(
+  value: unknown,
+  budget: MemoryValidationBudget = { nodes: 0, characters: 0 },
+) {
+  const ancestors = new WeakSet<object>();
+
+  function visit(candidate: unknown, depth: number): boolean {
+    if (++budget.nodes > maxMemoryValueNodes || depth > maxMemoryValueDepth) return false;
+    if (candidate === null || typeof candidate === 'string' || typeof candidate === 'boolean') {
+      return true;
+    }
+    if (typeof candidate === 'number') return Number.isFinite(candidate);
+    if (typeof candidate !== 'object' || ancestors.has(candidate)) return false;
+
+    ancestors.add(candidate);
+    try {
+      if (Object.getOwnPropertySymbols(candidate).length > 0) return false;
+      if (Array.isArray(candidate)) {
+        const names = Object.getOwnPropertyNames(candidate);
+        if (names.length !== candidate.length + 1 || !names.includes('length')) return false;
+        for (let index = 0; index < candidate.length; index += 1) {
+          const descriptor = Object.getOwnPropertyDescriptor(candidate, String(index));
+          if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
+              !visit(descriptor.value, depth + 1)) return false;
+        }
+        return true;
+      }
+      if (!isPlainObject(candidate)) return false;
+      const names = Object.getOwnPropertyNames(candidate);
+      const keys = Object.keys(candidate);
+      if (names.length !== keys.length) return false;
+      for (const key of keys) {
+        const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+        if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
+            !visit(descriptor.value, depth + 1)) return false;
+      }
+      return true;
+    } finally {
+      ancestors.delete(candidate);
+    }
+  }
+
+  try {
+    if (!visit(value, 0)) return false;
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) return false;
+    budget.characters += serialized.length;
+    return budget.characters <= maxMemoryValueCharacters;
+  } catch {
+    return false;
+  }
+}
+
+function isMemoryEvidence(value: unknown) {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, memoryEvidenceKeys) ||
+      !isJsonSafeMemoryValue(value)) return false;
+  return typeof value.kind === 'string' && value.kind.length >= 1 && value.kind.length <= 200 &&
+    typeof value.id === 'string' && value.id.length >= 1 && value.id.length <= 500 &&
+    (value.excerpt === undefined ||
+      (typeof value.excerpt === 'string' && value.excerpt.length <= 2000));
+}
+
+function isMemoryImpactScope(value: unknown) {
+  if (!isPlainObject(value) || !isJsonSafeMemoryValue(value) ||
+      Object.keys(value).length !== 1 ||
+      !Object.hasOwn(value, 'contextIds')) return false;
+  const contextIds = value.contextIds;
+  return contextIds === 'all' ||
+    (Array.isArray(contextIds) && contextIds.length <= 1000 &&
+      contextIds.every((id) => typeof id === 'string' && uuidPattern.test(id)));
+}
+
+function isMemoryUpdate(
+  value: unknown,
+  budget: MemoryValidationBudget,
+): value is MemoryUpdate {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, memoryUpdateKeys) ||
+      (value.scope !== 'user' && value.scope !== 'context') ||
+      typeof value.key !== 'string' || value.key.length < 1 || value.key.length > 200 ||
+      value.key !== value.key.trim() ||
+      !Object.hasOwn(value, 'value') || !isJsonSafeMemoryValue(value.value, budget) ||
+      (value.expectedVersion !== undefined &&
+        (typeof value.expectedVersion !== 'number' ||
+          !Number.isInteger(value.expectedVersion) || value.expectedVersion < 1)) ||
+      (value.highImpact !== undefined && typeof value.highImpact !== 'boolean') ||
+      (value.confirmationPrompt !== undefined &&
+        (typeof value.confirmationPrompt !== 'string' ||
+          value.confirmationPrompt.trim().length < 1 || value.confirmationPrompt.length > 2000)) ||
+      (value.evidence !== undefined &&
+        (!isJsonSafeMemoryValue(value.evidence, budget) ||
+          !Array.isArray(value.evidence) || value.evidence.length > 100 ||
+          value.evidence.some((item) => !isMemoryEvidence(item)))) ||
+      (value.impactScope !== undefined &&
+        (!isJsonSafeMemoryValue(value.impactScope, budget) ||
+          !isMemoryImpactScope(value.impactScope)))) {
+    return false;
+  }
+  return true;
+}
+
 function isWorkflowV2Result(result: unknown): result is WorkflowV2BridgeResult {
+  const memoryBudget = { nodes: 0, characters: 0 };
   if (!isPlainObject(result) ||
       !Array.isArray(result.replyEvents) ||
       result.replyEvents.some((event) =>
@@ -117,6 +250,8 @@ function isWorkflowV2Result(result: unknown): result is WorkflowV2BridgeResult {
       !Object.hasOwn(result.checkpoint, 'workflowState') ||
       !isPlainObject(result.checkpoint.workflowState) ||
       !Array.isArray(result.memoryUpdates) ||
+      result.memoryUpdates.length > maxMemoryUpdates ||
+      result.memoryUpdates.some((update) => !isMemoryUpdate(update, memoryBudget)) ||
       !Array.isArray(result.artifactProposals) ||
       !isPlainObject(result.diagnostics) ||
       !Object.hasOwn(result, 'interrupt')) {
@@ -128,6 +263,34 @@ function isWorkflowV2Result(result: unknown): result is WorkflowV2BridgeResult {
     Object.hasOwn(result.interrupt, 'cursor');
 }
 
+function snapshotMemoryUpdate(update: MemoryUpdate): MemoryUpdate {
+  const snapshot: MemoryUpdate = {
+    scope: update.scope,
+    key: update.key,
+    value: JSON.parse(JSON.stringify(update.value)) as unknown,
+  };
+  if (update.expectedVersion !== undefined) snapshot.expectedVersion = update.expectedVersion;
+  if (update.highImpact !== undefined) snapshot.highImpact = update.highImpact;
+  if (update.confirmationPrompt !== undefined) {
+    snapshot.confirmationPrompt = update.confirmationPrompt;
+  }
+  if (update.evidence !== undefined) {
+    snapshot.evidence = update.evidence.map((item) => ({
+      kind: item.kind,
+      id: item.id,
+      ...(item.excerpt === undefined ? {} : { excerpt: item.excerpt }),
+    }));
+  }
+  if (update.impactScope !== undefined) {
+    snapshot.impactScope = {
+      contextIds: update.impactScope.contextIds === 'all'
+        ? 'all'
+        : [...update.impactScope.contextIds],
+    };
+  }
+  return snapshot;
+}
+
 async function runUnifiedBridge(
   bridge: WorkflowBridge,
   input: WorkflowV2BridgeInput,
@@ -136,7 +299,10 @@ async function runUnifiedBridge(
   if (!isWorkflowV2Result(result)) {
     throw new WorkflowBridgeError('WORKFLOW_INVALID_RESPONSE');
   }
-  return result;
+  return {
+    ...result,
+    memoryUpdates: result.memoryUpdates.map(snapshotMemoryUpdate),
+  };
 }
 
 function replyFromEvents(
@@ -148,6 +314,20 @@ function replyFromEvents(
   const reply = message?.content ?? (streamed || interruptPrompt || '');
   if (!reply.trim()) throw new WorkflowBridgeError('WORKFLOW_INVALID_RESPONSE');
   return reply.trim();
+}
+
+function memoryReferencesFromExecution(
+  memory: UnifiedCommandExecutionContext['memory'],
+): Array<{ memoryId: string; version: number }> {
+  const references = new Map<string, { memoryId: string; version: number }>();
+  for (const item of [...(memory?.user ?? []), ...(memory?.context ?? [])]) {
+    if (!isPlainObject(item) || typeof item.id !== 'string' || !uuidPattern.test(item.id) ||
+        typeof item.version !== 'number' || !Number.isInteger(item.version) || item.version < 1) {
+      continue;
+    }
+    references.set(item.id, { memoryId: item.id, version: item.version });
+  }
+  return [...references.values()];
 }
 
 function normalize(input: CommandInput): NormalizedCommandInput {
@@ -433,6 +613,7 @@ export function createCommandService(options: {
           now(),
         );
         const conversationId = prepared.execution.conversationId ?? prepared.execution.threadId;
+        const consumedMemoryReferences = memoryReferencesFromExecution(prepared.execution.memory);
         const result = await runUnifiedBridge(options.bridge, {
           commandId,
           userId: prepared.execution.userId,
@@ -449,7 +630,7 @@ export function createCommandService(options: {
           memory: prepared.execution.memory ?? { user: [], context: [] },
         });
         const reply = replyFromEvents(result.replyEvents, result.interrupt?.prompt);
-        const memoryUpdates = result.memoryUpdates as MemoryUpdate[];
+        const memoryUpdates = result.memoryUpdates;
         if (memoryUpdates.length > 0 && !options.memoryRepository) {
           throw new WorkflowBridgeError('WORKFLOW_INVALID_RESPONSE');
         }
@@ -472,6 +653,13 @@ export function createCommandService(options: {
             return;
           }
         }
+        if (result.artifactProposals.length > 0 && !options.assetService) {
+          throw new Error('Artifact service is unavailable');
+        }
+        const preparedArtifacts = options.assetService
+          ? await Promise.all(result.artifactProposals.map((artifact) =>
+            options.assetService!.prepareArtifact(prepared.execution.userId, artifact)))
+          : [];
         const committed = await unifiedRepository.finalizeCommand(commandId, {
           userMessageId: createId(),
           assistantMessageId: createId(),
@@ -482,6 +670,11 @@ export function createCommandService(options: {
           workflowCursor: null,
           memoryProposals: [],
           workflowState: result.checkpoint.workflowState,
+          ...(typeof result.diagnostics.workflow_revision === 'string' &&
+            result.diagnostics.workflow_revision.trim().length > 0 &&
+            result.diagnostics.workflow_revision.length <= 200
+            ? { workflowRevision: result.diagnostics.workflow_revision }
+            : {}),
           ...(result.stageProjection === undefined
             ? {}
             : { stageProjection: result.stageProjection }),
@@ -495,18 +688,10 @@ export function createCommandService(options: {
             cursor: result.interrupt.cursor,
           } : null,
           attachmentIds: prepared.input.attachmentIds,
+          preparedArtifacts,
           memoryUpdates,
+          consumedMemoryReferences,
         }, now());
-        if (committed.status === 'succeeded' && committed.checkpointId && options.assetService) {
-          for (const artifact of result.artifactProposals) {
-            await options.assetService.saveArtifact(prepared.execution.userId, commandId, {
-              contextId: prepared.execution.contextId,
-              routeId: committed.routeId,
-              threadId: committed.conversationId,
-              stageKey: prepared.execution.stageKey ?? '',
-            }, artifact);
-          }
-        }
       } catch (error) {
         const code = error instanceof WorkflowBridgeError ? error.code : 'WORKFLOW_UNAVAILABLE';
         await options.repository.failCommand(commandId, code, now());

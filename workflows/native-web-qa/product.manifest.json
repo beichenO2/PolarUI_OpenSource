@@ -15,35 +15,8 @@
     "username": "demo",
     "password": "Demo-Workflow-2026!"
   },
-  "stages": [
-    {
-      "key": "discover",
-      "label": "明确项目",
-      "component_key": "generic_chat",
-      "internal_states": ["start", "done"],
-      "actions": [
-        { "key": "adopt_thread", "label": "采纳到当前路线" },
-        { "key": "advance", "label": "推进阶段" }
-      ]
-    },
-    {
-      "key": "work",
-      "label": "推进实现",
-      "component_key": "document_workspace",
-      "internal_states": ["waiting", "running", "done"],
-      "actions": [
-        { "key": "adopt_thread", "label": "采纳到当前路线" },
-        { "key": "advance", "label": "推进阶段" }
-      ]
-    },
-    {
-      "key": "review",
-      "label": "复核交付",
-      "component_key": "structured_form",
-      "internal_states": ["waiting", "running", "done"],
-      "actions": [
-        { "key": "adopt_thread", "label": "采纳到当前路线" }
-      ]
-    }
-  ]
+  "intents": [
+    { "key": "summarize", "label": "生成验收摘要" }
+  ],
+  "stages": []
 }

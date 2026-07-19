@@ -51,6 +51,8 @@ export interface CheckpointWorkflowState extends Record<string, unknown> {
 
 export interface CheckpointSnapshot {
   workflowState: CheckpointWorkflowState;
+  workflowRevision?: string;
+  sourceCommandId?: string;
   stageProjection?: StageProjectionSnapshot;
   memoryReferences: Array<{
     memoryId: string;
@@ -303,6 +305,21 @@ function normalizeCanonicalSnapshot(
     validateStageProjection(snapshot.stageProjection);
     stageProjection = snapshot.stageProjection;
   }
+  let workflowRevision: string | undefined;
+  if ('workflowRevision' in snapshot && snapshot.workflowRevision !== undefined) {
+    if (!isBoundedRequiredString(snapshot.workflowRevision, 200)) {
+      invalidCheckpointSnapshot('Workflow revision is malformed');
+    }
+    workflowRevision = snapshot.workflowRevision;
+  }
+  let canonicalSourceCommandId: string | undefined;
+  if ('sourceCommandId' in snapshot && snapshot.sourceCommandId !== undefined) {
+    if (typeof snapshot.sourceCommandId !== 'string' ||
+        !checkpointIdPattern.test(snapshot.sourceCommandId)) {
+      invalidCheckpointSnapshot('source Command ID is malformed');
+    }
+    canonicalSourceCommandId = snapshot.sourceCommandId;
+  }
 
   const workflowState = snapshot.workflowState;
   const namespacedCompatibility =
@@ -328,6 +345,11 @@ function normalizeCanonicalSnapshot(
   }
 
   const compatibility = namespacedCompatibility ?? topLevelCompatibility;
+  const compatibilitySourceCommandId = compatibility?.command?.id;
+  if (canonicalSourceCommandId !== undefined && compatibilitySourceCommandId !== undefined &&
+      canonicalSourceCommandId !== compatibilitySourceCommandId) {
+    invalidCheckpointSnapshot('source Command provenance is ambiguous');
+  }
   const {
     legacyCompatibility: _persistedCompatibility,
     ...workflowStateProperties
@@ -343,12 +365,20 @@ function normalizeCanonicalSnapshot(
     memoryReferences: _persistedMemoryReferences,
     artifacts: _persistedArtifacts,
     stageProjection: _persistedStageProjection,
+    workflowRevision: _persistedWorkflowRevision,
+    sourceCommandId: _persistedSourceCommandId,
     ...persistedCompatibilityProperties
   } = snapshot;
 
   return {
     ...persistedCompatibilityProperties,
     workflowState: normalizedWorkflowState,
+    ...(workflowRevision === undefined
+      ? {}
+      : { workflowRevision }),
+    ...(canonicalSourceCommandId === undefined
+      ? {}
+      : { sourceCommandId: canonicalSourceCommandId }),
     ...(stageProjection === undefined ? {} : { stageProjection }),
     memoryReferences,
     artifacts,

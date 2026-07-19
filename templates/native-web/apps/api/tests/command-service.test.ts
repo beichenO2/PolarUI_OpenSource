@@ -307,6 +307,10 @@ function setupUnified(options: {
   bridgeResult?: unknown;
   manifest?: ProductManifest;
   memoryConflict?: unknown;
+  assetService?: {
+    prepareArtifact: ReturnType<typeof vi.fn>;
+    saveArtifact: ReturnType<typeof vi.fn>;
+  };
 } = {}) {
   const command = {
     id: ids.command,
@@ -362,6 +366,7 @@ function setupUnified(options: {
     repository: repository as never,
     bridge: bridge as never,
     memoryRepository: memoryRepository as never,
+    ...(options.assetService ? { assetService: options.assetService as never } : {}),
     manifest: options.manifest ?? manifest,
     createId: () => generated.shift()!,
     now: () => new Date('2026-07-16T10:00:00.000Z'),
@@ -370,6 +375,61 @@ function setupUnified(options: {
 }
 
 describe('unified workflow input command', () => {
+  it('prepares Workflow artifacts before atomic finalization and never saves them afterward', async () => {
+    const ready = {
+      status: 'ready' as const,
+      id: '22000000-0000-4000-8000-000000000001',
+      objectId: '22000000-0000-4000-8000-000000000002',
+      filename: 'result.txt',
+      mediaType: 'text/plain',
+      byteSize: 6,
+      sha256: 'a'.repeat(64),
+    };
+    const failed = {
+      status: 'failed' as const,
+      id: '22000000-0000-4000-8000-000000000003',
+      filename: 'broken.bin',
+      errorCode: 'ARTIFACT_STORAGE_FAILED',
+    };
+    const assetService = {
+      prepareArtifact: vi.fn()
+        .mockResolvedValueOnce(ready)
+        .mockResolvedValueOnce(failed),
+      saveArtifact: vi.fn(),
+    };
+    const proposals = [
+      { filename: 'result.txt', mediaType: 'text/plain', body: Buffer.from('result') },
+      { filename: 'broken.bin', mediaType: 'application/octet-stream', body: Buffer.from('broken') },
+    ];
+    const { repository, service } = setupUnified({
+      assetService,
+      bridgeResult: {
+        replyEvents: [{ type: 'message', content: 'Artifacts prepared' }],
+        checkpoint: { workflowState: {} },
+        memoryUpdates: [],
+        artifactProposals: proposals,
+        interrupt: null,
+        diagnostics: {},
+      },
+    });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(assetService.prepareArtifact.mock.calls).toEqual([
+      [ids.user, proposals[0]],
+      [ids.user, proposals[1]],
+    ]);
+    expect(repository.finalizeCommand).toHaveBeenCalledWith(
+      ids.command,
+      expect.objectContaining({ preparedArtifacts: [ready, failed] }),
+      expect.any(Date),
+    );
+    expect(assetService.prepareArtifact.mock.invocationCallOrder[1])
+      .toBeLessThan(repository.finalizeCommand.mock.invocationCallOrder[0]!);
+    expect(assetService.saveArtifact).not.toHaveBeenCalled();
+  });
+
   it.each([
     [undefined],
     [{ commandId: ids.command, attachmentIds: [], input: undefined }],
@@ -480,6 +540,102 @@ describe('unified workflow input command', () => {
     );
   });
 
+  it.each([
+    ['top-level value getter', () => Object.defineProperty({
+      scope: 'context', key: 'goal',
+    }, 'value', {
+      enumerable: true,
+      get: () => 'ship',
+    })],
+    ['top-level symbol metadata', () => {
+      const update: Record<PropertyKey, unknown> = {
+        scope: 'context', key: 'goal', value: 'ship',
+      };
+      update[Symbol('hidden')] = true;
+      return update;
+    }],
+    ['top-level non-enumerable metadata', () => Object.defineProperty({
+      scope: 'context', key: 'goal', value: 'ship',
+    }, 'hidden', {
+      enumerable: false,
+      value: true,
+    })],
+    ['evidence accessor', () => ({
+      scope: 'context',
+      key: 'goal',
+      value: 'ship',
+      evidence: [Object.defineProperty({ id: 'message-1' }, 'kind', {
+        enumerable: true,
+        get: () => 'message',
+      })],
+    })],
+    ['impact-scope accessor', () => ({
+      scope: 'context',
+      key: 'goal',
+      value: 'ship',
+      impactScope: Object.defineProperty({}, 'contextIds', {
+        enumerable: true,
+        get: () => [ids.context],
+      }),
+    })],
+  ] satisfies Array<[string, () => object]>)('rejects custom bridge %s before using memory metadata', async (_label, createUpdate) => {
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Mutable memory metadata' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [createUpdate()],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).not.toHaveBeenCalled();
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('uses an immutable memory snapshot when the custom bridge object changes during preflight', async () => {
+    const update: { scope: 'context'; key: string; value: unknown } = {
+      scope: 'context',
+      key: 'goal',
+      value: 'ship',
+    };
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Snapshot memory' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [update],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+    memoryRepository.detectConflict.mockImplementation(async () => {
+      update.value = undefined;
+      return null;
+    });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    const checkedUpdate = memoryRepository.detectConflict.mock.calls[0]![0].update;
+    expect(checkedUpdate).not.toBe(update);
+    expect(checkedUpdate).toEqual({ scope: 'context', key: 'goal', value: 'ship' });
+    expect(repository.finalizeCommand).toHaveBeenCalledWith(
+      ids.command,
+      expect.objectContaining({
+        memoryUpdates: [{ scope: 'context', key: 'goal', value: 'ship' }],
+      }),
+      expect.any(Date),
+    );
+    expect(repository.failCommand).not.toHaveBeenCalled();
+  });
+
   it('replays an exact command without scheduling Workflow a second time', async () => {
     const { bridge, service } = setupUnified({ prepared: {
       kind: 'replay',
@@ -534,6 +690,198 @@ describe('unified workflow input command', () => {
     );
   });
 
+  it('fails safely when a custom v2 bridge returns malformed memory metadata', async () => {
+    const { repository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Malformed memory' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [{
+        scope: 'context', key: 'goal', value: 'ship',
+        evidence: [{ kind: 'message' }],
+      }],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it.each([
+    ['undefined', () => undefined],
+    ['NaN', () => Number.NaN],
+    ['Infinity', () => Number.POSITIVE_INFINITY],
+    ['function', () => () => 'not-json'],
+    ['Symbol', () => Symbol('not-json')],
+    ['BigInt', () => BigInt(1)],
+    ['cyclic object', () => {
+      const value: Record<string, unknown> = {};
+      value.self = value;
+      return value;
+    }],
+    ['Date instance', () => new Date('2026-07-19T00:00:00.000Z')],
+    ['sparse array', () => {
+      const value: unknown[] = [];
+      value[1] = 'lossy';
+      return value;
+    }],
+    ['symbol-keyed object', () => {
+      const value: Record<PropertyKey, unknown> = { visible: true };
+      value[Symbol('hidden')] = true;
+      return value;
+    }],
+    ['accessor object', () => Object.defineProperty({}, 'value', {
+      enumerable: true,
+      get: () => 'lossy',
+    })],
+    ['non-enumerable property', () => Object.defineProperty({ visible: true }, 'hidden', {
+      enumerable: false,
+      value: true,
+    })],
+  ] satisfies Array<[string, () => unknown]>)('fails safely before memory/finalization for a custom bridge %s memory value', async (_label, createValue) => {
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Malformed memory value' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [{ scope: 'context', key: 'goal', value: createValue() }],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).not.toHaveBeenCalled();
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('rejects a custom bridge memory key that is not already canonical and trimmed', async () => {
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Malformed memory key' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [{ scope: 'context', key: ' goal ', value: 'ship' }],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).not.toHaveBeenCalled();
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('rejects more than 1000 custom bridge memory updates before conflict detection', async () => {
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Too many memory updates' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: Array.from({ length: 1001 }, (_, index) => ({
+        scope: 'context' as const,
+        key: `key-${index}`,
+        value: index,
+      })),
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).not.toHaveBeenCalled();
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('rejects custom bridge memory values above the aggregate response budget', async () => {
+    const { repository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Oversized memory values' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: Array.from({ length: 40 }, (_, index) => ({
+        scope: 'context' as const,
+        key: `large-${index}`,
+        value: 'x'.repeat(950_000),
+      })),
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(repository.finalizeCommand).not.toHaveBeenCalled();
+    expect(repository.failCommand).toHaveBeenCalledWith(
+      ids.command,
+      'WORKFLOW_INVALID_RESPONSE',
+      expect.any(Date),
+    );
+  });
+
+  it('accepts a custom bridge memory update with a nested JSON value', async () => {
+    const update = {
+      scope: 'context' as const,
+      key: 'goal',
+      value: {
+        title: 'Ship',
+        enabled: true,
+        score: 1.25,
+        optional: null,
+        milestones: ['design', { name: 'release', done: false }, [1, 2, 3]],
+      },
+    };
+    const { repository, memoryRepository, service } = setupUnified({ bridgeResult: {
+      replyEvents: [{ type: 'message', content: 'Valid nested memory' }],
+      checkpoint: { workflowState: {} },
+      memoryUpdates: [update],
+      artifactProposals: [],
+      interrupt: null,
+      diagnostics: {},
+    } });
+
+    await service.createCommand(ids.user, startCommandInput);
+    await service.executeCommand(ids.command);
+
+    expect(memoryRepository.detectConflict).toHaveBeenCalledWith({
+      userId: ids.user,
+      contextId: ids.context,
+      update,
+    });
+    expect(repository.persistInterrupt).not.toHaveBeenCalled();
+    expect(repository.finalizeCommand).toHaveBeenCalledWith(
+      ids.command,
+      expect.objectContaining({ memoryUpdates: [update] }),
+      expect.any(Date),
+    );
+    expect(repository.failCommand).not.toHaveBeenCalled();
+  });
+
   it('rejects changed payload reuse of the same command ID', async () => {
     const { service } = setupUnified({ prepared: { kind: 'reused' } });
     await expect(service.createCommand(ids.user, startCommandInput)).rejects.toEqual(
@@ -577,9 +925,13 @@ describe('unified workflow input command', () => {
     const checkpoint = {
       workflowState: { fsm: 'deliver', iteration: 7 },
     };
+    const consumedMemoryReferences = [
+      { memoryId: '30000000-0000-4000-8000-000000000001', version: 3 },
+      { memoryId: '30000000-0000-4000-8000-000000000002', version: 2 },
+    ];
     const memory = {
-      user: [{ key: 'tone', value: 'concise', version: 3 }],
-      context: [{ key: 'goal', value: 'ship', version: 2 }],
+      user: [{ id: consumedMemoryReferences[0]!.memoryId, key: 'tone', value: 'concise', version: 3 }],
+      context: [{ id: consumedMemoryReferences[1]!.memoryId, key: 'goal', value: 'ship', version: 2 }],
     };
     const memoryUpdates = [{
       scope: 'context' as const,
@@ -654,11 +1006,13 @@ describe('unified workflow input command', () => {
         headCheckpointIdAtClaim: ids.checkpoint,
         reply: '总结已完成',
         workflowState: checkpoint.workflowState,
+        workflowRevision: 'workflow-v7',
         stageProjection,
         contextTitle: '发布计划',
         conversationTitle: '首轮总结',
         attachmentIds: [],
         memoryUpdates,
+        consumedMemoryReferences,
       }),
       expect.any(Date),
     );

@@ -9,6 +9,7 @@ import type {
   StageProjection,
   StageProjectionSnapshot,
 } from '../domain/types.js';
+import type { MemoryUpdate as CanonicalMemoryUpdate } from '../memory/types.js';
 import type { PublicWorkflowCommandInput } from './types.js';
 
 export type WorkflowCommandKind = 'message' | 'named_action' | 'resume_interrupt';
@@ -62,16 +63,7 @@ export interface ArtifactProposal {
   body: Buffer;
 }
 
-export interface MemoryUpdate {
-  scope: 'user' | 'context';
-  key: string;
-  value: unknown;
-  expectedVersion?: number;
-  highImpact?: boolean;
-  confirmationPrompt?: string;
-  evidence?: Array<Record<string, unknown>>;
-  impactScope?: Record<string, unknown>;
-}
+export type MemoryUpdate = CanonicalMemoryUpdate;
 
 export interface LegacyWorkflowBridgeResult {
   reply: string;
@@ -145,6 +137,19 @@ const stageProjectionSchema = z.object({
   }).strict()).max(1000),
 }).strict();
 
+const memoryEvidenceSchema = z.object({
+  kind: z.string().min(1).max(200),
+  id: z.string().min(1).max(500),
+  excerpt: z.string().max(2000).optional(),
+}).strict();
+
+const memoryImpactScopeSchema = z.object({
+  context_ids: z.union([
+    z.literal('all'),
+    z.array(z.string().uuid()).max(1000),
+  ]),
+}).strict();
+
 const memoryUpdateSchema = z.object({
   scope: z.enum(['user', 'context']),
   key: z.string().trim().min(1).max(200),
@@ -152,8 +157,8 @@ const memoryUpdateSchema = z.object({
   expected_version: z.number().int().min(1).optional(),
   high_impact: z.boolean().optional(),
   confirmation_prompt: z.string().trim().min(1).max(2000).optional(),
-  evidence: z.array(z.record(z.string(), z.unknown())).max(100).optional(),
-  impact_scope: z.record(z.string(), z.unknown()).optional(),
+  evidence: z.array(memoryEvidenceSchema).max(100).optional(),
+  impact_scope: memoryImpactScopeSchema.optional(),
 }).strict().refine((update) => Object.hasOwn(update, 'value'), {
   message: 'memory update value is required',
 });
@@ -343,7 +348,9 @@ function normalizeMemoryUpdates(
       ? {}
       : { confirmationPrompt: update.confirmation_prompt }),
     ...(update.evidence === undefined ? {} : { evidence: update.evidence }),
-    ...(update.impact_scope === undefined ? {} : { impactScope: update.impact_scope }),
+    ...(update.impact_scope === undefined
+      ? {}
+      : { impactScope: { contextIds: update.impact_scope.context_ids } }),
   }));
 }
 

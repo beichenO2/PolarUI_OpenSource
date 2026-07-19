@@ -464,7 +464,13 @@ describe('workflow bridge v2', () => {
       stage_projection: stageProjection,
       context_title: '发布计划',
       conversation_title: '首轮交付',
-      memory_updates: [{ scope: 'context', key: 'goal', value: 'ship' }],
+      memory_updates: [{
+        scope: 'context',
+        key: 'goal',
+        value: 'ship',
+        evidence: [{ kind: 'message', id: 'evidence-1', excerpt: 'Goal stated explicitly' }],
+        impact_scope: { context_ids: [v2BaseInput.contextId] },
+      }],
       diagnostics: { workflow_revision: 'workflow-v7', duration_ms: 31 },
     }))));
 
@@ -488,7 +494,13 @@ describe('workflow bridge v2', () => {
       },
       contextTitle: '发布计划',
       conversationTitle: '首轮交付',
-      memoryUpdates: [{ scope: 'context', key: 'goal', value: 'ship' }],
+      memoryUpdates: [{
+        scope: 'context',
+        key: 'goal',
+        value: 'ship',
+        evidence: [{ kind: 'message', id: 'evidence-1', excerpt: 'Goal stated explicitly' }],
+        impactScope: { contextIds: [v2BaseInput.contextId] },
+      }],
       artifactProposals: [],
       interrupt: null,
       diagnostics: { workflow_revision: 'workflow-v7', duration_ms: 31 },
@@ -562,6 +574,18 @@ describe('workflow bridge v2', () => {
 
   it.each([
     ['a memory update with no value', { memory_updates: [{ scope: 'context', key: 'goal' }] }],
+    ['memory evidence without its required id', {
+      memory_updates: [{
+        scope: 'context', key: 'goal', value: 'ship',
+        evidence: [{ kind: 'message' }],
+      }],
+    }],
+    ['a malformed memory impact scope', {
+      memory_updates: [{
+        scope: 'user', key: 'tone', value: 'concise',
+        impact_scope: { contextIds: 'one-context' },
+      }],
+    }],
     ['an interrupt with no private cursor', { interrupt: { prompt: '请确认' } }],
     ['neither reply events nor an interrupt', { reply_events: [], interrupt: null }],
   ])('rejects %s', async (_label, overrides) => {

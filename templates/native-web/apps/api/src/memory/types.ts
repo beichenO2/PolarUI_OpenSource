@@ -32,17 +32,6 @@ export interface MemoryItem {
   updatedAt: Date;
 }
 
-export interface MemoryItemVersion {
-  memoryId: string;
-  version: number;
-  value: unknown;
-  status: MemoryStatus;
-  source: MemorySource;
-  evidence: MemoryEvidence[];
-  impactScope: MemoryImpactScope;
-  createdAt: Date;
-}
-
 export type MemoryListInput =
   | { scope: 'user'; contextId?: never }
   | { scope: 'context'; contextId: string };

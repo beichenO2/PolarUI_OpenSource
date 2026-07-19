@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AssetRepository, ThreadScope } from './repository.js';
 import type { ObjectStore } from './storage.js';
 import { objectKey } from './storage.js';
+import type { PreparedArtifact } from '../commands/types.js';
 
 const maximumBytes = 25 * 1024 * 1024;
 
@@ -63,6 +64,43 @@ export function createAssetService(options: {
     return { attachment: { ...attachment, mediaType: object.mediaType, byteSize: object.byteSize, sha256: object.sha256 } };
   }
 
+  async function stageAttachment(userId: string, input: {
+    filename: string;
+    mediaType: string;
+    body: Buffer;
+  }) {
+    const safeName = filename(input.filename);
+    const object = await persistObject(userId, input.body, input.mediaType);
+    const staged = await options.repository.createStagedAttachment({
+      id: createId(),
+      userId,
+      objectId: object.id,
+      filename: safeName,
+    });
+    return {
+      id: staged.id,
+      filename: staged.filename,
+      mediaType: object.mediaType,
+      byteSize: object.byteSize,
+      sha256: object.sha256,
+      status: staged.status,
+      conversationId: null,
+      createdAt: staged.createdAt,
+    };
+  }
+
+  async function deleteStagedAttachment(userId: string, attachmentId: string) {
+    if (!await options.repository.deleteStagedAttachment(userId, attachmentId)) {
+      throw new AssetServiceError('NOT_FOUND', 404);
+    }
+  }
+
+  async function listConversationAttachments(userId: string, conversationId: string) {
+    const attachments = await options.repository.listConversationAttachments(userId, conversationId);
+    if (!attachments) throw new AssetServiceError('NOT_FOUND', 404);
+    return { attachments };
+  }
+
   async function listThreadAttachments(userId: string, threadId: string) {
     const scope = await options.repository.getThreadScope(userId, threadId);
     if (!scope) throw new AssetServiceError('NOT_FOUND', 404);
@@ -84,24 +122,68 @@ export function createAssetService(options: {
   async function saveArtifact(userId: string, commandId: string, scope: ThreadScope, input: {
     filename: string; mediaType: string; body: Buffer;
   }) {
-    const id = createId();
-    let safeName: string;
-    try {
-      safeName = filename(input.filename);
-      const object = await persistObject(userId, input.body, input.mediaType);
+    const prepared = await prepareArtifact(userId, input);
+    if (prepared.status === 'ready') {
       return await options.repository.createArtifact({
-        ...scope, id, userId, objectId: object.id, commandId, filename: safeName,
+        ...scope,
+        id: prepared.id,
+        userId,
+        objectId: prepared.objectId,
+        commandId,
+        filename: prepared.filename,
       });
+    }
+    return options.repository.createFailedArtifact({
+      ...scope,
+      id: prepared.id,
+      userId,
+      commandId,
+      filename: prepared.filename,
+      errorCode: prepared.errorCode,
+    });
+  }
+
+  async function prepareArtifact(userId: string, input: {
+    filename: string;
+    mediaType: string;
+    body: Buffer;
+  }): Promise<PreparedArtifact> {
+    const id = createId();
+    try {
+      const safeName = filename(input.filename);
+      const object = await persistObject(userId, input.body, input.mediaType);
+      return {
+        status: 'ready',
+        id,
+        objectId: object.id,
+        filename: safeName,
+        mediaType: object.mediaType,
+        byteSize: object.byteSize,
+        sha256: object.sha256,
+      };
     } catch (error) {
-      safeName = input.filename.replace(/[\\/\u0000-\u001f\u007f]/g, '_').trim().slice(0, 255) || 'artifact.bin';
-      return options.repository.createFailedArtifact({
-        ...scope, id, userId, commandId, filename: safeName,
+      return {
+        status: 'failed',
+        id,
+        filename: input.filename.replace(/[\\/\u0000-\u001f\u007f]/g, '_')
+          .trim().slice(0, 255) || 'artifact.bin',
         errorCode: error instanceof AssetServiceError ? error.code : 'ARTIFACT_STORAGE_FAILED',
-      });
+      };
     }
   }
 
-  return { uploadAttachment, listThreadAttachments, listStageArtifacts, openAsset, persistObject, saveArtifact };
+  return {
+    uploadAttachment,
+    stageAttachment,
+    deleteStagedAttachment,
+    listThreadAttachments,
+    listConversationAttachments,
+    listStageArtifacts,
+    openAsset,
+    persistObject,
+    prepareArtifact,
+    saveArtifact,
+  };
 }
 
 export type AssetService = ReturnType<typeof createAssetService>;

@@ -62,15 +62,117 @@ export async function runGovernedServiceAction(
   }, fetchImpl);
 }
 
+async function waitForGovernedServiceStatus(
+  serviceId,
+  expectedStatus,
+  {
+    fetch: fetchImpl = fetch,
+    baseUrl = DEFAULT_PROCESS_URL,
+    timeoutMs = 120_000,
+    intervalMs = 300,
+  } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = 'unknown';
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const service = await jsonRequest(
+        `${baseUrl}/api/services/${encodeURIComponent(serviceId)}`,
+        { method: 'GET' },
+        fetchImpl,
+      );
+      lastStatus = service.status ?? 'unknown';
+      if (lastStatus === expectedStatus) return service;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(
+    `PolarProcess ${serviceId} did not reach ${expectedStatus} (last status: ${lastStatus})`
+      + (lastError instanceof Error ? `: ${lastError.message}` : ''),
+  );
+}
+
+export async function restartGovernedServiceWithPort(
+  { serviceId, serviceName = serviceId, preferred, project = 'PolarUI' },
+  {
+    runServiceAction = runGovernedServiceAction,
+    waitForServiceStatus = waitForGovernedServiceStatus,
+    claimPort = claimGovernedQaPort,
+    releasePort = releaseGovernedQaPort,
+  } = {},
+) {
+  await runServiceAction(serviceId, 'stop');
+  await waitForServiceStatus(serviceId, 'stopped');
+  const claimed = await claimPort({ serviceName, preferred, project });
+
+  async function releaseAfterFailure(primaryError) {
+    try {
+      await releasePort(claimed, { serviceName, project });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [primaryError, cleanupError],
+        `governed restart failed and PolarPort cleanup failed for ${serviceName} on port ${claimed}`,
+      );
+    }
+    throw primaryError;
+  }
+
+  if (claimed !== preferred) {
+    return releaseAfterFailure(
+      new Error(`PolarPort claimed alternate port ${claimed} instead of required port ${preferred}`),
+    );
+  }
+  try {
+    return await runServiceAction(serviceId, 'start');
+  } catch (startError) {
+    return releaseAfterFailure(startError);
+  }
+}
+
 export async function claimGovernedQaPort({ serviceName, preferred, project = 'PolarUI' }) {
   return claimPolarPort({ serviceName, preferred, project });
 }
 
-export async function releaseGovernedQaPort(port, { fetch: fetchImpl = fetch, baseUrl = DEFAULT_PORT_URL } = {}) {
+export async function releaseGovernedQaPort(
+  port,
+  {
+    serviceName,
+    project,
+    fetch: fetchImpl = fetch,
+    baseUrl = DEFAULT_PORT_URL,
+  } = {},
+) {
+  const ownerAware = serviceName !== undefined || project !== undefined;
+  const owner = !ownerAware
+    ? {}
+    : { service_name: serviceName, project };
+  if (ownerAware) {
+    const entries = await jsonRequest(
+      `${baseUrl}/api/list?all=true`,
+      { method: 'GET' },
+      fetchImpl,
+    );
+    if (!Array.isArray(entries)) throw new Error('PolarPort owner preflight returned a non-array registry');
+    const activeRows = entries.filter((entry) => entry.port === port && entry.status === 'active');
+    if (activeRows.length !== 1) {
+      throw new Error(
+        `PolarPort owner preflight expected exactly one active row for port ${port}, found ${activeRows.length}`,
+      );
+    }
+    const [activeOwner] = activeRows;
+    if (activeOwner.service_name !== serviceName || activeOwner.project !== project) {
+      throw new Error(
+        `PolarPort port ${port} owned by ${activeOwner.service_name}/${activeOwner.project}, not ${serviceName}/${project}`,
+      );
+    }
+  }
   return jsonRequest(`${baseUrl}/api/release`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ port }),
+    body: JSON.stringify({ port, ...owner }),
   }, fetchImpl);
 }
 

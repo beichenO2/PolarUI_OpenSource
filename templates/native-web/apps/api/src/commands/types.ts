@@ -1,4 +1,5 @@
 import type {
+  CheckpointSnapshot,
   CheckpointWorkflowState,
   RouteStageStatus,
   StageProjection,
@@ -189,6 +190,23 @@ export interface WorkflowStageSignal {
   internalState: string;
 }
 
+export type PreparedArtifact =
+  | {
+    status: 'ready';
+    id: string;
+    objectId: string;
+    filename: string;
+    mediaType: string;
+    byteSize: number;
+    sha256: string;
+  }
+  | {
+    status: 'failed';
+    id: string;
+    filename: string;
+    errorCode: string;
+  };
+
 export interface FinalizeActionInput {
   reply: string;
   stageSignals: WorkflowStageSignal[];
@@ -214,10 +232,13 @@ export interface FinalizeCommandInput {
   memoryProposals: unknown[];
   interrupt: PendingInterruptInput | null;
   attachmentIds: string[];
+  preparedArtifacts?: PreparedArtifact[];
   memoryUpdates?: MemoryUpdate[];
+  consumedMemoryReferences?: CheckpointSnapshot['memoryReferences'];
   contextTitle?: string;
   conversationTitle?: string;
   workflowState?: CheckpointWorkflowState;
+  workflowRevision?: string;
   stageProjection?: StageProjectionSnapshot;
 }
 
