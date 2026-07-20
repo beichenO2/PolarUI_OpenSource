@@ -1,0 +1,231 @@
+/* TaoCi skin: paper notebook surfaces framed by an ink-green study. */
+[data-skin="taoci"] {
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
+[data-skin="taoci"] body,
+[data-skin="taoci"] .empty-shell,
+[data-skin="taoci"] .auth-page,
+[data-skin="taoci"] .conversation-axis {
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 29px,
+      rgba(72, 78, 67, .045) 29px 30px
+    ),
+    radial-gradient(circle at 18% 12%, rgba(218, 91, 61, .075), transparent 30%),
+    radial-gradient(circle at 88% 90%, rgba(13, 43, 36, .065), transparent 38%);
+}
+
+[data-skin="taoci"] .product-bar {
+  background: rgba(247, 242, 232, .94);
+  box-shadow: 0 5px 20px rgba(13, 43, 36, .045);
+}
+
+[data-skin="taoci"] .context-sidebar-layer {
+  border-right-color: rgba(255, 255, 255, .12);
+  background: var(--forest);
+  color: #edf2eb;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .navigator {
+  background: transparent;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .eyebrow,
+[data-skin="taoci"] .context-sidebar-layer .section-heading > span,
+[data-skin="taoci"] .context-sidebar-layer .context-card small,
+[data-skin="taoci"] .context-sidebar-layer .stage-link small {
+  color: #9bafa4;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .context-card {
+  border-color: rgba(255, 255, 255, .13);
+  background: rgba(255, 255, 255, .055);
+  color: #edf2eb;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .context-card:hover {
+  border-color: rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, .09);
+}
+
+[data-skin="taoci"] .context-sidebar-layer .context-card.active-context {
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--forest);
+}
+
+[data-skin="taoci"] .context-sidebar-layer .context-index,
+[data-skin="taoci"] .context-sidebar-layer .route-origin {
+  color: #ef8a70;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .new-context-button,
+[data-skin="taoci"] .context-sidebar-layer .route-chip,
+[data-skin="taoci"] .context-sidebar-layer .stage-link {
+  border-color: rgba(255, 255, 255, .18);
+  color: #c9d6cf;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .active-route,
+[data-skin="taoci"] .context-sidebar-layer .stage-link.active {
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--forest);
+}
+
+[data-skin="taoci"] .context-sidebar-layer .stage-nav::before {
+  background: rgba(255, 255, 255, .18);
+}
+
+[data-skin="taoci"] .context-sidebar-layer .stage-number {
+  background: var(--forest);
+  color: #9bafa4;
+}
+
+[data-skin="taoci"] .context-sidebar-layer .stage-link.active .stage-number {
+  background: var(--copper);
+  color: #fff8ed;
+}
+
+[data-skin="taoci"] .workspace-inspector {
+  background: var(--paper-deep);
+}
+
+[data-skin="taoci"] .product-identity strong,
+[data-skin="taoci"] .context-empty h1,
+[data-skin="taoci"] .workspace h1,
+[data-skin="taoci"] .workspace-heading h1,
+[data-skin="taoci"] .conversation-header h2,
+[data-skin="taoci"] .conversation-switcher-header h2,
+[data-skin="taoci"] .workspace-inspector-header h2,
+[data-skin="taoci"] .auth-card h1,
+[data-skin="taoci"] .archive-panel h2,
+[data-skin="taoci"] .version-archive-header h2,
+[data-skin="taoci"] .version-detail-heading h3,
+[data-skin="taoci"] .discussion-empty h3,
+[data-skin="taoci"] .stage-component-intro h2,
+[data-skin="taoci"] .asset-heading h3,
+[data-skin="taoci"] .proposal-panel h3 {
+  font-family: "Songti SC", "STSong", "Iowan Old Style", serif;
+}
+
+[data-skin="taoci"] .context-index,
+[data-skin="taoci"] .stage-number,
+[data-skin="taoci"] .conversation-state,
+[data-skin="taoci"] .message-entry > span {
+  font-family: "Iowan Old Style", "Songti SC", serif;
+  font-style: italic;
+}
+
+[data-skin="taoci"] .product-mark,
+[data-skin="taoci"] .brand-seal {
+  border-radius: 4px 14px 4px 14px;
+  background: var(--copper);
+  color: #fff7eb;
+  font-family: "Songti SC", "STSong", serif;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+
+[data-skin="taoci"] :is(
+  button,
+  input,
+  textarea,
+  summary,
+  .context-card,
+  .conversation-card,
+  .auth-card,
+  .context-empty,
+  .artifact-panel,
+  .attachment-panel,
+  .proposal-panel,
+  .structured-summary,
+  .selection-placeholder
+) {
+  border-radius: 2px 16px 2px 16px;
+}
+
+[data-skin="taoci"] :is(.icon-button, .status-dot, .stage-number) {
+  border-radius: 50%;
+}
+
+[data-skin="taoci"] .conversation,
+[data-skin="taoci"] .conversation-switcher,
+[data-skin="taoci"] .archive-panel,
+[data-skin="taoci"] .version-archive,
+[data-skin="taoci"] .stage-projection-drawer {
+  background-color: rgba(255, 250, 240, .74);
+  box-shadow: 0 18px 54px rgba(13, 43, 36, .075);
+}
+
+[data-skin="taoci"] .conversation-header,
+[data-skin="taoci"] .message-composer,
+[data-skin="taoci"] .interrupt-panel,
+[data-skin="taoci"] .inline-form {
+  background: rgba(247, 242, 232, .93);
+}
+
+[data-skin="taoci"] .message-entry p {
+  border-left-color: #789382;
+  background: rgba(247, 242, 232, .9);
+}
+
+[data-skin="taoci"] .message-user p {
+  border-right-color: var(--copper);
+  background: rgba(244, 224, 211, .74);
+}
+
+[data-skin="taoci"] .message-composer textarea,
+[data-skin="taoci"] .interrupt-panel textarea,
+[data-skin="taoci"] .auth-card input,
+[data-skin="taoci"] .context-empty input,
+[data-skin="taoci"] .inline-form input,
+[data-skin="taoci"] .thread-manage input {
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Songti SC", serif;
+  font-size: 16px;
+}
+
+[data-skin="taoci"] .auth-card,
+[data-skin="taoci"] .context-empty {
+  border-left: 5px solid var(--copper);
+  background: rgba(255, 250, 240, .78);
+}
+
+[data-skin="taoci"] :is(
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]
+):focus-visible {
+  outline: 3px solid rgba(218, 91, 61, .42);
+  outline-offset: 3px;
+}
+
+[data-skin="taoci"] .auth-primary,
+[data-skin="taoci"] .primary-action,
+[data-skin="taoci"] .composer-footer button,
+[data-skin="taoci"] .workflow-actions button:first-child,
+[data-skin="taoci"] .discussion-trigger {
+  background: var(--forest);
+  color: #fffaf0;
+  box-shadow: 0 12px 26px rgba(13, 43, 36, .16);
+}
+
+@media (max-width: 900px) {
+  [data-skin="taoci"] .context-sidebar-layer[data-mobile-open="true"] {
+    background: var(--forest);
+    color: #edf2eb;
+  }
+
+  [data-skin="taoci"] .context-mobile-layer-header {
+    border-bottom-color: rgba(255, 255, 255, .15);
+  }
+}

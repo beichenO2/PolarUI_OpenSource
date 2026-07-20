@@ -1,0 +1,41 @@
+{
+  "contract_version": "1.0",
+  "product": {
+    "id": "taoci-outreach",
+    "name": "导儿，你要学生不",
+    "context_label": "申请",
+    "route_label": "路线"
+  },
+  "workflow": {
+    "id": "taoci-outreach",
+    "endpoint": "http://127.0.0.1:13930/run"
+  },
+  "demo_login": {
+    "email": "demo@taoci.test",
+    "username": "demo",
+    "password": "Demo-TaoCi-2026!"
+  },
+  "branding": {
+    "skin": "taoci",
+    "tokens": {
+      "--paper": "#f7f2e8",
+      "--paper-deep": "#f3efe5",
+      "--ink": "#202820",
+      "--muted": "#6f766d",
+      "--line": "#d7d0c2",
+      "--forest": "#0d2b24",
+      "--copper": "#da5b3d",
+      "--serif": "\"Songti SC\", \"STSong\", \"Iowan Old Style\", serif"
+    }
+  },
+  "intents": [
+    {
+      "key": "summarize_progress",
+      "label": "梳理当前申请进展"
+    },
+    {
+      "key": "draft_outreach",
+      "label": "起草导师套辞话术"
+    }
+  ]
+}

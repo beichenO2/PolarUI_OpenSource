@@ -131,6 +131,7 @@ type EditDialog = {
 
 type DialogReturnFocus = {
   actionKey: string;
+  memoryId: string;
   scopeIdentity: string;
   fallback: HTMLButtonElement;
 };
@@ -263,10 +264,17 @@ export function MemoryPanel({
       pendingDialogReturnFocusRef.current = null;
       return;
     }
-    const currentTrigger = Array.from(memoryPanelRef.current?.querySelectorAll<HTMLButtonElement>(
+    const actionTriggers = Array.from(memoryPanelRef.current?.querySelectorAll<HTMLButtonElement>(
       '[data-memory-action]',
-    ) ?? []).find((candidate) => candidate.dataset.memoryAction === pending.actionKey);
-    const target = currentTrigger ?? (pending.fallback.isConnected ? pending.fallback : undefined);
+    ) ?? []);
+    const currentTrigger = actionTriggers.find(
+      (candidate) => candidate.dataset.memoryAction === pending.actionKey,
+    );
+    const sameMemoryTrigger = actionTriggers.find(
+      (candidate) => candidate.dataset.memoryAction === `revise:${pending.memoryId}`,
+    );
+    const target = currentTrigger ?? sameMemoryTrigger ??
+      (pending.fallback.isConnected ? pending.fallback : undefined);
     if (!target) {
       pendingDialogReturnFocusRef.current = null;
       return;
@@ -451,6 +459,7 @@ export function MemoryPanel({
     actionEpoch.current += 1;
     dialogReturnFocusRef.current = {
       actionKey: `${kind}:${item.id}`,
+      memoryId: item.id,
       scopeIdentity,
       fallback: trigger,
     };
@@ -557,7 +566,7 @@ export function MemoryPanel({
             : visibleDialog.conflict === 'refreshed'
               ? visibleDialog.kind === 'revise' ? '重试修正' : '重试失效'
             : visibleDialog.kind === 'revise' ? '保存修正' : '确认失效'}</button>
-          <button type="button" disabled={actionBusy} onClick={closeDialog}>取消</button>
+          <button type="button" disabled={actionBusy} onClick={() => closeDialog()}>取消</button>
         </div>
       </section>
     </div>}

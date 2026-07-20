@@ -52,6 +52,44 @@ describe('parseProductManifest', () => {
       .toThrow(/duplicate intent key/);
   });
 
+  it('accepts optional product branding with a skin key and CSS variable tokens', () => {
+    const branding = {
+      skin: 'taoci',
+      tokens: {
+        '--paper': '#f7f2e8',
+        '--forest': '#0d2b24',
+        '--copper': '#da5b3d',
+        '--serif': '"Songti SC", "STSong", serif',
+      },
+    };
+
+    expect(parseProductManifest({ ...valid, branding }).branding).toEqual(branding);
+  });
+
+  it('defaults branding to undefined when omitted', () => {
+    expect(parseProductManifest(valid).branding).toBeUndefined();
+  });
+
+  it('rejects branding tokens whose names are not CSS custom properties', () => {
+    expect(() => parseProductManifest({
+      ...valid,
+      branding: { tokens: { paper: '#fff' } },
+    })).toThrow();
+  });
+
+  it('rejects branding token values that could smuggle CSS rules or external loads', () => {
+    for (const value of ['red; background: url(https://evil.test)', 'url(https://evil.test)', '#fff}body{']) {
+      expect(() => parseProductManifest({
+        ...valid,
+        branding: { skin: 'taoci', tokens: { '--paper': value } },
+      })).toThrow();
+    }
+  });
+
+  it('rejects branding skins that are not lowercase identifiers', () => {
+    expect(() => parseProductManifest({ ...valid, branding: { skin: 'TaoCi!' } })).toThrow();
+  });
+
   it('accepts an optional public demo login contract', () => {
     const demoLogin = {
       email: 'demo@native-web.test',

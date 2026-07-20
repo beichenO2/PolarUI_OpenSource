@@ -354,6 +354,26 @@ describe('MemoryPanel', () => {
     expect(screen.queryByRole('region', { name: 'launch-goal 的版本历史' })).not.toBeInTheDocument();
   });
 
+  it('focuses the same-memory revise action when successful invalidation removes its trigger', async () => {
+    const invalidated = { ...item, status: 'invalidated' as const, version: 4 };
+    vi.mocked(memoryApi.listMemories)
+      .mockResolvedValueOnce([item])
+      .mockResolvedValueOnce([invalidated]);
+    vi.mocked(memoryApi.invalidateMemory).mockResolvedValueOnce(invalidated);
+    const user = userEvent.setup();
+    render(<MemoryPanel ownerKey="demo:user-1" contextId="context-a" />);
+    const trigger = await screen.findByRole('button', { name: '使 launch-goal 失效' });
+
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: '使 launch-goal 失效' });
+    await user.type(within(dialog).getByRole('textbox', { name: '失效原因' }), '由新事实替代');
+    await user.click(within(dialog).getByRole('button', { name: '确认失效' }));
+
+    expect(await screen.findByText('版本 4')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '使 launch-goal 失效' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '修正 launch-goal' })).toHaveFocus());
+  });
+
   it('preserves a proposed revision through 409 refresh and retries against the latest version', async () => {
     const remote = { ...item, version: 4, value: { outcome: 'remote' } };
     vi.mocked(memoryApi.listMemories)
