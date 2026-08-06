@@ -5,9 +5,11 @@ description: Use when opening, inspecting, restarting, or developing against the
 
 # PolarUI GUI usage
 
-## Runtime authority
+## Runtime authority (PolarManager)
 
-PolarPort is the only port authority and PolarProcess is the only lifecycle authority. The stable GUI service ID is `polarui`, with preferred port 5170 and health endpoint `http://127.0.0.1:5170/`.
+**PolarManager** = PolarPort (`:11050`) + PolarProcess (`:11055`) + PolarBudget (`:11060`). Port and lifecycle for PolarUI go through Port/Process; heavy local builds/tests should consult Budget (`polarbudget-core-budget`).
+
+The stable GUI service ID is `polarui`, with preferred port 5170 and health endpoint `http://127.0.0.1:5170/`.
 
 Install and build are transient commands. Persistent preview actions must use the exact PolarProcess service ID:
 

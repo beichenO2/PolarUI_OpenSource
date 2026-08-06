@@ -28,7 +28,7 @@ description: >
 | 工作目录 | `~/Desktop/Web_related/`（模版 `_template/`、发行版 `{release_id}/`） |
 | PolarUI workflow | `workflows/{id}/` 含 `{id}.lg.json`、`registry-entry.json`；preflight 通过 |
 | PolarPrivate | LLM 端点可用（export Step 1 preflight） |
-| PolarPort | `:11050` 申领端口（⛔ 禁止启发式写死端口） |
+| PolarManager | Port `:11050` 申领端口（⛔ 禁止写死）；Process `:11055` 启停发行版服务；Budget `:11060` 重导出/构建前问预算 |
 
 ---
 

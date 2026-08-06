@@ -7,19 +7,22 @@ description: Use when the PolarUI GUI, Native Web preview, or a governed PolarUI
 
 ## Read-only diagnosis
 
+PolarManager health (Port · Process · Budget):
+
 ```bash
 curl -fsS http://127.0.0.1:11050/api/health
 curl -fsS http://127.0.0.1:11055/api/health
+curl -fsS http://127.0.0.1:11060/api/health
 curl -fsS http://127.0.0.1:11055/api/services/polarui
 curl -fsS http://127.0.0.1:11050/api/list
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5170/
 ```
 
-Use PolarProcess's verified PID and PolarPort's exact `service_name/project/port` owner. Do not infer ownership from a broad process-name search.
+Use PolarProcess's verified PID and PolarPort's exact `service_name/project/port` owner. Do not infer ownership from a broad process-name search. Budget down is non-blocking for GUI recovery (note `budget_unavailable` only if CPU work is involved).
 
 ## Exact recovery
 
-After both authorities pass health checks, act only on the failing service ID:
+After Port/Process authorities pass health checks, act only on the failing service ID:
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:11055/api/services/polarui/restart

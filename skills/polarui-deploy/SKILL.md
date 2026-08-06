@@ -7,7 +7,7 @@ description: Use when deciding between the local PolarUI GUI preview and exporti
 
 ## Local GUI preview
 
-Use `polarui-usage`. The stable GUI is `polarui:5170`; PolarPort owns allocation and PolarProcess owns start, stop, restart, PID, and health supervision.
+Use `polarui-usage`. The stable GUI is `polarui:5170`. Under **PolarManager**: PolarPort owns allocation, PolarProcess owns start/stop/restart/PID/health, PolarBudget owns CPU budget for heavy local export/build work.
 
 ```bash
 curl -fsS http://127.0.0.1:11055/api/services/polarui
@@ -21,6 +21,6 @@ Use `polarui-web-deploy` and `docs/WEB_EXPORT.md`. Export compilation is a trans
 node scripts/export-release.mjs --workflow <id> --json
 ```
 
-The export/deploy pipeline must use `http://127.0.0.1:11050` and `http://127.0.0.1:11055`. It must not use detached containers, direct Vite/Node server startup, PID files, broad process matching, or another process manager.
+The export/deploy pipeline must use PolarManager endpoints `:11050` / `:11055` (and `:11060` when CPU-heavy). It must not use detached containers, direct Vite/Node server startup, PID files, broad process matching, or another process manager.
 
 Native Web preview and `polarui-native-web-qa-*` are separate service boundaries. Never restart or release them while operating the stable GUI.
